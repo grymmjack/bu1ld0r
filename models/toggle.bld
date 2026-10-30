@@ -1,0 +1,9 @@
+bu1ld0r 1
+name toggle
+part box  0 0 0  0 0 0  0.3 0.08 0.2  9AA0B4  0  0
+part cylinder  0 0.08 0  0 0 0  0.08 0.03 0.08  2D3240  16  0
+part cylinder  0 0.1 0  0 0 25  0.025 0.14 0.025  F0F0F5  12  0
+part sphere  -0.059 0.2 0  0 0 0  0.05 0.05 0.05  FF3CC8  12  1
+part cone  -0.1 0.08 0.06  0 0 0  0.04 0.05 0.04  50FF8C  12  0.4
+part tube  0.1 0.08 0.06  0 0 0  0.05 0.02 0.05  FFD23C  12  0.6
+part wedge  0 0.08 -0.08  0 0 0  0.2 0.04 0.04  00C8E6  0  0

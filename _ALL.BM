@@ -1,0 +1,9 @@
+''
+' bu1ld0r - _ALL.BM: every routine file
+'
+'$INCLUDE:'./CORE/APP.BM'
+'$INCLUDE:'./MODEL/PARTS.BM'
+'$INCLUDE:'./MODEL/MESH.BM'
+'$INCLUDE:'./VIEW/VIEW.BM'
+'$INCLUDE:'./UI/UI.BM'
+'$INCLUDE:'./OUT/EXPORT.BM'

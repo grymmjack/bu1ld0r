@@ -1,0 +1,173 @@
+''
+' bu1ld0r - OUT/EXPORT.BM
+' =============================================================================
+
+SUB ExportAll
+    DIM g, n$, ex$, nd$, ok, f, img&, big&, made$
+    IF pN = 0 THEN Msg "Nothing to export: put some shapes down first": EXIT SUB
+    g = ghostOn: ghostOn = 0: MeshBuild ' (the model alone, not the shape being put down)
+    n$ = SafeName$(mdlName$): mdlName$ = n$
+    ExColours
+    ExFrameWork
+
+    ex$ = appDir$ + "export/"
+    WriteObj ex$ + n$ + ".obj", n$, n$ + "_tex.png", 0
+    WriteTex ex$ + n$ + "_tex.png", 256
+    made$ = ex$ + n$ + ".obj"
+
+    nd$ = neonDir$
+    IF LEN(nd$) THEN
+        IF _DIREXISTS(nd$ + "models") THEN
+            IF NOT _DIREXISTS(nd$ + "hd") THEN MKDIR nd$ + "hd"
+            IF NOT _DIREXISTS(nd$ + "hd/models") THEN MKDIR nd$ + "hd/models"
+            WriteObj nd$ + "models/" + n$ + ".obj", n$, "../hd/models/" + n$ + "_tex.png", -1
+            WriteTex nd$ + "models/" + n$ + "_tex.png", 64
+            WriteTex nd$ + "hd/models/" + n$ + "_tex.png", 256
+            img& = _NEWIMAGE(PIC_SIZE, PIC_SIZE, 32): big& = _NEWIMAGE(PIC_SIZE * PIC_SS, PIC_SIZE * PIC_SS, 32)
+            FOR f = 0 TO 7
+                RenderPicture f, big&, img&
+                _SAVEIMAGE nd$ + "models/" + n$ + "_" + LTRIM$(STR$(f)) + ".png", img&
+            NEXT
+            _FREEIMAGE img&: _FREEIMAGE big&
+            made$ = made$ + " and NEON-CASTER's models/" + n$
+        ELSE
+            made$ = made$ + " (neon_dir has no models/ folder: " + nd$ + ")"
+        END IF
+    END IF
+    ghostOn = g: meshDirty = -1: viewDirty = -1
+    IF sceneTN > NEON_TRI_WARN THEN made$ = made$ + " - " + LTRIM$(STR$(sceneTN)) + " triangles: a lot for a NEON-CASTER prop (fewer slices?)"
+    Msg "Exported " + made$
+END SUB
+
+' The model's colours, each a square of the texture
+SUB ExColours
+    DIM t AS LONG, k, found
+    exColN = 0
+    FOR t = 1 TO sceneTN
+        found = -1
+        FOR k = 0 TO exColN - 1
+            IF exCol(k) = tCol(t) THEN found = k: EXIT FOR
+        NEXT
+        IF found < 0 AND exColN < EX_COLS THEN exCol(exColN) = tCol(t): exColN = exColN + 1
+    NEXT
+END SUB
+
+' Which square of the texture colour c is (the nearest, past 64 colours)
+FUNCTION ExColIdx (c AS _UNSIGNED LONG)
+    DIM k, best, d, bd
+    bd = 1E9
+    FOR k = 0 TO exColN - 1
+        IF exCol(k) = c THEN ExColIdx = k: EXIT FUNCTION
+        d = (_RED32(c) - _RED32(exCol(k))) ^ 2 + (_GREEN32(c) - _GREEN32(exCol(k))) ^ 2 + (_BLUE32(c) - _BLUE32(exCol(k))) ^ 2
+        IF d < bd THEN bd = d: best = k
+    NEXT
+    ExColIdx = best
+END FUNCTION
+
+' How many cells across its pictures are: room for it all round, as models.py works it out
+SUB ExFrameWork
+    DIM t AS LONG, k, p AS V3, r, reach, tall
+    FOR t = 1 TO sceneTN
+        FOR k = 0 TO 2
+            SELECT CASE k
+                CASE 0: p = tA(t)
+                CASE 1: p = tB(t)
+                CASE ELSE: p = tC(t)
+            END SELECT
+            r = SQR(p.x * p.x + p.z * p.z): IF r > reach THEN reach = r
+            IF p.y > tall THEN tall = p.y
+        NEXT
+    NEXT
+    exFrame = 2 * reach * 1.04: IF tall * 1.04 > exFrame THEN exFrame = tall * 1.04
+    IF exFrame < .05 THEN exFrame = .05
+END SUB
+
+SUB WriteObj (f$, n$, tex$, neon)
+    DIM fh, t AS LONG, k, a AS LONG, ti
+    fh = FREEFILE: OPEN f$ FOR OUTPUT AS #fh
+    IF neon THEN
+        PRINT #fh, "# NEON-CASTER prop: " + n$ + " - made by bu1ld0r (edit models/" + n$ + ".bld there, not this)"
+    ELSE
+        PRINT #fh, "# " + n$ + " - made by bu1ld0r " + APP_VERSION$
+    END IF
+    PRINT #fh, "# OBJ axes: y up, its front towards -z; 1 = a NEON-CASTER cell."
+    PRINT #fh, "# frame " + Fmt$(exFrame)
+    PRINT #fh, "# (how many cells across its 8 pictures are)"
+    PRINT #fh, "mtllib " + n$ + ".mtl"
+    PRINT #fh, "usemtl " + n$
+    FOR t = 1 TO sceneTN
+        PRINT #fh, "v " + Fmt$(tA(t).x) + " " + Fmt$(tA(t).y) + " " + Fmt$(tA(t).z)
+        PRINT #fh, "v " + Fmt$(tB(t).x) + " " + Fmt$(tB(t).y) + " " + Fmt$(tB(t).z)
+        PRINT #fh, "v " + Fmt$(tC(t).x) + " " + Fmt$(tC(t).y) + " " + Fmt$(tC(t).z)
+    NEXT
+    FOR k = 0 TO EX_COLS - 1 ' (each colour's square's middle; OBJ's v runs up from the bottom)
+        PRINT #fh, "vt " + Fmt$(((k MOD 8) + .5) / 8) + " " + Fmt$(1 - ((k \ 8) + .5) / 8)
+    NEXT
+    FOR t = 1 TO sceneTN
+        a = (t - 1) * 3 + 1: ti = ExColIdx(tCol(t)) + 1
+        PRINT #fh, "f" + STR$(a) + "/" + LTRIM$(STR$(ti)) + STR$(a + 1) + "/" + LTRIM$(STR$(ti)) + STR$(a + 2) + "/" + LTRIM$(STR$(ti))
+    NEXT
+    CLOSE #fh
+    fh = FREEFILE: OPEN LEFT$(f$, LEN(f$) - 4) + ".mtl" FOR OUTPUT AS #fh
+    PRINT #fh, "# " + n$ + " - its texture, for 3D programs"
+    PRINT #fh, "newmtl " + n$
+    PRINT #fh, "Kd 1 1 1"
+    PRINT #fh, "map_Kd " + tex$
+    CLOSE #fh
+END SUB
+
+' The texture: each colour an eighth across, the squares past the last the first's
+SUB WriteTex (f$, size)
+    DIM img&, k, c AS _UNSIGNED LONG, d, b
+    img& = _NEWIMAGE(size, size, 32)
+    d = _DEST: _DEST img&
+    b = size \ 8
+    FOR k = 0 TO EX_COLS - 1
+        c = exCol(0): IF k < exColN THEN c = exCol(k)
+        LINE ((k MOD 8) * b, (k \ 8) * b)-((k MOD 8) * b + b - 1, (k \ 8) * b + b - 1), c, BF
+    NEXT
+    _DEST d
+    _SAVEIMAGE f$, img&
+    _FREEIMAGE img&
+END SUB
+
+' Picture f of the 8 (f x 45 degrees round, 0: its front), as models.py
+' draws them: flat (no perspective), its foot on the bottom edge, lit from
+' over your left shoulder, drawn big then shrunk; see-through where less
+' than half of a pixel is covered
+SUB RenderPicture (f, big&, img&)
+    DIM th, S, t AS LONG, x, y, i AS LONG, sx, sy, cnt, r, g, b, c AS _UNSIGNED LONG, m AS _MEM, mi AS _MEM, l, d
+    th = f * 45
+    cFX = -DSin(th): cFY = 0: cFZ = DCos(th) ' (forward: from you to it - the eye is at (sin, 0, -cos))
+    cRX = -DCos(th): cRY = 0: cRZ = -DSin(th)
+    cUX = 0: cUY = 1: cUZ = 0
+    rLX = -cFX * .55 + cUX * .8 - cRX * .35: rLY = -cFY * .55 + cUY * .8 - cRY * .35: rLZ = -cFZ * .55 + cUZ * .8 - cRZ * .35
+    l = SQR(rLX * rLX + rLY * rLY + rLZ * rLZ): rLX = rLX / l: rLY = rLY / l: rLZ = rLZ / l
+    rShadeLo = .72: rShadeK = .45
+    S = PIC_SIZE * PIC_SS
+    rOrtho = -1: rSpan = exFrame: rCull = 0: rGhost = 0
+    RenderBegin big&, S, S
+    d = _DEST: _DEST big&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
+    FOR t = 1 TO sceneTN: RasterTri t: NEXT
+    RenderEnd
+    rOrtho = 0
+    m = _MEMIMAGE(big&): mi = _MEMIMAGE(img&)
+    FOR y = 0 TO PIC_SIZE - 1
+        FOR x = 0 TO PIC_SIZE - 1
+            cnt = 0: r = 0: g = 0: b = 0
+            FOR sy = 0 TO PIC_SS - 1
+                FOR sx = 0 TO PIC_SS - 1
+                    i = (y * PIC_SS + sy) * S + x * PIC_SS + sx
+                    IF rId(i) > 0 THEN
+                        _MEMGET m, m.OFFSET + i * 4, c
+                        r = r + _RED32(c): g = g + _GREEN32(c): b = b + _BLUE32(c): cnt = cnt + 1
+                    END IF
+                NEXT
+            NEXT
+            c = 0
+            IF cnt * 2 > PIC_SS * PIC_SS THEN c = _RGBA32(r / cnt, g / cnt, b / cnt, 255)
+            _MEMPUT mi, mi.OFFSET + (y * PIC_SIZE + x) * 4, c
+        NEXT
+    NEXT
+    _MEMFREE m: _MEMFREE mi
+END SUB

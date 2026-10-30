@@ -1,0 +1,162 @@
+''
+' bu1ld0r - MODEL/MESH.BM
+' =============================================================================
+' Each shape as triangles. A shape is made 1 x 1 x 1, standing on its own
+' origin (the middle of its foot: x and z -0.5 to 0.5, y 0 to 1), then
+' sized, turned (Z, then X, then Y) and put in place. Each triangle is
+' given a way that's out (a hint), and its corners are put round that way,
+' so it faces out whatever the sizes and turns did.
+'
+
+SUB MeshBuild
+    DIM i
+    tN = 0
+    FOR i = 1 TO pN: MeshPart i: NEXT
+    sceneTN = tN
+    IF ghostOn THEN MeshPart 0
+    meshDirty = 0: viewDirty = -1
+END SUB
+
+FUNCTION SegsOf (i)
+    DIM s
+    s = pSeg(i): IF s < 3 THEN s = 12
+    IF s > 64 THEN s = 64
+    SegsOf = s
+END FUNCTION
+
+SUB MeshPart (i)
+    DIM k, s, a0, a1, am, r0, r1, ri, amt, ph0, ph1, phm, phMax, nl, j, sp0, sp1, cp0, cp1, y0, y1
+    mkPart = i: mkCol = pCol(i)
+    mkSX = pSX(i): mkSY = pSY(i): mkSZ = pSZ(i)
+    mkCX = DCos(pRX(i)): mkSXr = DSin(pRX(i))
+    mkCY = DCos(pRY(i)): mkSYr = DSin(pRY(i))
+    mkCZ = DCos(pRZ(i)): mkSZr = DSin(pRZ(i))
+    mkPX = pX(i): mkPY = pY(i): mkPZ = pZ(i)
+    s = SegsOf(i)
+    SELECT CASE pKind(i)
+        CASE K_BOX
+            mkFace = 0: MkQuad -.5, 0, -.5, .5, 0, -.5, .5, 1, -.5, -.5, 1, -.5, 0, 0, -1 ' (front)
+            mkFace = 1: MkQuad .5, 0, -.5, .5, 0, .5, .5, 1, .5, .5, 1, -.5, 1, 0, 0 ' (right)
+            mkFace = 2: MkQuad .5, 0, .5, -.5, 0, .5, -.5, 1, .5, .5, 1, .5, 0, 0, 1 ' (back)
+            mkFace = 3: MkQuad -.5, 0, .5, -.5, 0, -.5, -.5, 1, -.5, -.5, 1, .5, -1, 0, 0 ' (left)
+            mkFace = 4: MkQuad -.5, 1, -.5, .5, 1, -.5, .5, 1, .5, -.5, 1, .5, 0, 1, 0 ' (top)
+            mkFace = 5: MkQuad -.5, 0, -.5, -.5, 0, .5, .5, 0, .5, .5, 0, -.5, 0, -1, 0 ' (bottom)
+        CASE K_CYL, K_CONE
+            r0 = .5: r1 = .5
+            IF pKind(i) = K_CONE THEN r1 = .5 * Clamp(pAmt(i), 0, 1)
+            FOR k = 0 TO s - 1
+                a0 = 360 * k / s: a1 = 360 * (k + 1) / s: am = (a0 + a1) / 2
+                mkFace = 0
+                MkQuad r0 * DCos(a0), 0, r0 * DSin(a0), r0 * DCos(a1), 0, r0 * DSin(a1), r1 * DCos(a1), 1, r1 * DSin(a1), r1 * DCos(a0), 1, r1 * DSin(a0), DCos(am), (r0 - r1), DSin(am)
+                mkFace = 2: MkTri 0, 0, 0, r0 * DCos(a0), 0, r0 * DSin(a0), r0 * DCos(a1), 0, r0 * DSin(a1), 0, -1, 0
+                IF r1 > .001 THEN mkFace = 1: MkTri 0, 1, 0, r1 * DCos(a0), 1, r1 * DSin(a0), r1 * DCos(a1), 1, r1 * DSin(a1), 0, 1, 0
+            NEXT
+        CASE K_TUBE
+            ri = .5 * Clamp(pAmt(i), .05, .95)
+            FOR k = 0 TO s - 1
+                a0 = 360 * k / s: a1 = 360 * (k + 1) / s: am = (a0 + a1) / 2
+                mkFace = 0: MkQuad .5 * DCos(a0), 0, .5 * DSin(a0), .5 * DCos(a1), 0, .5 * DSin(a1), .5 * DCos(a1), 1, .5 * DSin(a1), .5 * DCos(a0), 1, .5 * DSin(a0), DCos(am), 0, DSin(am)
+                mkFace = 3: MkQuad ri * DCos(a0), 0, ri * DSin(a0), ri * DCos(a1), 0, ri * DSin(a1), ri * DCos(a1), 1, ri * DSin(a1), ri * DCos(a0), 1, ri * DSin(a0), -DCos(am), 0, -DSin(am)
+                mkFace = 1: MkQuad ri * DCos(a0), 1, ri * DSin(a0), .5 * DCos(a0), 1, .5 * DSin(a0), .5 * DCos(a1), 1, .5 * DSin(a1), ri * DCos(a1), 1, ri * DSin(a1), 0, 1, 0
+                mkFace = 2: MkQuad ri * DCos(a0), 0, ri * DSin(a0), .5 * DCos(a0), 0, .5 * DSin(a0), .5 * DCos(a1), 0, .5 * DSin(a1), ri * DCos(a1), 0, ri * DSin(a1), 0, -1, 0
+            NEXT
+        CASE K_SPHERE
+            ' Its share from the top (amount 1 whole, 0.5 a dome), stretched to fill the box
+            amt = Clamp(pAmt(i), .05, 1)
+            phMax = _ACOS(1 - 2 * amt) * 180 / 3.14159265
+            nl = s \ 2: IF nl < 3 THEN nl = 3
+            FOR j = 0 TO nl - 1
+                ph0 = phMax * j / nl: ph1 = phMax * (j + 1) / nl: phm = (ph0 + ph1) / 2
+                sp0 = .5 * DSin(ph0): sp1 = .5 * DSin(ph1)
+                y0 = (.5 + .5 * DCos(ph0) - (1 - amt)) / amt: y1 = (.5 + .5 * DCos(ph1) - (1 - amt)) / amt
+                FOR k = 0 TO s - 1
+                    a0 = 360 * k / s: a1 = 360 * (k + 1) / s: am = (a0 + a1) / 2
+                    mkFace = 0
+                    MkQuad sp0 * DCos(a0), y0, sp0 * DSin(a0), sp0 * DCos(a1), y0, sp0 * DSin(a1), sp1 * DCos(a1), y1, sp1 * DSin(a1), sp1 * DCos(a0), y1, sp1 * DSin(a0), DSin(phm) * DCos(am), DCos(phm), DSin(phm) * DSin(am)
+                NEXT
+            NEXT
+            IF amt < .999 THEN
+                cp1 = .5 * DSin(phMax)
+                FOR k = 0 TO s - 1
+                    a0 = 360 * k / s: a1 = 360 * (k + 1) / s
+                    mkFace = 1: MkTri 0, 0, 0, cp1 * DCos(a0), 0, cp1 * DSin(a0), cp1 * DCos(a1), 0, cp1 * DSin(a1), 0, -1, 0
+                NEXT
+            END IF
+        CASE K_WEDGE
+            ' Its back full height, sloping down to its front's foot
+            mkFace = 0: MkQuad -.5, 0, -.5, .5, 0, -.5, .5, 1, .5, -.5, 1, .5, 0, 1, -1 ' (the slope)
+            mkFace = 2: MkQuad .5, 0, .5, -.5, 0, .5, -.5, 1, .5, .5, 1, .5, 0, 0, 1 ' (back)
+            mkFace = 5: MkQuad -.5, 0, -.5, -.5, 0, .5, .5, 0, .5, .5, 0, -.5, 0, -1, 0 ' (bottom)
+            mkFace = 1: MkTri .5, 0, -.5, .5, 0, .5, .5, 1, .5, 1, 0, 0 ' (right)
+            mkFace = 3: MkTri -.5, 0, -.5, -.5, 0, .5, -.5, 1, .5, -1, 0, 0 ' (left)
+    END SELECT
+END SUB
+
+' A point of the part's own 1 x 1 x 1 shape to the world: sized, turned, placed
+SUB XformPt (p AS V3)
+    p.x = p.x * mkSX: p.y = p.y * mkSY: p.z = p.z * mkSZ
+    XformRot p
+    p.x = p.x + mkPX: p.y = p.y + mkPY: p.z = p.z + mkPZ
+END SUB
+
+' Turned: Z, then X, then Y
+SUB XformRot (p AS V3)
+    DIM x, y, z
+    x = p.x * mkCZ - p.y * mkSZr: y = p.x * mkSZr + p.y * mkCZ: p.x = x: p.y = y
+    y = p.y * mkCX - p.z * mkSXr: z = p.y * mkSXr + p.z * mkCX: p.y = y: p.z = z
+    x = p.x * mkCY + p.z * mkSYr: z = -p.x * mkSYr + p.z * mkCY: p.x = x: p.z = z
+END SUB
+
+SUB MkQuad (ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, hx, hy, hz)
+    MkTri ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz
+    MkTri ax, ay, az, cx, cy, cz, dx, dy, dz, hx, hy, hz
+END SUB
+
+' A triangle of the part's own shape; h is which way's out
+SUB MkTri (ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz)
+    DIM a AS V3, b AS V3, c AS V3, h AS V3, n AS V3, l, t AS LONG
+    IF tN >= MAX_TRI THEN EXIT SUB
+    a.x = ax: a.y = ay: a.z = az: XformPt a
+    b.x = bx: b.y = by: b.z = bz: XformPt b
+    c.x = cx: c.y = cy: c.z = cz: XformPt c
+    h.x = hx / mkSX: h.y = hy / mkSY: h.z = hz / mkSZ: XformRot h ' (out, through the sizes: as a normal goes)
+    n.x = (b.y - a.y) * (c.z - a.z) - (b.z - a.z) * (c.y - a.y)
+    n.y = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z)
+    n.z = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+    l = SQR(n.x * n.x + n.y * n.y + n.z * n.z)
+    IF l < 1E-9 THEN EXIT SUB ' (a point, or a line: nothing to draw)
+    n.x = n.x / l: n.y = n.y / l: n.z = n.z / l
+    t = tN + 1
+    IF n.x * h.x + n.y * h.y + n.z * h.z < 0 THEN
+        tA(t) = a: tB(t) = c: tC(t) = b: n.x = -n.x: n.y = -n.y: n.z = -n.z
+    ELSE
+        tA(t) = a: tB(t) = b: tC(t) = c
+    END IF
+    tNrm(t) = n: tPart(t) = mkPart: tFace(t) = mkFace: tCol(t) = mkCol
+    tN = t
+END SUB
+
+' The model's box: lo and hi corners (0 if it's empty)
+SUB MeshBounds (lo AS V3, hi AS V3, selOnly)
+    DIM t AS LONG, k, p AS V3, found
+    lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
+    FOR t = 1 TO sceneTN
+        IF selOnly = 0 OR pSel(tPart(t)) THEN
+            found = -1
+            FOR k = 0 TO 2
+                SELECT CASE k
+                    CASE 0: p = tA(t)
+                    CASE 1: p = tB(t)
+                    CASE ELSE: p = tC(t)
+                END SELECT
+                IF p.x < lo.x THEN lo.x = p.x
+                IF p.y < lo.y THEN lo.y = p.y
+                IF p.z < lo.z THEN lo.z = p.z
+                IF p.x > hi.x THEN hi.x = p.x
+                IF p.y > hi.y THEN hi.y = p.y
+                IF p.z > hi.z THEN hi.z = p.z
+            NEXT
+        END IF
+    NEXT
+    IF found = 0 THEN lo.x = 0: lo.y = 0: lo.z = 0: hi.x = 0: hi.y = 0: hi.z = 0
+END SUB

@@ -1,0 +1,292 @@
+''
+' bu1ld0r - VIEW/VIEW.BM
+' =============================================================================
+' The camera (it orbits round a point it looks at), the drawing of every
+' triangle, the outlines of what's selected and under the pointer, and
+' picking: which triangle, and where on it, a pixel shows.
+'
+
+SUB ViewSetup
+    viewImg& = _NEWIMAGE(vW, vH, 32)
+    ovImg& = _NEWIMAGE(vW, vH, 32)
+    camFov = 45
+    ViewHome
+END SUB
+
+SUB ViewHome
+    camTX = 0: camTY = .15: camTZ = 0: camYaw = 30: camPitch = 24: camDist = 1.5
+    viewDirty = -1
+END SUB
+
+' The camera's eye and its three ways (forward, right, up), for a picture w x h
+SUB CamBasis (w, h)
+    DIM l
+    cEX = camTX + camDist * DCos(camPitch) * DSin(camYaw)
+    cEY = camTY + camDist * DSin(camPitch)
+    cEZ = camTZ - camDist * DCos(camPitch) * DCos(camYaw)
+    cFX = camTX - cEX: cFY = camTY - cEY: cFZ = camTZ - cEZ
+    l = SQR(cFX * cFX + cFY * cFY + cFZ * cFZ): cFX = cFX / l: cFY = cFY / l: cFZ = cFZ / l
+    ' right = forward x up(0,1,0); up = right x forward
+    cRX = -cFZ: cRY = 0: cRZ = cFX
+    l = SQR(cRX * cRX + cRZ * cRZ): IF l < 1E-6 THEN cRX = 1: cRZ = 0: l = 1
+    cRX = cRX / l: cRZ = cRZ / l
+    cUX = cRY * cFZ - cRZ * cFY: cUY = cRZ * cFX - cRX * cFZ: cUZ = cRX * cFY - cRY * cFX
+    cMidX = w / 2: cMidY = h / 2
+    cFoc = (h / 2) / TAN(camFov / 2 * 3.14159265 / 180)
+END SUB
+
+' The light, coming from over your left shoulder: lo + k x how square on a face is to it
+SUB LightFromCamera (lo, k)
+    DIM l
+    rLX = -cFX * .5 + cUX * .8 - cRX * .4: rLY = -cFY * .5 + cUY * .8 - cRY * .4: rLZ = -cFZ * .5 + cUZ * .8 - cRZ * .4
+    l = SQR(rLX * rLX + rLY * rLY + rLZ * rLZ): rLX = rLX / l: rLY = rLY / l: rLZ = rLZ / l
+    rShadeLo = lo: rShadeK = k
+END SUB
+
+' Start drawing into img& (w x h): nothing's there yet
+SUB RenderBegin (img&, w, h)
+    DIM m AS _MEM
+    rImg& = img&: rW = w: rH = h
+    rMem = _MEMIMAGE(img&)
+    m = _MEM(rZ()): _MEMFILL m, m.OFFSET, w * h * 4, 0 AS LONG: _MEMFREE m
+    m = _MEM(rId()): _MEMFILL m, m.OFFSET, w * h * 4, 0 AS LONG: _MEMFREE m
+END SUB
+
+SUB RenderEnd
+    _MEMFREE rMem
+END SUB
+
+SUB ViewRender
+    DIM t AS LONG, y, k, d
+    d = _DEST
+    CamBasis vW, vH
+    LightFromCamera .5, .55
+    RenderBegin viewImg&, vW, vH
+    _DEST viewImg&
+    FOR y = 0 TO vH - 1 ' (the backdrop: darker towards the top)
+        k = y / vH
+        LINE (0, y)-(vW - 1, y), _RGB32(10 + 14 * k, 9 + 10 * k, 20 + 18 * k)
+    NEXT
+    DrawGrid
+    rOrtho = 0: rCull = -1: rGhost = 0
+    FOR t = 1 TO sceneTN: RasterTri t: NEXT
+    rGhost = -1
+    FOR t = sceneTN + 1 TO tN: RasterTri t: NEXT
+    rGhost = 0
+    RenderEnd
+    _DEST d
+    viewDirty = 0: ovDirty = -1
+END SUB
+
+' The ground: a grid on y = 0 - a cell's square (where a NEON-CASTER prop
+' stands) bright, eighths of a cell dim - and the X (red) and Z (blue) lines
+SUB DrawGrid
+    DIM k, v, c AS _UNSIGNED LONG
+    FOR k = -16 TO 16
+        v = k / 16
+        c = _RGB32(34, 32, 54): IF k MOD 4 = 0 THEN c = _RGB32(48, 44, 76)
+        Line3D -1, 0, v, 1, 0, v, c
+        Line3D v, 0, -1, v, 0, 1, c
+    NEXT
+    c = _RGB32(110, 60, 150)
+    Line3D -.5, 0, -.5, .5, 0, -.5, c: Line3D .5, 0, -.5, .5, 0, .5, c
+    Line3D .5, 0, .5, -.5, 0, .5, c: Line3D -.5, 0, .5, -.5, 0, -.5, c
+    Line3D -1, 0, 0, 1, 0, 0, _RGB32(150, 50, 60)
+    Line3D 0, 0, -1, 0, 0, 1, _RGB32(50, 80, 170)
+    Line3D 0, 0, -.5, 0, 0, -.62, _RGB32(80, 140, 255) ' (its front: towards -z)
+END SUB
+
+' A line in the world, drawn on rImg& (cut where it goes behind the eye)
+SUB Line3D (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG)
+    DIM avx, avy, avz, bvx, bvy, bvz, t, nz
+    nz = .01
+    CamSpace ax, ay, az, avx, avy, avz
+    CamSpace bx, by, bz, bvx, bvy, bvz
+    IF avz < nz AND bvz < nz THEN EXIT SUB
+    IF avz < nz THEN t = (nz - avz) / (bvz - avz): avx = avx + (bvx - avx) * t: avy = avy + (bvy - avy) * t: avz = nz
+    IF bvz < nz THEN t = (nz - bvz) / (avz - bvz): bvx = bvx + (avx - bvx) * t: bvy = bvy + (avy - bvy) * t: bvz = nz
+    LINE (cMidX + avx / avz * cFoc, cMidY - avy / avz * cFoc)-(cMidX + bvx / bvz * cFoc, cMidY - bvy / bvz * cFoc), c
+END SUB
+
+' A world point in the camera's own terms: across, up, ahead
+SUB CamSpace (x, y, z, vx, vy, vz)
+    DIM dx, dy, dz
+    dx = x - cEX: dy = y - cEY: dz = z - cEZ
+    vx = dx * cRX + dy * cRY + dz * cRZ
+    vy = dx * cUX + dy * cUY + dz * cUZ
+    vz = dx * cFX + dy * cFY + dz * cFZ
+END SUB
+
+' Triangle t drawn: lit by the way it faces, cut at the eye, filled
+SUB RasterTri (t AS LONG)
+    DIM n AS V3, lit, sh, col AS _UNSIGNED LONG, k, j, nz, f, ink, inj, cnt
+    DIM wx(2), wy(2), wz(2), vx(4), vy(4), vz(4), sx(4), sy(4), q(4), cx(2), cy(2), cz(2)
+    n = tNrm(t)
+    IF rOrtho THEN
+        f = -(n.x * cFX + n.y * cFY + n.z * cFZ)
+    ELSE
+        f = n.x * (cEX - tA(t).x) + n.y * (cEY - tA(t).y) + n.z * (cEZ - tA(t).z)
+    END IF
+    IF f <= 0 THEN
+        IF rCull THEN EXIT SUB
+        n.x = -n.x: n.y = -n.y: n.z = -n.z ' (seen from inside: lit as its other side)
+    END IF
+    lit = n.x * rLX + n.y * rLY + n.z * rLZ: IF lit < 0 THEN lit = 0
+    sh = rShadeLo + rShadeK * lit
+    col = Shade~&(tCol(t), sh)
+    IF rGhost THEN col = Shade~&(_RGB32(255, 255, 255), .5 + .5 * lit)
+
+    wx(0) = tA(t).x: wy(0) = tA(t).y: wz(0) = tA(t).z
+    wx(1) = tB(t).x: wy(1) = tB(t).y: wz(1) = tB(t).z
+    wx(2) = tC(t).x: wy(2) = tC(t).y: wz(2) = tC(t).z
+    IF rOrtho THEN
+        FOR k = 0 TO 2
+            sx(k) = ((wx(k) * cRX + wy(k) * cRY + wz(k) * cRZ) / rSpan + .5) * rW
+            sy(k) = (1 - (wx(k) * cUX + wy(k) * cUY + wz(k) * cUZ) / rSpan) * rH
+            q(k) = 1000 - (wx(k) * cFX + wy(k) * cFY + wz(k) * cFZ)
+        NEXT
+        FillTri sx(0), sy(0), q(0), sx(1), sy(1), q(1), sx(2), sy(2), q(2), col, t
+        EXIT SUB
+    END IF
+    ' In the camera's terms, cut at the near plane (a polygon of up to 4 corners)
+    nz = .01
+    FOR k = 0 TO 2: CamSpace wx(k), wy(k), wz(k), cx(k), cy(k), cz(k): NEXT
+    IF cz(0) < nz AND cz(1) < nz AND cz(2) < nz THEN EXIT SUB
+    cnt = 0
+    FOR k = 0 TO 2
+        j = (k + 1) MOD 3
+        ink = (cz(k) >= nz): inj = (cz(j) >= nz)
+        IF ink THEN vx(cnt) = cx(k): vy(cnt) = cy(k): vz(cnt) = cz(k): cnt = cnt + 1
+        IF ink <> inj THEN
+            f = (nz - cz(k)) / (cz(j) - cz(k))
+            vx(cnt) = cx(k) + (cx(j) - cx(k)) * f: vy(cnt) = cy(k) + (cy(j) - cy(k)) * f: vz(cnt) = nz: cnt = cnt + 1
+        END IF
+    NEXT
+    FOR k = 0 TO cnt - 1
+        sx(k) = cMidX + vx(k) / vz(k) * cFoc: sy(k) = cMidY - vy(k) / vz(k) * cFoc: q(k) = 1 / vz(k)
+    NEXT
+    FOR k = 1 TO cnt - 2
+        FillTri sx(0), sy(0), q(0), sx(k), sy(k), q(k), sx(k + 1), sy(k + 1), q(k + 1), col, t
+    NEXT
+END SUB
+
+FUNCTION Shade~& (c AS _UNSIGNED LONG, s)
+    DIM r, g, b
+    r = _RED32(c) * s: g = _GREEN32(c) * s: b = _BLUE32(c) * s
+    IF r > 255 THEN r = 255
+    IF g > 255 THEN g = 255
+    IF b > 255 THEN b = 255
+    Shade~& = _RGB32(r, g, b)
+END FUNCTION
+
+' A triangle on the picture filled: each pixel inside it, if nearer than
+' what's there (q: bigger is nearer), takes its colour and its number
+SUB FillTri (ax, ay, aq, bx, by, bq, cx, cy, cq, col AS _UNSIGNED LONG, id AS LONG)
+    DIM den, x0, x1, y0, y1, x, y, w0, w1, w2, a0, b0, a1, b1, q, i AS LONG, old AS _UNSIGNED LONG, yy, fx
+    den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    IF ABS(den) < 1E-9 THEN EXIT SUB
+    x0 = INT(ax): IF bx < x0 THEN x0 = INT(bx)
+    IF cx < x0 THEN x0 = INT(cx)
+    x1 = INT(ax): IF bx > x1 THEN x1 = INT(bx)
+    IF cx > x1 THEN x1 = INT(cx)
+    y0 = INT(ay): IF by < y0 THEN y0 = INT(by)
+    IF cy < y0 THEN y0 = INT(cy)
+    y1 = INT(ay): IF by > y1 THEN y1 = INT(by)
+    IF cy > y1 THEN y1 = INT(cy)
+    IF x0 < 0 THEN x0 = 0
+    IF y0 < 0 THEN y0 = 0
+    IF x1 > rW - 1 THEN x1 = rW - 1
+    IF y1 > rH - 1 THEN y1 = rH - 1
+    IF x0 > x1 OR y0 > y1 THEN EXIT SUB
+    a0 = (by - cy) / den: b0 = (cx - bx) / den
+    a1 = (cy - ay) / den: b1 = (ax - cx) / den
+    fx = x0 + .5 - cx
+    FOR y = y0 TO y1
+        yy = y + .5 - cy
+        w0 = a0 * fx + b0 * yy: w1 = a1 * fx + b1 * yy
+        i = y * rW + x0
+        FOR x = x0 TO x1
+            w2 = 1 - w0 - w1
+            IF w0 >= -.00001 AND w1 >= -.00001 AND w2 >= -.00001 THEN
+                q = w0 * aq + w1 * bq + w2 * cq
+                IF q > rZ(i) THEN
+                    IF rGhost THEN
+                        _MEMGET rMem, rMem.OFFSET + i * 4, old
+                        _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32((_RED32(old) + _RED32(col)) \ 2, (_GREEN32(old) + _GREEN32(col)) \ 2, (_BLUE32(old) + _BLUE32(col)) \ 2) AS _UNSIGNED LONG
+                    ELSE
+                        rZ(i) = q: rId(i) = id
+                        _MEMPUT rMem, rMem.OFFSET + i * 4, col
+                    END IF
+                END IF
+            END IF
+            w0 = w0 + a0: w1 = w1 + a1: i = i + 1
+        NEXT
+    NEXT
+END SUB
+
+' The outlines: round each selected part, and the part under the pointer
+SUB ViewOverlay
+    DIM m AS _MEM, x, y, i AS LONG, p, c AS _UNSIGNED LONG, edge
+    m = _MEMIMAGE(ovImg&)
+    _MEMFILL m, m.OFFSET, vW * vH * 4, 0 AS _UNSIGNED LONG
+    FOR i = 0 TO vW * vH - 1
+        IF rId(i) > 0 THEN rPart(i) = tPart(rId(i)) ELSE rPart(i) = 0
+    NEXT
+    FOR y = 1 TO vH - 2
+        i = y * vW + 1
+        FOR x = 1 TO vW - 2
+            p = rPart(i)
+            IF p > 0 THEN
+                IF pSel(p) OR p = hoverPart THEN
+                    edge = (rPart(i - 1) <> p) OR (rPart(i + 1) <> p) OR (rPart(i - vW) <> p) OR (rPart(i + vW) <> p)
+                    IF edge THEN
+                        IF pSel(p) THEN c = cSel ELSE c = _RGBA32(0, 240, 255, 200)
+                        _MEMPUT m, m.OFFSET + i * 4, c
+                    END IF
+                END IF
+            END IF
+            i = i + 1
+        NEXT
+    NEXT
+    _MEMFREE m
+    ovDirty = 0
+END SUB
+
+' Which triangle the view shows at (sx, sy) - the view's own pixels (0: none)
+FUNCTION PickTri& (sx, sy)
+    IF sx < 0 OR sy < 0 OR sx >= vW OR sy >= vH THEN EXIT FUNCTION
+    PickTri& = rId(INT(sy) * vW + INT(sx))
+END FUNCTION
+
+' The ray from the eye through view pixel (sx, sy)
+SUB ViewRay (sx, sy, d AS V3)
+    DIM l, a, b
+    a = (sx + .5 - cMidX) / cFoc: b = -(sy + .5 - cMidY) / cFoc
+    d.x = cFX + cRX * a + cUX * b: d.y = cFY + cRY * a + cUY * b: d.z = cFZ + cRZ * a + cUZ * b
+    l = SQR(d.x * d.x + d.y * d.y + d.z * d.z): d.x = d.x / l: d.y = d.y / l: d.z = d.z / l
+END SUB
+
+' Where the ray through (sx, sy) meets the plane through o facing n: ok 0 if it doesn't
+SUB RayPlane (sx, sy, o AS V3, n AS V3, hit AS V3, ok)
+    DIM d AS V3, dn, s
+    ok = 0
+    ViewRay sx, sy, d
+    dn = d.x * n.x + d.y * n.y + d.z * n.z
+    IF ABS(dn) < 1E-6 THEN EXIT SUB
+    s = ((o.x - cEX) * n.x + (o.y - cEY) * n.y + (o.z - cEZ) * n.z) / dn
+    IF s <= 0 THEN EXIT SUB
+    hit.x = cEX + d.x * s: hit.y = cEY + d.y * s: hit.z = cEZ + d.z * s: ok = -1
+END SUB
+
+' The camera turned to see the whole model (or the selection)
+SUB ViewFrameAll
+    DIM lo AS V3, hi AS V3, r
+    IF meshDirty THEN MeshBuild
+    MeshBounds lo, hi, SelCount > 0
+    IF hi.x - lo.x + hi.y - lo.y + hi.z - lo.z < .0001 THEN ViewHome: EXIT SUB
+    camTX = (lo.x + hi.x) / 2: camTY = (lo.y + hi.y) / 2: camTZ = (lo.z + hi.z) / 2
+    r = SQR((hi.x - lo.x) ^ 2 + (hi.y - lo.y) ^ 2 + (hi.z - lo.z) ^ 2) / 2
+    IF r < .05 THEN r = .05
+    camDist = r / DSin(camFov / 2) * 1.15
+    viewDirty = -1
+END SUB

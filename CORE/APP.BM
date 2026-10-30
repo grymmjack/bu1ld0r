@@ -1,0 +1,169 @@
+''
+' bu1ld0r - CORE/APP.BM
+' =============================================================================
+' Start-up, the mouse and keys each frame, and small helpers.
+'
+
+SUB AppStart
+    DIM a$, i, k$
+    SCREEN _NEWIMAGE(SCR_W, SCR_H, 32)
+    _TITLE APP_NAME$ + " " + APP_VERSION$
+    _PRINTMODE _KEEPBACKGROUND
+    cBg = _RGB32(14, 12, 24): cPanel = _RGB32(24, 22, 38): cLine = _RGB32(60, 54, 90)
+    cText = _RGB32(225, 225, 240): cDim = _RGB32(130, 125, 160): cHi = _RGB32(0, 240, 255)
+    cSel = _RGB32(255, 60, 200): cBtn = _RGB32(40, 36, 62): cHover = _RGB32(62, 56, 96): cWarn = _RGB32(255, 190, 60)
+    vX0 = BIN_W: vY0 = TOP_H: vW = SCR_W - BIN_W - PANEL_W: vH = SCR_H - TOP_H - BAR_H
+
+    ' Where the program is (its folders are beside it), from its own path
+    a$ = COMMAND$(0)
+    i = _INSTRREV(a$, "/"): IF _INSTRREV(a$, "\") > i THEN i = _INSTRREV(a$, "\")
+    IF i THEN appDir$ = LEFT$(a$, i) ELSE appDir$ = "./"
+    IF NOT _DIREXISTS(appDir$ + "models") THEN MKDIR appDir$ + "models"
+    IF NOT _DIREXISTS(appDir$ + "export") THEN MKDIR appDir$ + "export"
+    ReadCfg
+
+    FOR i = 1 TO _COMMANDCOUNT
+        a$ = COMMAND$(i)
+        SELECT CASE LCASE$(a$)
+            CASE "--open": i = i + 1: argOpen$ = COMMAND$(i)
+            CASE "--export": argExport = -1
+            CASE "--shot": i = i + 1: argShot$ = COMMAND$(i)
+            CASE "--quit": argQuit = -1
+            CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
+            CASE ELSE
+                k$ = LCASE$(RIGHT$(a$, 4))
+                IF k$ = ".bld" THEN argOpen$ = a$
+        END SELECT
+    NEXT
+    IF LEN(neonDir$) AND RIGHT$(neonDir$, 1) <> "/" THEN neonDir$ = neonDir$ + "/"
+
+    PartsSetup
+    ViewSetup
+    BinSetup
+    IF LEN(argOpen$) THEN ModelLoad argOpen$ ELSE ModelNew
+    Msg "Pick a shape on the left (or 1-6), click on the grid to put it down. H: every key"
+END SUB
+
+' bu1ld0r.cfg, beside the program: key=value lines
+SUB ReadCfg
+    DIM fh, l$, k$, v$, j
+    IF NOT _FILEEXISTS(appDir$ + "bu1ld0r.cfg") THEN EXIT SUB
+    fh = FREEFILE: OPEN appDir$ + "bu1ld0r.cfg" FOR INPUT AS #fh
+    DO WHILE NOT EOF(fh)
+        LINE INPUT #fh, l$
+        l$ = LTRIM$(RTRIM$(l$)): j = INSTR(l$, "=")
+        IF j > 0 AND LEFT$(l$, 1) <> "#" AND LEFT$(l$, 1) <> "'" THEN
+            k$ = LCASE$(RTRIM$(LEFT$(l$, j - 1))): v$ = LTRIM$(MID$(l$, j + 1))
+            SELECT CASE k$
+                CASE "neon_dir": neonDir$ = v$
+            END SELECT
+        END IF
+    LOOP
+    CLOSE #fh
+END SUB
+
+' The mouse's queue read out: where it ended, what was pressed and let go
+SUB InputFrame
+    DIM b1, b2, b3
+    mP1 = 0: mP2 = 0: mP3 = 0: mR1 = 0: mR2 = 0: mR3 = 0: mWheel = 0
+    DO WHILE _MOUSEINPUT
+        mWheel = mWheel + _MOUSEWHEEL
+        b1 = _MOUSEBUTTON(1): b2 = _MOUSEBUTTON(2): b3 = _MOUSEBUTTON(3)
+        IF b1 AND NOT mB1 THEN mP1 = -1
+        IF mB1 AND NOT b1 THEN mR1 = -1
+        IF b2 AND NOT mB2 THEN mP2 = -1
+        IF mB2 AND NOT b2 THEN mR2 = -1
+        IF b3 AND NOT mB3 THEN mP3 = -1
+        IF mB3 AND NOT b3 THEN mR3 = -1
+        mB1 = b1: mB2 = b2: mB3 = b3
+        IF mP1 OR mP2 OR mP3 THEN mX = _MOUSEX: mY = _MOUSEY: EXIT DO ' (a press is handled where it happened)
+    LOOP
+    mX = _MOUSEX: mY = _MOUSEY
+    kShift = _KEYDOWN(100304) OR _KEYDOWN(100303)
+    kCtrl = _KEYDOWN(100306) OR _KEYDOWN(100305)
+    kAlt = _KEYDOWN(100308) OR _KEYDOWN(100307)
+END SUB
+
+SUB Msg (t$)
+    msgText$ = t$: msgT = TIMER(0.001)
+END SUB
+
+' l$ split at spaces into wd$(1 to wdN)
+SUB Words (l$)
+    DIM p, j, n
+    n = 0: p = 1
+    DO
+        DO WHILE MID$(l$, p, 1) = " " OR MID$(l$, p, 1) = CHR$(9): p = p + 1: LOOP
+        IF p > LEN(l$) OR n >= 40 THEN EXIT DO
+        j = p
+        DO WHILE j <= LEN(l$) AND MID$(l$, j, 1) <> " " AND MID$(l$, j, 1) <> CHR$(9): j = j + 1: LOOP
+        n = n + 1: wd$(n) = MID$(l$, p, j - p): p = j
+    LOOP
+    wdN = n
+END SUB
+
+' A number as a file or field shows it: up to 4 decimals, no trailing zeros, 0.5 not .5
+FUNCTION Fmt$ (v)
+    DIM n AS LONG, s$, w$, f$
+    n = CLNG(v * 10000)
+    IF n < 0 THEN s$ = "-": n = -n
+    w$ = LTRIM$(STR$(n \ 10000)): f$ = RIGHT$("000" + LTRIM$(STR$(n MOD 10000)), 4)
+    DO WHILE RIGHT$(f$, 1) = "0" AND LEN(f$): f$ = LEFT$(f$, LEN(f$) - 1): LOOP
+    IF LEN(f$) THEN f$ = s$ + w$ + "." + f$ ELSE f$ = s$ + w$
+    IF f$ = "-0" THEN f$ = "0"
+    Fmt$ = f$
+END FUNCTION
+
+FUNCTION HexCol$ (c AS _UNSIGNED LONG)
+    HexCol$ = RIGHT$("00000" + HEX$(c AND &HFFFFFF), 6)
+END FUNCTION
+
+' "RRGGBB" (a # or not) as a colour; ok = 0 if it wasn't one
+FUNCTION ParseCol~& (t$, ok)
+    DIM s$, i
+    s$ = UCASE$(LTRIM$(RTRIM$(t$))): IF LEFT$(s$, 1) = "#" THEN s$ = MID$(s$, 2)
+    ok = 0
+    IF LEN(s$) <> 6 THEN EXIT FUNCTION
+    FOR i = 1 TO 6
+        IF INSTR("0123456789ABCDEF", MID$(s$, i, 1)) = 0 THEN EXIT FUNCTION
+    NEXT
+    ok = -1
+    ParseCol~& = _RGB32(VAL("&H" + MID$(s$, 1, 2)), VAL("&H" + MID$(s$, 3, 2)), VAL("&H" + MID$(s$, 5, 2)))
+END FUNCTION
+
+FUNCTION Clamp (v, lo, hi)
+    Clamp = v
+    IF v < lo THEN Clamp = lo
+    IF v > hi THEN Clamp = hi
+END FUNCTION
+
+FUNCTION InRect (x, y, x0, y0, w, h)
+    InRect = (x >= x0 AND x < x0 + w AND y >= y0 AND y < y0 + h)
+END FUNCTION
+
+SUB Txt (x, y, t$, c AS _UNSIGNED LONG)
+    COLOR c: _PRINTSTRING (x, y), t$
+END SUB
+
+' A button: its box, lit when the pointer's over it (or on), its words in the middle
+SUB Btn (x, y, w, h, t$, onIt)
+    DIM c AS _UNSIGNED LONG
+    c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover
+    IF onIt THEN c = _RGB32(90, 30, 110)
+    LINE (x, y)-(x + w - 1, y + h - 1), c, BF
+    LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
+    Txt x + (w - 8 * LEN(t$)) \ 2, y + (h - 16) \ 2, t$, cText
+END SUB
+
+' A button pressed this frame (the left button went down on it)
+FUNCTION BtnHit (x, y, w, h)
+    BtnHit = mP1 AND InRect(mX, mY, x, y, w, h)
+END FUNCTION
+
+FUNCTION DSin (d)
+    DSin = SIN(d * 3.14159265 / 180)
+END FUNCTION
+
+FUNCTION DCos (d)
+    DCos = COS(d * 3.14159265 / 180)
+END FUNCTION
