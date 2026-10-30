@@ -22,11 +22,17 @@ DIM SHARED dragX0(MAX_PARTS), dragY0(MAX_PARTS), dragZ0(MAX_PARTS)
 DIM SHARED ghostKey$ ' (where the ghost was last made: made again only when it moves)
 
 ' Typing into a field
-DIM SHARED typeField, typeBuf$, typeFresh
+DIM SHARED typeField, typeBuf$ ' (the field being typed in, what's in it)
+DIM SHARED typeCur, typeAnc, typeScroll, typeDrag, typeClickF, typeClickT# ' (the cursor, the other end of what's picked; the first letter showing; a drag picking; the last click, for a double one)
 DIM SHARED wheelField, wheelT AS DOUBLE ' (a run of wheel turns on one field is one undo step)
 
 DIM SHARED helpOn, openOn, openN, openTop
+' The top bar's view buttons, each with a slider: TEX (the faces, how solid), WIRE (the
+' edges, how strong), GRID (the walls; how bright). Buttons 8 to 10, sliders 1 to 3
+CONST TB_VIEW = 8, SL_W = 84
+DIM SHARED topSlide ' (the slider being dragged: 1 to 3, 0 none)
 DIM SHARED openName$(500)
 DIM SHARED quitAsk
 DIM SHARED qCtrl, qShift, qAlt ' (the modifier keys as the key queue has them)
-DIM SHARED helpLine$(60), helpN
+DIM SHARED helpLine$(240), helpPg(240), helpN ' (HELP: its lines - "KEYS|what they do", "#HEADING" - and which page each is on)
+DIM SHARED hpName$(16), hpN, helpPage ' (its pages, and the one shown)

@@ -1,0 +1,73 @@
+''
+' bu1ld0r - MODEL/PIC.BM
+' =============================================================================
+
+FUNCTION PicDir$
+    PicDir$ = appDir$ + "pictures/"
+END FUNCTION
+
+' Picture ref$'s number (loaded the first time it's asked for; 0: none - no name)
+FUNCTION PicFind (ref$)
+    DIM k, img&, n AS LONG, w AS LONG, h AS LONG
+    IF LEN(ref$) = 0 THEN EXIT FUNCTION
+    FOR k = 1 TO picN
+        IF picRef$(k) = ref$ THEN EXIT FOR
+    NEXT
+    IF k > picN THEN
+        IF picN >= MAX_PIC THEN EXIT FUNCTION
+        picN = picN + 1: k = picN: picRef$(k) = ref$: picW(k) = 0: picH(k) = 0: picOff(k) = 0
+    END IF
+    IF picW(k) > 0 THEN PicFind = k: EXIT FUNCTION
+    IF _FILEEXISTS(PicDir$ + ref$ + ".png") THEN
+        img& = _LOADIMAGE(PicDir$ + ref$ + ".png", 32)
+        IF img& < -1 THEN
+            w = _WIDTH(img&): h = _HEIGHT(img&): n = w * h
+            IF picTop + n > UBOUND(picPix) THEN REDIM _PRESERVE picPix(picTop + n + 65536) AS _UNSIGNED LONG
+            PicCopyIn img&, picTop
+            picW(k) = w: picH(k) = h: picOff(k) = picTop: picTop = picTop + n
+            _FREEIMAGE img&
+        END IF
+    END IF
+    PicFind = k
+END FUNCTION
+
+SUB PicCopyIn (img&, at AS LONG)
+    DIM m AS _MEM, i AS LONG, n AS LONG, c AS _UNSIGNED LONG
+    m = _MEMIMAGE(img&): n = _WIDTH(img&) * _HEIGHT(img&)
+    FOR i = 0 TO n - 1
+        _MEMGET m, m.OFFSET + i * 4, c: picPix(at + i) = c
+    NEXT
+    _MEMFREE m
+END SUB
+
+' Picture k's pixel at (u, v) - repeated past 0 to 1 (0: none there)
+FUNCTION PicAt~& (k, u, v)
+    DIM x AS LONG, y AS LONG
+    IF k < 1 OR k > picN THEN EXIT FUNCTION
+    IF picW(k) = 0 THEN EXIT FUNCTION
+    x = INT((u - INT(u)) * picW(k)): y = INT((v - INT(v)) * picH(k))
+    IF x >= picW(k) THEN x = picW(k) - 1
+    IF y >= picH(k) THEN y = picH(k) - 1
+    PicAt~& = picPix(picOff(k) + y * picW(k) + x)
+END FUNCTION
+
+' Every picture read again from its file (OPEN: one changed in DRAW shows)
+SUB PicReloadAll
+    DIM k, img&, n AS LONG
+    picTop = 0
+    FOR k = 1 TO picN
+        IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
+        pcThumb&(k) = 0
+        picW(k) = 0: picH(k) = 0: picOff(k) = 0
+        IF _FILEEXISTS(PicDir$ + picRef$(k) + ".png") THEN
+            img& = _LOADIMAGE(PicDir$ + picRef$(k) + ".png", 32)
+            IF img& < -1 THEN
+                n = _WIDTH(img&) * _HEIGHT(img&)
+                IF picTop + n > UBOUND(picPix) THEN REDIM _PRESERVE picPix(picTop + n + 65536) AS _UNSIGNED LONG
+                PicCopyIn img&, picTop
+                picW(k) = _WIDTH(img&): picH(k) = _HEIGHT(img&): picOff(k) = picTop: picTop = picTop + n
+                _FREEIMAGE img&
+            END IF
+        END IF
+    NEXT
+END SUB

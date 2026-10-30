@@ -77,22 +77,41 @@ END SUB
 
 ' Item i of the folder: 2 across from BI_Y0 (w 0: scrolled out of sight)
 SUB BinItemRect (i, x, y, w, h)
-    DIM row
-    row = (i - 1) \ 2 - binTop
-    x = 6 + ((i - 1) MOD 2) * 72: y = BI_Y0 + row * 88: w = 66: h = 84
+    DIM row, s
+    s = BinTS
+    row = (i - 1) \ BinCols - binTop
+    x = 6 + ((i - 1) MOD BinCols) * (s + 8): y = BI_Y0 + row * (s + 24): w = s + 2: h = s + 20
     IF row < 0 OR row >= BinRows THEN w = 0: h = 0
 END SUB
+
+' A tile's picture size: 64 for prefabs; the PICTURES tab's as Shift + wheel set it (no wider than the bin)
+FUNCTION BinTS
+    DIM s
+    s = 64
+    IF binTab = 1 THEN
+        s = picTS: IF s < PIC_TS_MIN THEN s = 64
+        IF s > BIN_W - 14 THEN s = BIN_W - 14
+    END IF
+    BinTS = s
+END FUNCTION
+
+' How many tiles across the bin is (2 at 64, wider as it's dragged wider)
+FUNCTION BinCols
+    DIM c
+    c = (BIN_W - 6) \ (BinTS + 8): IF c < 1 THEN c = 1
+    BinCols = c
+END FUNCTION
 
 ' How many rows of tiles the bin shows, at our screen's height
 FUNCTION BinRows
     DIM r
-    r = (scrH - BAR_H - 38 - BI_Y0) \ 88: IF r < 1 THEN r = 1
+    r = (scrH - BAR_H - 38 - BI_Y0) \ (BinTS + 24): IF r < 1 THEN r = 1
     BinRows = r
 END FUNCTION
 
 ' +FOLDER, at the bin's foot
 SUB BinBtn (x, y, w, h)
-    x = 6: y = scrH - BAR_H - 30: w = 138: h = 24
+    x = 6: y = scrH - BAR_H - 30: w = BIN_W - 12: h = 24
 END SUB
 
 ' ---------------------------------------------------------------- the folder's list
@@ -100,6 +119,7 @@ END SUB
 ' What's in the open folder: .. (not at the top), its folders, its prefabs - by name
 SUB BinList
     DIM f$, i, a
+    IF binTab = 1 THEN PicBinList: EXIT SUB
     biN = 0
     IF NOT _DIREXISTS(PfDir$ + binDir$) THEN binDir$ = ""
     IF LEN(binDir$) THEN biN = 1: biKind(1) = BI_UP: biName$(1) = "..": biRef$(1) = PfFolder$(LEFT$(binDir$, LEN(binDir$) - 1))
@@ -136,7 +156,7 @@ END SUB
 
 FUNCTION BinMaxTop
     DIM m
-    m = (biN + 1) \ 2 - BinRows: IF m < 0 THEN m = 0
+    m = (biN + BinCols - 1) \ BinCols - BinRows: IF m < 0 THEN m = 0
     BinMaxTop = m
 END FUNCTION
 
@@ -159,13 +179,27 @@ SUB BinClick
             EXIT SUB
         END IF
     NEXT
+    IF mY >= 152 AND mY < 170 THEN ' (the tabs: PREFABS, PICTURES)
+        k = 0: IF mX >= 74 THEN k = 1
+        IF k <> binTab THEN binTab = k: binTop = 0: BinList
+        IF binTab = 1 THEN Msg "Pictures: drag one onto a face, or click it then click faces. The path under the tabs: click it to go to any folder (paste one: Ctrl+V). Right-click a picture: EDIT IN DRAW, kaleidotron. Shift + wheel: bigger or smaller"
+        EXIT SUB
+    END IF
     BinBtn x, y, w, h
     IF InRect(mX, mY, x, y, w, h) THEN
-        typeField = F_DIR: typeBuf$ = "": typeFresh = -1
-        Msg "The new folder's name (in prefabs/" + binDir$ + "), then Enter. Esc: not now"
+        IF binTab = 1 AND LEN(binPicExt$) > 0 THEN Msg "Back in PICTURES first: + FOLDER makes one in pictures/": EXIT SUB
+        TypeStart F_DIR, "", -1
+        Msg "The new folder's name (in " + IIFS$(binTab = 1, "pictures/" + binPicDir$, "prefabs/" + binDir$) + "), then Enter. Esc: not now"
         EXIT SUB
     END IF
     i = BinItemAt(mX, mY): IF i = 0 THEN EXIT SUB
+    IF binTab = 1 THEN
+        SELECT CASE biKind(i)
+            CASE BI_UP, BI_DIR: PicFolderOpen biRef$(i)
+            CASE BI_PIC: PicPick biRef$(i)
+        END SELECT
+        EXIT SUB
+    END IF
     SELECT CASE biKind(i)
         CASE BI_UP, BI_DIR
             binDir$ = biRef$(i): binTop = 0: BinList
@@ -177,19 +211,146 @@ SUB BinClick
     END SELECT
 END SUB
 
-' Right-click a prefab: open it to change it
+' Right-click a prefab: its menu - EDIT IT, RENAME / MOVE. A picture: EDIT IN DRAW,
+' OPEN IN KALEIDOTRON; a pictures folder (or the empty bin: the one open): OPEN, KALEIDOTRON
 SUB BinRightClick
-    DIM i
-    i = BinItemAt(mX, mY): IF i = 0 THEN EXIT SUB
-    IF biKind(i) = BI_PF THEN PfEdit biRef$(i)
+    DIM i, x, y, w, h
+    i = BinItemAt(mX, mY)
+    IF binTab = 1 THEN
+        IF i = 0 THEN
+            IF mY < BI_Y0 THEN EXIT SUB
+            binMenuKind = 2: binMenuRef$ = "" ' (the folder open)
+        ELSEIF biKind(i) = BI_PIC THEN
+            binMenuKind = 1: binMenuRef$ = biRef$(i)
+        ELSE
+            binMenuKind = 2: binMenuRef$ = biRef$(i)
+            IF LEFT$(binMenuRef$, 1) <> "/" THEN binMenuRef$ = "=" + binMenuRef$ ' (one in pictures/: "=" + its folder there)
+        END IF
+    ELSE
+        IF i = 0 THEN EXIT SUB
+        IF biKind(i) <> BI_PF THEN EXIT SUB
+        binMenuKind = 0: binMenuRef$ = biRef$(i)
+    END IF
+    binMenu = -1: binMenuX = mX: binMenuY = mY
+    BinMenuRect 0, x, y, w, h ' (kept on the screen)
+END SUB
+
+' The folder a pictures folder menu is for, from / (ending in /)
+FUNCTION BinMenuFolder$
+    DIM r$
+    r$ = binMenuRef$
+    IF LEFT$(r$, 1) = "=" THEN BinMenuFolder$ = AbsPath$(PicDir$ + MID$(r$, 2)): EXIT FUNCTION
+    IF LEN(r$) = 0 THEN
+        IF LEN(binPicExt$) THEN BinMenuFolder$ = binPicExt$ ELSE BinMenuFolder$ = AbsPath$(PicDir$ + binPicDir$)
+        EXIT FUNCTION
+    END IF
+    BinMenuFolder$ = r$
+END FUNCTION
+
+FUNCTION BinMenuItems
+    BinMenuItems = 2: IF binMenuKind = 2 AND LEN(binMenuRef$) = 0 THEN BinMenuItems = 1
+END FUNCTION
+
+FUNCTION BinMenuItem$ (k)
+    SELECT CASE binMenuKind
+        CASE 0: BinMenuItem$ = IIFS$(k = 1, "EDIT IT", "RENAME / MOVE")
+        CASE 1: BinMenuItem$ = IIFS$(k = 1, "EDIT IN DRAW", "OPEN IN KALEIDOTRON")
+        CASE 2
+            IF BinMenuItems = 1 THEN BinMenuItem$ = "OPEN IN KALEIDOTRON" ELSE BinMenuItem$ = IIFS$(k = 1, "OPEN", "OPEN IN KALEIDOTRON")
+    END SELECT
+END FUNCTION
+
+FUNCTION BinMenuTitle$
+    DIM t$
+    SELECT CASE binMenuKind
+        CASE 0: t$ = PfBase$(binMenuRef$)
+        CASE 1: t$ = MID$(binMenuRef$, _INSTRREV(binMenuRef$, "/") + 1): IF LEFT$(binMenuRef$, 1) <> "/" THEN t$ = t$ + ".png"
+        CASE 2: t$ = Tilde$(PathClean$(BinMenuFolder$))
+    END SELECT
+    IF LEN(t$) > 22 THEN t$ = ".." + RIGHT$(t$, 20)
+    BinMenuTitle$ = t$
+END FUNCTION
+
+SUB BinMenuRect (k, x, y, w, h)
+    w = IIF(binMenuKind = 0, 170, 196)
+    IF binMenuX + w > scrW - 4 THEN binMenuX = scrW - 4 - w
+    IF binMenuY + 22 * (BinMenuItems + 1) + 4 > scrH - BAR_H THEN binMenuY = scrH - BAR_H - 22 * (BinMenuItems + 1) - 4
+    x = binMenuX: y = binMenuY + 22 + (k - 1) * 22: h = 22
+    IF k = 0 THEN y = binMenuY: h = 22 * (BinMenuItems + 1) + 4 ' (the whole of it)
+END SUB
+
+SUB BinMenuDraw
+    DIM x, y, w, h, k
+    BinMenuRect 0, x, y, w, h
+    LINE (x, y)-(x + w - 1, y + h - 1), _RGB32(12, 10, 22), BF
+    LINE (x, y)-(x + w - 1, y + h - 1), cHi, B
+    Txt x + 6, y + 3, BinMenuTitle$, cDim
+    FOR k = 1 TO BinMenuItems
+        BinMenuRect k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN LINE (x + 2, y)-(x + w - 3, y + h - 1), cHover, BF
+        Txt x + 8, y + 3, BinMenuItem$(k), cText
+    NEXT
+END SUB
+
+SUB BinMenuClick
+    DIM x, y, w, h, k, hit
+    binMenu = 0
+    FOR k = 1 TO BinMenuItems
+        BinMenuRect k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN hit = k
+    NEXT
+    IF hit = 0 THEN EXIT SUB
+    IF binMenuKind = 1 THEN
+        IF hit = 1 THEN PicDrawFromBin binMenuRef$ ELSE KaleidoOpen PicPath$(binMenuRef$)
+        EXIT SUB
+    END IF
+    IF binMenuKind = 2 THEN
+        IF BinMenuItem$(hit) = "OPEN" THEN
+            IF LEFT$(binMenuRef$, 1) = "=" THEN PicFolderOpen MID$(binMenuRef$, 2) ELSE PicFolderOpen binMenuRef$
+        ELSE
+            KaleidoOpen BinMenuFolder$
+        END IF
+        EXIT SUB
+    END IF
+    IF hit = 1 THEN PfEdit binMenuRef$: EXIT SUB
+    BinMenuRect 2, x, y, w, h
+    IF InRect(mX, mY, x, y, w, h) THEN
+        IF typeField THEN FieldCommit
+        TypeStart F_PFNAME, binMenuRef$, 0
+        Msg "Its new name, then Enter (a folder in it moves it: panels/" + PfBase$(binMenuRef$) + "). Every model and prefab that uses it follows. Esc: not now"
+    END IF
 END SUB
 
 SUB BinWheel
     binTop = Clamp(binTop + SGN(mWheel), 0, BinMaxTop)
 END SUB
 
+' Shift + wheel over the PICTURES tab: its tiles bigger (up) or smaller, the first one showing kept in sight
+SUB PicTileWheel (d)
+    DIM s, first, i
+    STATIC steps(7)
+    IF steps(1) = 0 THEN steps(1) = 40: steps(2) = 48: steps(3) = 64: steps(4) = 96: steps(5) = 128: steps(6) = 192: steps(7) = 256
+    s = BinTS: first = binTop * BinCols
+    IF d < 0 THEN ' (up: bigger)
+        FOR i = 1 TO 7
+            IF steps(i) > s THEN picTS = steps(i): EXIT FOR
+        NEXT
+    ELSE
+        FOR i = 7 TO 1 STEP -1
+            IF steps(i) < s THEN picTS = steps(i): EXIT FOR
+        NEXT
+    END IF
+    IF picTS > BIN_W - 14 THEN picTS = BIN_W - 14 ' (as big as the bin is wide: drag its edge for bigger)
+    IF picTS < PIC_TS_MIN THEN picTS = PIC_TS_MIN
+    IF BinTS = s THEN EXIT SUB
+    binTop = Clamp(first \ BinCols, 0, BinMaxTop)
+    CfgSet "pic_size", LTRIM$(STR$(picTS))
+    Msg "Pictures shown at" + STR$(BinTS) + " pixels (Shift + wheel)"
+END SUB
+
 ' A shape (or prefab r$) to put down: the ghost follows the pointer
 SUB PlaceStart (k, r$)
+    pmRef$ = ""
     placeKind = k: placeRef$ = r$: placeDrag = -1: ghostKey$ = "": SelNone: ovDirty = -1
     PartFresh P_TPL, k, 0, 0, 0: pRef$(P_TPL) = r$ ' (set up as the last one of its kind was - the panel changes it)
     gHave = 0: IF ghostOn THEN ghostOn = 0: meshDirty = -1
@@ -224,7 +385,7 @@ END SUB
 ' ---------------------------------------------------------------- drawing
 
 SUB BinDraw
-    DIM k, x, y, w, h, i, pf, c AS _UNSIGNED LONG, t$, hov$, isOn
+    DIM k, x, y, w, h, i, pf, c AS _UNSIGNED LONG, t$, hov$, isOn, img&
     LINE (0, TOP_H)-(BIN_W - 1, scrH - BAR_H - 1), cPanel, BF
     LINE (BIN_W - 1, TOP_H)-(BIN_W - 1, scrH - BAR_H - 1), cLine
     t$ = "SHAPES"
@@ -239,43 +400,60 @@ SUB BinDraw
     NEXT
     Txt 10, TOP_H + 4, t$, cHi
 
-    Txt 10, 156, "PREFABS", cHi
-    t$ = "/" + binDir$: IF LEN(t$) > 17 THEN t$ = ".." + RIGHT$(t$, 15)
-    Txt 10, 174, t$, cDim
+    Txt 10, 156, "PREFABS", IIFC~&(binTab = 0, cHi, cDim)
+    Txt 78, 156, "PICTURES", IIFC~&(binTab = 1, cHi, cDim)
+    LINE (IIF(binTab = 0, 10, 78), 169)-(IIF(binTab = 0, 65, 141), 169), cHi
+    IF binTab = 1 THEN
+        FieldDraw F_PICPATH
+    ELSE
+        t$ = "/" + binDir$: IF LEN(t$) > 17 THEN t$ = ".." + RIGHT$(t$, 15)
+        Txt 10, 174, t$, cDim
+    END IF
+    xtLoads = 0
     FOR i = 1 TO biN
         BinItemRect i, x, y, w, h
         IF w > 0 THEN
-            isOn = (biKind(i) = BI_PF AND placeKind = K_USE AND placeRef$ = biRef$(i))
+            isOn = (biKind(i) = BI_PF AND placeKind = K_USE AND placeRef$ = biRef$(i)) OR (biKind(i) = BI_PIC AND LEN(pmRef$) > 0 AND (pmRef$ = biRef$(i) OR pmSrc$ = biRef$(i)))
             c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover: hov$ = biName$(i)
             IF isOn THEN c = _RGB32(90, 30, 110)
             LINE (x, y)-(x + w - 1, y + h - 1), c, BF
             LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
             SELECT CASE biKind(i)
                 CASE BI_UP, BI_DIR
-                    FolderGlyph x + 13, y + 14, biKind(i) = BI_UP
+                    FolderGlyph x + (w - 40) \ 2, y + (h - 56) \ 2 + 1, biKind(i) = BI_UP
+                CASE BI_PIC
+                    img& = PicThumb&(biRef$(i))
+                    IF img& < -1 THEN _PUTIMAGE (x + 1, y + 2), img&
                 CASE BI_PF
                     pf = PfFind(biRef$(i))
                     IF pf > 0 THEN
                         IF pfIcon&(pf) < -1 THEN _PUTIMAGE (x + 1, y + 2), pfIcon&(pf)
                     END IF
             END SELECT
-            t$ = LEFT$(biName$(i), 8): Txt x + (w - 8 * LEN(t$)) \ 2, y + 67, t$, IIFC~&(biKind(i) = BI_PF, cText, cWarn)
+            t$ = LEFT$(biName$(i), (w - 2) \ 8): Txt x + (w - 8 * LEN(t$)) \ 2, y + h - 17, t$, IIFC~&(biKind(i) = BI_PF OR biKind(i) = BI_PIC, cText, cWarn)
         END IF
     NEXT
-    IF biN = 0 OR (biN = 1 AND biKind(1) = BI_UP) THEN
+    IF binTab = 1 AND (biN = 0 OR (biN = 1 AND biKind(1) = BI_UP)) THEN
+        Txt 10, BI_Y0 + IIF(biN, 92, 4), "None here yet:", cDim
+        Txt 10, BI_Y0 + IIF(biN, 108, 20), "drop a PNG from", cDim
+        Txt 10, BI_Y0 + IIF(biN, 124, 36), "your desktop on", cDim
+        Txt 10, BI_Y0 + IIF(biN, 140, 52), "the window.", cDim
+    ELSEIF biN = 0 OR (biN = 1 AND biKind(1) = BI_UP) THEN
         Txt 10, BI_Y0 + IIF(biN, 92, 4), "None here yet:", cDim
         Txt 10, BI_Y0 + IIF(biN, 108, 20), "PREFAB at the top", cDim
         Txt 10, BI_Y0 + IIF(biN, 124, 36), "saves the model", cDim
         Txt 10, BI_Y0 + IIF(biN, 140, 52), "as one.", cDim
     END IF
-    IF binTop < BinMaxTop THEN Txt 10, BI_Y0 + BinRows * 88 - 2, "more: the wheel", cDim
+    IF binTop < BinMaxTop THEN Txt 10, BI_Y0 + BinRows * (BinTS + 24) - 2, "more: the wheel", cDim
     IF typeField = F_DIR THEN
         FieldDraw F_DIR
+    ELSEIF typeField = F_PFNAME THEN
+        FieldDraw F_PFNAME
     ELSE
         BinBtn x, y, w, h: Btn x, y, w, h, "+ FOLDER", 0
     END IF
     ' (a name too long for its tile, in full by the pointer)
-    IF LEN(hov$) > 8 THEN
+    IF LEN(hov$) > (BinTS \ 8) THEN
         w = 8 * LEN(hov$) + 8
         LINE (mX + 14, mY + 4)-(mX + 14 + w, mY + 24), _RGB32(12, 10, 22), BF
         LINE (mX + 14, mY + 4)-(mX + 14 + w, mY + 24), cHi, B

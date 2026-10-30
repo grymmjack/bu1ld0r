@@ -37,6 +37,7 @@ FUNCTION CsgPoly& (nv)
         REDIM _PRESERVE cgV0(n) AS LONG, cgVn(n) AS INTEGER, cgNext(n) AS LONG
         REDIM _PRESERVE cgPart(n) AS INTEGER, cgFace(n) AS INTEGER, cgCol(n) AS _UNSIGNED LONG, cgCut(n) AS INTEGER
         REDIM _PRESERVE cgPar(n) AS LONG, cgOn(n) AS INTEGER
+        REDIM _PRESERVE cgTex(n) AS INTEGER, cgMap(8 * n + 7) AS DOUBLE
         cgCap = n
     END IF
     IF cvTop + nv > cvCap THEN
@@ -69,6 +70,7 @@ FUNCTION CsgFromTris& (t0 AS LONG, t1 AS LONG, cut)
             nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
             cgNx(p) = nx#: cgNy(p) = ny#: cgNz(p) = nz#: cgW(p) = nx# * cvX(v) + ny# * cvY(v) + nz# * cvZ(v)
             cgPart(p) = tPart(t): cgFace(p) = tFace(t): cgCol(p) = tCol(t): cgCut(p) = cut
+            cgTex(p) = tTex(t): IF tTex(t) THEN CsgMapFrom p, t
             cgNext(p) = h: h = p
         END IF
     NEXT
@@ -146,9 +148,41 @@ END SUB
 
 ' Polygon q given p's plane and what p came from, as a piece of p
 SUB CsgLike (p AS LONG, q AS LONG)
+    DIM k
     cgNx(q) = cgNx(p): cgNy(q) = cgNy(p): cgNz(q) = cgNz(p): cgW(q) = cgW(p)
     cgPart(q) = cgPart(p): cgFace(q) = cgFace(p): cgCol(q) = cgCol(p): cgCut(q) = cgCut(p)
     cgOn(q) = cgOn(p): cgPar(q) = p
+    cgTex(q) = cgTex(p)
+    IF cgTex(p) THEN
+        FOR k = 0 TO 7: cgMap(8 * q + k) = cgMap(8 * p + k): NEXT
+    END IF
+END SUB
+
+' Polygon p's picture spots as a function of where a point is, from triangle t's
+' (flat on its plane: so any piece of it, cut anywhere, gets the same spots there)
+SUB CsgMapFrom (p AS LONG, t AS LONG)
+    DIM e1x#, e1y#, e1z#, e2x#, e2y#, e2z#, d11#, d12#, d22#, det#, r1#, r2#, al#, be#, gx#, gy#, gz#, k, a0#, b0#, c0#
+    e1x# = tB(t).x - tA(t).x: e1y# = tB(t).y - tA(t).y: e1z# = tB(t).z - tA(t).z
+    e2x# = tC(t).x - tA(t).x: e2y# = tC(t).y - tA(t).y: e2z# = tC(t).z - tA(t).z
+    d11# = e1x# * e1x# + e1y# * e1y# + e1z# * e1z#
+    d12# = e1x# * e2x# + e1y# * e2y# + e1z# * e2z#
+    d22# = e2x# * e2x# + e2y# * e2y# + e2z# * e2z#
+    det# = d11# * d22# - d12# * d12#
+    FOR k = 0 TO 1
+        IF k = 0 THEN
+            a0# = tU(3 * t): b0# = tU(3 * t + 1): c0# = tU(3 * t + 2)
+        ELSE
+            a0# = tW(3 * t): b0# = tW(3 * t + 1): c0# = tW(3 * t + 2)
+        END IF
+        gx# = 0: gy# = 0: gz# = 0
+        IF det# > 1E-20 THEN
+            r1# = b0# - a0#: r2# = c0# - a0#
+            al# = (r1# * d22# - r2# * d12#) / det#: be# = (r2# * d11# - r1# * d12#) / det#
+            gx# = al# * e1x# + be# * e2x#: gy# = al# * e1y# + be# * e2y#: gz# = al# * e1z# + be# * e2z#
+        END IF
+        cgMap(8 * p + 4 * k) = gx#: cgMap(8 * p + 4 * k + 1) = gy#: cgMap(8 * p + 4 * k + 2) = gz#
+        cgMap(8 * p + 4 * k + 3) = a0# - (gx# * tA(t).x + gy# * tA(t).y + gz# * tA(t).z)
+    NEXT
 END SUB
 
 ' Polygon p turned to face the other way (its corners round the other way)
@@ -317,15 +351,27 @@ END SUB
 ' Solid a less solid b: a's faces outside b, and b's inside a turned in
 ' (they take a's colour: a hole's walls are what it's cut from)
 FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
+    CsgSubtract& = CsgBool&(la, lb, 0)
+END FUNCTION
+
+' Less (keep 0), or only where they overlap (keep: a's faces inside b,
+' and b's inside a as they are - in a's colour)
+FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     DIM p AS LONG, nx AS LONG, q AS LONG, pp AS LONG, l AS LONG, nl AS LONG, f AS LONG, b AS LONG, cf AS LONG, cb AS LONG
     DIM plo AS V3, phi AS V3, aNear AS LONG, aFar AS LONG, bNear AS LONG, aP AS LONG, bP AS LONG, na AS LONG, nb AS LONG, i AS LONG, k AS LONG
     DIM x#, y#, z#, ins, res AS LONG, c AS _UNSIGNED LONG, side
-    IF la = 0 OR lb = 0 THEN CsgSubtract& = la: EXIT FUNCTION
+    IF la = 0 OR lb = 0 THEN
+        IF keep = 0 THEN CsgBool& = la
+        EXIT FUNCTION
+    END IF
     c = cgCol(la)
     ' Both whole, for the inside tests
     rbN = 0
     CsgRays 0, la: CsgRays 1, lb
-    IF BoxesMeet(rgLo(0), rgHi(0), rgLo(1), rgHi(1)) = 0 THEN CsgSubtract& = la: EXIT FUNCTION
+    IF BoxesMeet(rgLo(0), rgHi(0), rgLo(1), rgHi(1)) = 0 THEN
+        IF keep = 0 THEN CsgBool& = la
+        EXIT FUNCTION
+    END IF
     ' a's faces near b, and b's near a (b's others are outside a: gone)
     p = la
     DO WHILE p
@@ -341,7 +387,10 @@ FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
         IF BoxesMeet(plo, phi, rgLo(0), rgHi(0)) THEN cgNext(p) = bNear: bNear = p
         p = nx
     LOOP
-    IF aNear = 0 OR bNear = 0 THEN CsgSubtract& = CsgJoin&(aNear, aFar): EXIT FUNCTION
+    IF aNear = 0 OR bNear = 0 THEN
+        IF keep = 0 THEN CsgBool& = CsgJoin&(aNear, aFar)
+        EXIT FUNCTION
+    END IF
     ' Which near faces meet which; each that meets any split by their planes
     CsgCrossing aNear, bNear, na, nb
     FOR i = 1 TO na + nb
@@ -381,7 +430,7 @@ FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
                 ins = CsgInside(x#, y#, z#, 0)
                 IF ins AND cgOn(p) <> 0 THEN CsgMid p, -.0002, x#, y#, z#: ins = CsgInside(x#, y#, z#, 0)
             END IF
-            IF ins = (side = 0) THEN ' (it goes)
+            IF ins = ((side = 0) AND (keep = 0)) THEN ' (it goes)
                 q = p
                 DO WHILE q
                     IF csGone(q) THEN EXIT DO
@@ -393,7 +442,7 @@ FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
     NEXT
     ' What's left: a's far faces, and of each piece kept the first face it was
     ' split from that lost nothing (once) - b's turned in
-    res = aFar
+    res = aFar: IF keep THEN res = 0 ' (a's far faces are outside b)
     FOR side = 0 TO 1
         p = aP: IF side THEN p = bP
         DO WHILE p
@@ -406,14 +455,14 @@ FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
                 LOOP
                 IF csDone(q) = 0 THEN
                     csDone(q) = 1
-                    IF side THEN CsgFlip q: cgCol(q) = c
+                    IF side THEN cgCol(q) = c: cgTex(q) = 0: IF keep = 0 THEN CsgFlip q ' (walls: the solid's colour, no picture)
                     cgNext(q) = res: res = q
                 END IF
             END IF
             p = nx
         LOOP
     NEXT
-    CsgSubtract& = res
+    CsgBool& = res
 END FUNCTION
 
 ' Near lists a and b into csXP (a's 1 to na, b's after), and which of a's
@@ -519,7 +568,7 @@ END SUB
 
 ' A list's polygons made triangles (a fan from each one's first corner)
 SUB CsgEmit (lst AS LONG)
-    DIM p AS LONG, n, k, v0 AS LONG, t AS LONG, e, ux, uy, uz, wx, wy, wz, cx, cy, cz
+    DIM p AS LONG, n, k, v0 AS LONG, t AS LONG, e, ux, uy, uz, wx, wy, wz, cx, cy, cz, m AS LONG
     p = lst
     DO WHILE p
         n = cgVn(p): v0 = cgV0(p)
@@ -540,6 +589,16 @@ SUB CsgEmit (lst AS LONG)
                 tEdge(t) = e
                 tNrm(t).x = cgNx(p): tNrm(t).y = cgNy(p): tNrm(t).z = cgNz(p)
                 tPart(t) = cgPart(p): tFace(t) = cgFace(p): tCol(t) = cgCol(p)
+                tTex(t) = cgTex(p)
+                IF tTex(t) THEN ' (its picture's spots where its corners are now)
+                    m = 8 * p
+                    tU(3 * t) = cgMap(m) * tA(t).x + cgMap(m + 1) * tA(t).y + cgMap(m + 2) * tA(t).z + cgMap(m + 3)
+                    tU(3 * t + 1) = cgMap(m) * tB(t).x + cgMap(m + 1) * tB(t).y + cgMap(m + 2) * tB(t).z + cgMap(m + 3)
+                    tU(3 * t + 2) = cgMap(m) * tC(t).x + cgMap(m + 1) * tC(t).y + cgMap(m + 2) * tC(t).z + cgMap(m + 3)
+                    tW(3 * t) = cgMap(m + 4) * tA(t).x + cgMap(m + 5) * tA(t).y + cgMap(m + 6) * tA(t).z + cgMap(m + 7)
+                    tW(3 * t + 1) = cgMap(m + 4) * tB(t).x + cgMap(m + 5) * tB(t).y + cgMap(m + 6) * tB(t).z + cgMap(m + 7)
+                    tW(3 * t + 2) = cgMap(m + 4) * tC(t).x + cgMap(m + 5) * tC(t).y + cgMap(m + 6) * tC(t).z + cgMap(m + 7)
+                END IF
                 tN = t
             END IF
         NEXT

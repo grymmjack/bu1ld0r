@@ -3,4 +3,5 @@ bu1ld0r.run
 export/
 models/*.bak
 bu1ld0r.cfg
-.claude/
+.claude/*
+!.claude/skills/

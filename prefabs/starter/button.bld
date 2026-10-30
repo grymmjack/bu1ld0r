@@ -1,0 +1,5 @@
+bu1ld0r 1
+name button
+budget 200
+part tube  0 0 0  0 0 0  0.08 0.015 0.08  B8BCC8  16  0.72  name=bezel
+part cylinder  0 0 0  0 0 0  0.056 0.03 0.056  E03030  16  0  name=cap

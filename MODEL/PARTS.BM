@@ -12,7 +12,8 @@ SUB PartsSetup
     FOR k = 1 TO NUM_KINDS: kindSX(k) = 0.25: kindSY(k) = 0.25: kindSZ(k) = 0.25: NEXT
     kindSY(K_CYL) = 0.3: kindSY(K_TUBE) = 0.15: kindAmt(K_TUBE) = 0.6: kindAmt(K_SPHERE) = 1
     kindName$(K_USE) = "prefab": kindSX(K_USE) = 1: kindSY(K_USE) = 1: kindSZ(K_USE) = 1 ' (a prefab's size is its scale)
-    FOR k = 1 TO K_USE: defSX(k) = kindSX(k): defSY(k) = kindSY(k): defSZ(k) = kindSZ(k): NEXT
+    kindName$(K_MESH) = "mesh": kindSX(K_MESH) = 1: kindSY(K_MESH) = 1: kindSZ(K_MESH) = 1 ' (its points are its own: its size is its scale)
+    FOR k = 1 TO K_MESH: defSX(k) = kindSX(k): defSY(k) = kindSY(k): defSZ(k) = kindSZ(k): NEXT
     snapStep = 1 / 32
     curCol = _RGB32(76, 255, 255) ' (ANSI32's cyan, 4CFFFF)
     defCol = curCol
@@ -32,6 +33,7 @@ SUB PartFresh (i, k, x, y, z)
     pSX(i) = kindSX(k): pSY(i) = kindSY(k): pSZ(i) = kindSZ(k)
     pAmt(i) = kindAmt(k): pSeg(i) = 0: pCol(i) = curCol: pSel(i) = 0: pRef$(i) = ""
     pHole(i) = 0: pHide(i) = 0: pWire(i) = 0: pName$(i) = ""
+    pMesh(i) = 0: pKeep(i) = 0: pGrp(i) = 0: pTint(i) = 0
 END SUB
 
 ' Part a copied over part b (all but whether it's selected)
@@ -41,6 +43,7 @@ SUB PartCopy (a, b)
     pSX(b) = pSX(a): pSY(b) = pSY(a): pSZ(b) = pSZ(a)
     pAmt(b) = pAmt(a): pSeg(b) = pSeg(a): pCol(b) = pCol(a): pRef$(b) = pRef$(a)
     pHole(b) = pHole(a): pHide(b) = pHide(a): pWire(b) = pWire(a): pName$(b) = pName$(a)
+    pMesh(b) = pMesh(a): pKeep(b) = pKeep(a): pGrp(b) = pGrp(a): pTint(b) = pTint(a)
 END SUB
 
 ' The ghost (part 0) put in the model as a part of its own: its number
@@ -49,7 +52,7 @@ FUNCTION PartFromGhost
     pN = pN + 1: PartCopy 0, pN: pSel(pN) = 0
     PartFromGhost = pN
     ' (the next of this kind starts as big as this one - a prefab always as made)
-    IF pKind(0) <> K_USE THEN kindSX(pKind(0)) = pSX(0): kindSY(pKind(0)) = pSY(0): kindSZ(pKind(0)) = pSZ(0)
+    IF pKind(0) <> K_USE AND pKind(0) <> K_MESH THEN kindSX(pKind(0)) = pSX(0): kindSY(pKind(0)) = pSY(0): kindSZ(pKind(0)) = pSZ(0)
 END FUNCTION
 
 SUB SelNone
@@ -98,16 +101,34 @@ SUB SelDuplicate
     Msg "Copied: the copies are selected": ModelChanged
 END SUB
 
-' The model as text: the .bld file, and each undo step
+' The model as text, each undo step (a mesh part's polygons named, not
+' written out: "mesh=ID" - the .bld has them in full, ModelWrite)
 FUNCTION ModelText$
     DIM i, t$, nl$
     nl$ = CHR$(10)
-    t$ = "bu1ld0r 1" + nl$ + "name " + mdlName$ + nl$
+    t$ = "bu1ld0r 1" + nl$ + "name " + mdlName$ + nl$ + "budget" + STR$(mdlBudget) + nl$ + "tidy" + STR$(-(mdlTidy <> 0)) + nl$
     FOR i = 1 TO pN
-        t$ = t$ + PartLine$(i) + nl$
+        t$ = t$ + PartLine$(i)
+        IF pKind(i) = K_MESH THEN t$ = t$ + "  mesh=" + LTRIM$(STR$(pMesh(i)))
+        t$ = t$ + nl$
     NEXT
     ModelText$ = t$
 END FUNCTION
+
+' The model as its .bld file: each mesh part's points and polygons after its line
+SUB ModelWrite (f$)
+    DIM fh, i
+    fh = FREEFILE: OPEN f$ FOR OUTPUT AS #fh
+    PRINT #fh, "bu1ld0r 1"
+    PRINT #fh, "name " + mdlName$
+    PRINT #fh, "budget" + STR$(mdlBudget)
+    IF mdlTidy THEN PRINT #fh, "tidy 1"
+    FOR i = 1 TO pN
+        PRINT #fh, PartLine$(i)
+        IF pKind(i) = K_MESH THEN MeshLines fh, pMesh(i)
+    NEXT
+    CLOSE #fh
+END SUB
 
 ' part KIND  x y z  turns  sizes  RRGGBB  slices  amount; or a prefab: use NAME  x y z  turns  scales
 FUNCTION PartLine$ (i)
@@ -119,7 +140,9 @@ FUNCTION PartLine$ (i)
         t$ = "part " + kindName$(pKind(i)) + "  " + t$ + "  " + HexCol$(pCol(i)) + "  " + LTRIM$(STR$(pSeg(i))) + "  " + Fmt$(pAmt(i))
     END IF
     ' (then its flags, words of their own after the numbers: older copies leave them out)
-    IF pHole(i) THEN t$ = t$ + "  hole"
+    IF pHole(i) THEN t$ = t$ + IIFS$(pKeep(i), "  keep", "  hole")
+    IF pGrp(i) THEN t$ = t$ + "  group=" + LTRIM$(STR$(pGrp(i)))
+    IF _ALPHA32(pTint(i)) THEN t$ = t$ + "  tint=" + HexCol$(pTint(i)) + RIGHT$("0" + HEX$(_ALPHA32(pTint(i))), 2)
     IF pHide(i) THEN t$ = t$ + "  hide"
     IF pWire(i) THEN t$ = t$ + "  wire"
     IF LEN(pName$(i)) THEN t$ = t$ + "  name=" + pName$(i)
@@ -130,13 +153,15 @@ END FUNCTION
 SUB ModelFromText (t$)
     pN = PartsFromText&(t$, 0, MAX_PARTS)
     IF LEN(txtName$) THEN mdlName$ = txtName$
+    IF txtBudget >= 0 THEN mdlBudget = txtBudget ELSE mdlBudget = TD_BUDGET: mdlTidy = 0
+    mdlTidy = txtTidy
 END SUB
 
 ' A .bld's parts read into at0 + 1 on (room of them at most): how many.
 ' The lines it doesn't know are left out; its name line goes in txtName$.
 FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
-    DIM p AS LONG, j AS LONG, l$, k, ok, c AS _UNSIGNED LONG, n AS LONG, i, w
-    n = 0: p = 1: txtName$ = ""
+    DIM p AS LONG, j AS LONG, l$, k, ok, c AS _UNSIGNED LONG, n AS LONG, i, w, mb AS LONG, r AS LONG, v AS LONG, nv AS LONG, w0, j1 AS LONG, j2 AS LONG
+    n = 0: p = 1: txtName$ = "": txtBudget = -1: txtTidy = 0: i = 0: mb = 0
     DO WHILE p <= LEN(t$)
         j = INSTR(p, t$, CHR$(10)): IF j = 0 THEN j = LEN(t$) + 1
         l$ = MID$(t$, p, j - p): p = j + 1
@@ -146,9 +171,37 @@ FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
             k = 0
             SELECT CASE LCASE$(wd$(1))
                 CASE "name": txtName$ = MID$(LTRIM$(l$), 6)
-                CASE "part": IF wdN >= 12 THEN k = KindOf(wd$(2))
+                CASE "tidy": txtTidy = (VAL(wd$(2)) <> 0)
+                CASE "budget": txtBudget = INT(Clamp(VAL(wd$(2)), 0, MAX_TRI))
+                CASE "part"
+                    IF wdN >= 12 THEN k = KindOf(wd$(2))
+                    IF wdN >= 12 AND LCASE$(wd$(2)) = "mesh" THEN k = K_MESH
                 CASE "use": IF wdN >= 11 THEN k = K_USE
+                CASE "v" ' (a mesh part's point: the mesh is begun at its first)
+                    IF i > 0 AND wdN >= 4 THEN
+                        IF pKind(i) = K_MESH THEN
+                            IF mb = 0 THEN mb = MbBegin&: pMesh(i) = mb: nv = 0
+                            IF mb = mbN THEN r = MbAddV&(mb, VAL(wd$(2)), VAL(wd$(3)), VAL(wd$(4))): nv = nv + 1
+                        END IF
+                    END IF
+                CASE "f" ' (its polygon: a colour, then its corners - points from 1, less than 0 when the edge on isn't the shape's own)
+                    IF i > 0 AND wdN >= 5 AND mb > 0 AND mb = mbN THEN
+                        c = ParseCol~&(wd$(2), ok): IF ok = 0 THEN c = pCol(i)
+                        MbAddF mb, c
+                        w0 = 3
+                        IF LEFT$(wd$(3), 1) = "@" THEN mfTex(mfTop) = PicFind(MID$(wd$(3), 2)): w0 = 4 ' (its picture; corners point:u:v)
+                        FOR w = w0 TO wdN
+                            v = ABS(VAL(wd$(w))) - 1
+                            IF v >= 0 AND v < nv THEN
+                                MbAddC v, -(LEFT$(wd$(w), 1) <> "-")
+                                j1 = INSTR(wd$(w), ":")
+                                IF j1 THEN j2 = INSTR(j1 + 1, wd$(w), ":"): mcTU(mcTop) = VAL(MID$(wd$(w), j1 + 1)): IF j2 THEN mcTV(mcTop) = VAL(MID$(wd$(w), j2 + 1))
+                            END IF
+                        NEXT
+                        IF mfCN(mfTop) < 3 THEN mfTop = mfTop - 1: mbFN(mb) = mbFN(mb) - 1 ' (not a polygon: left out)
+                    END IF
             END SELECT
+            IF k > 0 THEN mb = 0: i = 0
             IF k > 0 AND n < room THEN
                 n = n + 1: i = at0 + n
                 PartFresh i, k, VAL(wd$(3)), VAL(wd$(4)), VAL(wd$(5))
@@ -164,15 +217,30 @@ FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
                 FOR w = 12 TO wdN
                     SELECT CASE LCASE$(wd$(w))
                         CASE "hole": pHole(i) = -1
+                        CASE "keep": pHole(i) = -1: pKeep(i) = -1
                         CASE "hide": pHide(i) = -1
                         CASE "wire": pWire(i) = -1
-                        CASE ELSE: IF LCASE$(LEFT$(wd$(w), 5)) = "name=" THEN pName$(i) = MID$(wd$(w), 6)
+                        CASE ELSE
+                            SELECT CASE LCASE$(LEFT$(wd$(w), INSTR(wd$(w), "=")))
+                                CASE "name=": pName$(i) = MID$(wd$(w), 6)
+                                CASE "mesh=": pMesh(i) = VAL(MID$(wd$(w), 6)) ' (an undo step's: the mesh in the pool)
+                                CASE "group=": pGrp(i) = VAL(MID$(wd$(w), 7))
+                                CASE "tint=": pTint(i) = TintParse~&(MID$(wd$(w), 6))
+                            END SELECT
                     END SELECT
                 NEXT
             END IF
         END IF
     LOOP
     PartsFromText& = n
+END FUNCTION
+
+' "RRGGBBAA" as a tint (AA: how much of it)
+FUNCTION TintParse~& (t$)
+    DIM c AS _UNSIGNED LONG, ok
+    c = ParseCol~&(LEFT$(t$, 6), ok)
+    IF ok = 0 OR LEN(t$) < 8 THEN EXIT FUNCTION
+    TintParse~& = _RGBA32(_RED32(c), _GREEN32(c), _BLUE32(c), VAL("&H" + MID$(t$, 7, 2)))
 END FUNCTION
 
 FUNCTION PosSize (v)
@@ -209,8 +277,8 @@ SUB RedoStep
 END SUB
 
 SUB ModelNew
-    pN = 0: undoN = 0: redoN = 0: mdlName$ = "untitled": mdlPf$ = ""
-    ModelChanged: mdlDirty = 0
+    pN = 0: undoN = 0: redoN = 0: mdlName$ = "untitled": mdlPf$ = "": mdlBudget = TD_BUDGET
+    ModelChanged: mdlDirty = 0: MeshGc
 END SUB
 
 FUNCTION ModelPath$ (n$)
@@ -234,8 +302,7 @@ SUB ModelSave
     mdlName$ = SafeName$(mdlName$)
     IF LEN(mdlPf$) THEN PrefabWrite PfFolder$(mdlPf$) + mdlName$: EXIT SUB ' (a prefab open: saved back to prefabs/)
     f$ = ModelPath$(mdlName$)
-    t$ = ModelText$
-    fh = FREEFILE: OPEN f$ FOR OUTPUT AS #fh: PRINT #fh, t$;: CLOSE #fh
+    ModelWrite f$
     mdlDirty = 0
     Msg "Saved " + f$
 END SUB
@@ -243,15 +310,18 @@ END SUB
 ' f$: a path, or a name in models/
 SUB ModelLoad (f$)
     DIM fh, t$, p$, i
+    IF LCASE$(LEFT$(f$, 5)) = "neon:" THEN ObjImport NeonInDir$ + "models/" + MID$(f$, 6) + ".obj": EXIT SUB
+    IF LCASE$(RIGHT$(f$, 4)) = ".obj" THEN ObjImport f$: EXIT SUB
     p$ = f$
     IF NOT _FILEEXISTS(p$) THEN p$ = ModelPath$(f$)
     IF NOT _FILEEXISTS(p$) THEN Msg "No such model: " + f$: EXIT SUB
+    PicReloadAll ' (a picture changed since - in DRAW - shows as it is now)
     fh = FREEFILE: OPEN p$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
     ModelFromText t$
     mdlPf$ = "" ' (PfEdit says when it's a prefab)
     i = _INSTRREV(p$, "/"): mdlName$ = MID$(p$, i + 1): IF LCASE$(RIGHT$(mdlName$, 4)) = ".bld" THEN mdlName$ = LEFT$(mdlName$, LEN(mdlName$) - 4) ' (named for its file)
     undoN = 0: redoN = 0
-    ModelChanged: mdlDirty = 0
+    ModelChanged: mdlDirty = 0: MeshGc
     ViewFrameAll
     t$ = ModelMissing$
     IF LEN(t$) THEN

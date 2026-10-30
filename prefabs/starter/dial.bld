@@ -1,0 +1,12 @@
+bu1ld0r 1
+name dial
+budget 200
+part tube  0 0 0  0 0 0  0.15 0.03 0.15  B8BCC8  24  0.86  name=bezel
+part cylinder  0 0 0  0 0 0  0.13 0.02 0.13  F4ECD0  24  0  name=face
+part box  -0.0433 0.016 0.025  0 120 0  0.004 0.01 0.014  F0F0F0  0  0  hole  name=tick1
+part box  -0.0433 0.016 -0.025  0 60 0  0.004 0.01 0.014  F0F0F0  0  0  hole  name=tick2
+part box  0 0.016 -0.05  0 0 0  0.004 0.01 0.014  F0F0F0  0  0  hole  name=tick3
+part box  0.0433 0.016 -0.025  0 -60 0  0.004 0.01 0.014  F0F0F0  0  0  hole  name=tick4
+part box  0.0433 0.016 0.025  0 -120 0  0.004 0.01 0.014  F0F0F0  0  0  hole  name=tick5
+part box  0.012 0.02 -0.02  0 30 0  0.004 0.004 0.05  E03030  0  0  name=needle
+part cylinder  0 0.02 0  0 0 0  0.014 0.008 0.014  18181E  10  0  name=pin

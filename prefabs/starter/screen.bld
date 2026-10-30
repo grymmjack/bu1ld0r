@@ -1,0 +1,8 @@
+bu1ld0r 1
+name screen
+budget 200
+part box  0 0 0  0 0 0  0.3 0.03 0.22  2A2A36  0  0  name=frame
+part box  0 0.018 0  0 0 0  0.26 0.02 0.18  F0F0F0  0  0  hole  name=recess
+part box  0 0.012 0  0 0 0  0.26 0.008 0.18  0C3A2C  0  0  name=glass
+part box  -0.07 0.02 -0.04  0 0 0  0.08 0.002 0.01  30E080  0  0  name=line1
+part box  -0.05 0.02 -0.015  0 0 0  0.12 0.002 0.01  30E080  0  0  name=line2

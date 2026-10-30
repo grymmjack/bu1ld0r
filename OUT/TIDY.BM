@@ -1,0 +1,691 @@
+''
+' bu1ld0r - OUT/TIDY.BM
+' =============================================================================
+' The model's triangles (1 to sceneTN) tidied in place - see TIDY.BI.
+'
+$CHECKING:OFF
+
+FUNCTION TidyOn
+    TidyOn = tidyNow OR (tidyView <> 0 AND edPart = 0)
+END FUNCTION
+
+SUB TidyRun
+    DIM t0#, t AS LONG, k AS LONG
+    t0# = TIMER(.001)
+    tdIn = sceneTN: tdHold = 0
+    IF sceneTN > 0 THEN
+        TdHidden
+        ' (faces with a picture on them are kept as they are - the picture's spots
+        ' can't be joined or collapsed - at the top of the triangles meanwhile)
+        FOR t = 1 TO sceneTN
+            IF tTex(t) > 0 AND tdHid(t) = 0 THEN tdHold = tdHold + 1
+        NEXT
+        IF sceneTN + tdHold > MAX_TRI THEN tdHold = 0: tdOut = sceneTN: EXIT SUB
+        k = MAX_TRI - tdHold
+        FOR t = 1 TO sceneTN
+            IF tTex(t) > 0 AND tdHid(t) = 0 THEN k = k + 1: TriCopy t, k: tdHid(t) = -1
+        NEXT
+        TdWork
+        TdTris
+        TdSimplify
+        TdBack
+        FOR k = 1 TO tdHold
+            sceneTN = sceneTN + 1: TriCopy MAX_TRI - tdHold + k, sceneTN
+        NEXT
+    END IF
+    tdOut = sceneTN: tN = sceneTN: emTag = 0
+    tdMs = (TIMER(.001) - t0#) * 1000: IF tdMs < 0 THEN tdMs = 0
+END SUB
+
+' ---------------------------------------------------------------- hidden faces
+
+' A triangle's hidden when, just off its face, its middle and (nearly) its
+' corners are all inside some other part - or inside another solid of its
+' own, when it's a prefab's use (they overlap)
+SUB TdHidden
+    DIM t AS LONG, r AS LONG, k, e#, cx#, cy#, cz#, nx#, ny#, nz#, p AS V3, hid
+    REDIM tdHid(sceneTN) AS _BYTE
+    REDIM rnT0(sceneTN) AS LONG, rnT1(sceneTN) AS LONG, rnPart(sceneTN) AS LONG, rnLo(sceneTN) AS V3, rnHi(sceneTN) AS V3
+    rnN = 0
+    FOR t = 1 TO sceneTN
+        IF t = 1 THEN
+            rnN = 1: rnT0(1) = 1: rnPart(1) = tSol(1)
+        ELSEIF tSol(t) <> tSol(t - 1) THEN
+            rnN = rnN + 1: rnT0(rnN) = t: rnPart(rnN) = tSol(t)
+        END IF
+        rnT1(rnN) = t
+    NEXT
+    FOR r = 1 TO rnN: TriBounds rnT0(r), rnT1(r), rnLo(r), rnHi(r): NEXT
+    e# = .0001
+    r = 1
+    FOR t = 1 TO sceneTN
+        IF t > rnT1(r) THEN r = r + 1
+        cx# = (CDBL(tA(t).x) + tB(t).x + tC(t).x) / 3
+        cy# = (CDBL(tA(t).y) + tB(t).y + tC(t).y) / 3
+        cz# = (CDBL(tA(t).z) + tB(t).z + tC(t).z) / 3
+        nx# = tNrm(t).x: ny# = tNrm(t).y: nz# = tNrm(t).z
+        hid = TdInside(cx# + nx# * e#, cy# + ny# * e#, cz# + nz# * e#, r)
+        IF hid THEN
+            FOR k = 0 TO 2
+                SELECT CASE k
+                    CASE 0: p = tA(t)
+                    CASE 1: p = tB(t)
+                    CASE ELSE: p = tC(t)
+                END SELECT
+                IF TdInside(cx# + (p.x - cx#) * .9 + nx# * e#, cy# + (p.y - cy#) * .9 + ny# * e#, cz# + (p.z - cz#) * .9 + nz# * e#, r) = 0 THEN hid = 0: EXIT FOR
+            NEXT
+        END IF
+        tdHid(t) = hid
+    NEXT
+END SUB
+
+' Is the point inside the parts (other than run own's, unless that's a
+' use)? Their winding number round it: the solid angle each triangle
+' fills, added up - 1 inside a closed one, 0 out (T-junctions and overlaps
+' don't upset it); a closed part whose box the point is out of adds 0.
+FUNCTION TdInside (px#, py#, pz#, own AS LONG)
+    DIM r AS LONG, t AS LONG, w#, ax#, ay#, az#, bx#, by#, bz#, cx#, cy#, cz#, la#, lb#, lc#, dt#, dv#
+    FOR r = 1 TO rnN
+        IF r <> own OR rnPart(r) < 0 THEN ' (its own solid adds 0 - unless it's a use's, made of several)
+            IF px# >= rnLo(r).x - .001 AND px# <= rnHi(r).x + .001 AND py# >= rnLo(r).y - .001 AND py# <= rnHi(r).y + .001 AND pz# >= rnLo(r).z - .001 AND pz# <= rnHi(r).z + .001 THEN
+                FOR t = rnT0(r) TO rnT1(r)
+                    ax# = tA(t).x - px#: ay# = tA(t).y - py#: az# = tA(t).z - pz#
+                    bx# = tB(t).x - px#: by# = tB(t).y - py#: bz# = tB(t).z - pz#
+                    cx# = tC(t).x - px#: cy# = tC(t).y - py#: cz# = tC(t).z - pz#
+                    la# = SQR(ax# * ax# + ay# * ay# + az# * az#)
+                    lb# = SQR(bx# * bx# + by# * by# + bz# * bz#)
+                    lc# = SQR(cx# * cx# + cy# * cy# + cz# * cz#)
+                    dt# = ax# * (by# * cz# - bz# * cy#) + ay# * (bz# * cx# - bx# * cz#) + az# * (bx# * cy# - by# * cx#)
+                    dv# = la# * lb# * lc# + (ax# * bx# + ay# * by# + az# * bz#) * lc# + (bx# * cx# + by# * cy# + bz# * cz#) * la# + (cx# * ax# + cy# * ay# + cz# * az#) * lb#
+                    w# = w# + _ATAN2(dt#, dv#)
+                NEXT
+            END IF
+        END IF
+    NEXT
+    TdInside = (w# > 3.14159265) ' (the angles are halves: 4 pi round, so half way in is pi)
+END FUNCTION
+
+' ---------------------------------------------------------------- welded, joined
+
+' The triangles left, welded into the work; corners on edges put in; flat
+' neighbours of a colour joined; corners on straight edges taken out
+SUB TdWork
+    DIM t AS LONG, r AS LONG
+    EmClear
+    EmWeldStart sceneTN * 3
+    FOR t = 1 TO sceneTN
+        IF tdHid(t) = 0 THEN
+            emL(0) = EmWeld&(tA(t).x, tA(t).y, tA(t).z)
+            emL(1) = EmWeld&(tB(t).x, tB(t).y, tB(t).z)
+            emL(2) = EmWeld&(tC(t).x, tC(t).y, tC(t).z)
+            emE(0) = -1: emE(1) = -1: emE(2) = -1
+            IF emL(0) <> emL(1) AND emL(1) <> emL(2) AND emL(2) <> emL(0) THEN
+                emTag = tPart(t): r = EmAddF&(3, tCol(t))
+                IF sfNx(r) = 0 AND sfNy(r) = 0 AND sfNz(r) = 0 THEN sfLive(r) = 0
+            END IF
+        END IF
+    NEXT
+    TdTJoin
+    EmMerge -1
+    TdStraight
+END SUB
+
+' Each edge with no twin (a cut's T-junction: a point of the faces across
+' lies on it) gets the points on it put in, in order
+SUB TdTJoin
+    DIM i AS LONG, gap AS LONG, f AS LONG, n AS LONG, k AS LONG, u AS LONG, v AS LONG, m AS LONG, nf AS LONG, cnt AS LONG, r AS LONG, added, w AS LONG, j AS LONG
+    REDIM tdOrd(swN) AS LONG
+    FOR i = 1 TO swN: tdOrd(i) = i: NEXT
+    gap = swN \ 2 ' (a shell sort, by x)
+    DO WHILE gap > 0
+        FOR i = gap + 1 TO swN
+            w = tdOrd(i): j = i
+            DO WHILE j > gap
+                IF swX(tdOrd(j - gap)) <= swX(w) THEN EXIT DO
+                tdOrd(j) = tdOrd(j - gap): j = j - gap
+            LOOP
+            tdOrd(j) = w
+        NEXT
+        gap = gap \ 2
+    LOOP
+    EmEdgeMap
+    nf = sfN
+    FOR f = 1 TO nf
+        IF sfLive(f) THEN
+            n = sfCN(f): m = 0: added = 0
+            FOR k = 0 TO n - 1
+                u = scV(sfC0(f) + k): v = scV(sfC0(f) + (k + 1) MOD n)
+                IF m < EM_MAXC THEN emL(m) = u: m = m + 1
+                IF EmEdgeFind&(v, u) = 0 THEN
+                    cnt = TdOnEdge&(u, v)
+                    FOR i = 1 TO cnt
+                        IF m < EM_MAXC THEN emL(m) = tjW(i): m = m + 1: added = -1
+                    NEXT
+                END IF
+            NEXT
+            IF added THEN
+                FOR k = 0 TO m - 1: emE(k) = -1: NEXT
+                emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f): sfLive(f) = 0
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' The points lying on edge u to v (not its ends), into tjW from u's end: how many
+FUNCTION TdOnEdge& (u AS LONG, v AS LONG)
+    DIM ex#, ey#, ez#, l2#, l#, tol#, lo#, hi#, ylo#, yhi#, zlo#, zhi#, a AS LONG, b AS LONG, md AS LONG, i AS LONG, w AS LONG
+    DIM dx#, dy#, dz#, s#, d2#, cnt AS LONG, j AS LONG
+    tol# = .00004
+    ex# = swX(v) - swX(u): ey# = swY(v) - swY(u): ez# = swZ(v) - swZ(u)
+    l2# = ex# * ex# + ey# * ey# + ez# * ez#: IF l2# < 1E-12 THEN EXIT FUNCTION
+    l# = SQR(l2#)
+    lo# = swX(u): hi# = swX(v): IF lo# > hi# THEN SWAP lo#, hi#
+    lo# = lo# - tol#: hi# = hi# + tol#
+    ylo# = swY(u): yhi# = swY(v): IF ylo# > yhi# THEN SWAP ylo#, yhi#
+    zlo# = swZ(u): zhi# = swZ(v): IF zlo# > zhi# THEN SWAP zlo#, zhi#
+    ylo# = ylo# - tol#: yhi# = yhi# + tol#: zlo# = zlo# - tol#: zhi# = zhi# + tol#
+    a = 1: b = swN + 1
+    DO WHILE a < b
+        md = (a + b) \ 2
+        IF swX(tdOrd(md)) < lo# THEN a = md + 1 ELSE b = md
+    LOOP
+    FOR i = a TO swN
+        w = tdOrd(i)
+        IF swX(w) > hi# THEN EXIT FOR
+        IF w <> u AND w <> v THEN
+            IF swY(w) >= ylo# AND swY(w) <= yhi# AND swZ(w) >= zlo# AND swZ(w) <= zhi# THEN
+                dx# = swX(w) - swX(u): dy# = swY(w) - swY(u): dz# = swZ(w) - swZ(u)
+                s# = (dx# * ex# + dy# * ey# + dz# * ez#) / l2#
+                IF s# * l# > tol# AND (1 - s#) * l# > tol# THEN
+                    d2# = (dx# - s# * ex#) ^ 2 + (dy# - s# * ey#) ^ 2 + (dz# - s# * ez#) ^ 2
+                    IF d2# <= tol# * tol# AND cnt < TD_TJ THEN
+                        j = cnt + 1 ' (in order along it)
+                        DO WHILE j > 1
+                            IF tjS(j - 1) <= s# THEN EXIT DO
+                            tjS(j) = tjS(j - 1): tjW(j) = tjW(j - 1): j = j - 1
+                        LOOP
+                        tjS(j) = s#: tjW(j) = w: cnt = cnt + 1
+                    END IF
+                END IF
+            END IF
+        END IF
+    NEXT
+    TdOnEdge& = cnt
+END FUNCTION
+
+' Corners lying on a straight edge, in every polygon that has them, taken out
+SUB TdStraight
+    DIM pass, did, f AS LONG, n AS LONG, k AS LONG, a AS LONG, w AS LONG, b AS LONG, m AS LONG, r AS LONG, nf AS LONG
+    REDIM tdUse(swN) AS LONG, tdLin(swN) AS LONG
+    DO
+        pass = pass + 1: did = 0
+        FOR w = 1 TO swN: tdUse(w) = 0: tdLin(w) = 0: NEXT
+        FOR f = 1 TO sfN
+            IF sfLive(f) THEN
+                n = sfCN(f)
+                FOR k = 0 TO n - 1
+                    a = scV(sfC0(f) + (k + n - 1) MOD n): w = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD n)
+                    tdUse(w) = tdUse(w) + 1
+                    IF TdStraightAt(a, w, b) THEN tdLin(w) = tdLin(w) + 1
+                NEXT
+            END IF
+        NEXT
+        nf = sfN
+        FOR f = 1 TO nf
+            IF sfLive(f) THEN
+                n = sfCN(f): m = 0
+                FOR k = 0 TO n - 1
+                    w = scV(sfC0(f) + k)
+                    IF tdUse(w) <> tdLin(w) THEN emL(m) = w: emE(m) = -1: m = m + 1
+                NEXT
+                IF m < n THEN
+                    did = -1: sfLive(f) = 0
+                    IF m >= 3 THEN
+                        emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                        sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
+                    END IF
+                END IF
+            END IF
+        NEXT
+    LOOP WHILE did AND pass < 8
+END SUB
+
+' Does w lie on the straight line from a to b, between them?
+FUNCTION TdStraightAt (a AS LONG, w AS LONG, b AS LONG)
+    DIM ex#, ey#, ez#, l2#, dx#, dy#, dz#, s#, tol#
+    tol# = .00003
+    ex# = swX(b) - swX(a): ey# = swY(b) - swY(a): ez# = swZ(b) - swZ(a)
+    l2# = ex# * ex# + ey# * ey# + ez# * ez#: IF l2# < 1E-14 THEN EXIT FUNCTION
+    dx# = swX(w) - swX(a): dy# = swY(w) - swY(a): dz# = swZ(w) - swZ(a)
+    s# = (dx# * ex# + dy# * ey# + dz# * ez#) / l2#
+    IF s# <= 0 OR s# >= 1 THEN EXIT FUNCTION
+    TdStraightAt = ((dx# - s# * ex#) ^ 2 + (dy# - s# * ey#) ^ 2 + (dz# - s# * ez#) ^ 2 <= tol# * tol#)
+END FUNCTION
+
+' ---------------------------------------------------------------- cut into triangles
+
+SUB TdTris
+    DIM f AS LONG, cap AS LONG
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND sfCN(f) >= 3 THEN cap = cap + sfCN(f) - 2
+    NEXT
+    REDIM tdV(3 * cap + 3) AS LONG, tdCol(cap) AS _UNSIGNED LONG, tdPart(cap) AS LONG, tdLive(cap) AS _BYTE
+    tdN = 0
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND sfCN(f) >= 3 THEN TdPoly f
+    NEXT
+    tdLiveN = tdN
+END SUB
+
+' Work polygon f as triangles: a fan when it bulges out all round (no
+' corner on a straight edge), else ears cut off one by one
+SUB TdPoly (f AS LONG)
+    DIM n AS LONG, k AS LONG, c0 AS LONG, nx#, ny#, nz#, ax, conv, m AS LONG, guard AS LONG
+    DIM i0 AS LONG, i1 AS LONG, i2 AS LONG, a AS LONG, c AS LONG, cr#, sg#, j AS LONG, ear, q AS LONG
+    n = sfCN(f): IF n > EM_MAXC THEN n = EM_MAXC
+    c0 = sfC0(f)
+    IF n = 3 THEN TdAdd scV(c0), scV(c0 + 1), scV(c0 + 2), f: EXIT SUB
+    EmNormal f: nx# = sfNx(f): ny# = sfNy(f): nz# = sfNz(f)
+    ax = 1: IF ABS(ny#) > ABS(nx#) THEN ax = 2
+    IF ABS(nz#) > ABS(nx#) AND ABS(nz#) > ABS(ny#) THEN ax = 3
+    FOR k = 0 TO n - 1
+        a = scV(c0 + k)
+        SELECT CASE ax
+            CASE 1: emX(k) = swY(a): emY(k) = swZ(a): sg# = nx#
+            CASE 2: emX(k) = swZ(a): emY(k) = swX(a): sg# = ny#
+            CASE ELSE: emX(k) = swX(a): emY(k) = swY(a): sg# = nz#
+        END SELECT
+        emR(k) = k
+    NEXT
+    sg# = SGN(sg#): IF sg# = 0 THEN sg# = 1
+    conv = -1
+    FOR k = 0 TO n - 1
+        i0 = (k + n - 1) MOD n: i2 = (k + 1) MOD n
+        cr# = (emX(k) - emX(i0)) * (emY(i2) - emY(k)) - (emY(k) - emY(i0)) * (emX(i2) - emX(k))
+        IF cr# * sg# < 1E-14 THEN conv = 0: EXIT FOR
+    NEXT
+    IF conv THEN
+        FOR k = 1 TO n - 2: TdAdd scV(c0), scV(c0 + k), scV(c0 + k + 1), f: NEXT
+        EXIT SUB
+    END IF
+    m = n: j = 0: guard = 0
+    DO WHILE m > 3
+        i0 = emR((j + m - 1) MOD m): i1 = emR(j): i2 = emR((j + 1) MOD m)
+        cr# = (emX(i1) - emX(i0)) * (emY(i2) - emY(i1)) - (emY(i1) - emY(i0)) * (emX(i2) - emX(i1))
+        ear = (cr# * sg# > 1E-14)
+        IF ear THEN
+            FOR q = 0 TO m - 1
+                c = emR(q)
+                IF c <> i0 AND c <> i1 AND c <> i2 THEN
+                    IF InTri2(emX(c), emY(c), emX(i0), emY(i0), emX(i1), emY(i1), emX(i2), emY(i2), sg#) THEN ear = 0: EXIT FOR
+                END IF
+            NEXT
+        END IF
+        IF ear OR guard >= m THEN
+            TdAdd scV(c0 + i0), scV(c0 + i1), scV(c0 + i2), f
+            FOR q = j TO m - 2: emR(q) = emR(q + 1): NEXT
+            m = m - 1: guard = 0
+            IF j >= m THEN j = 0
+        ELSE
+            j = (j + 1) MOD m: guard = guard + 1
+        END IF
+    LOOP
+    TdAdd scV(c0 + emR(0)), scV(c0 + emR(1)), scV(c0 + emR(2)), f
+END SUB
+
+' A triangle of points a, b, c from polygon f (none with no area)
+SUB TdAdd (a AS LONG, b AS LONG, c AS LONG, f AS LONG)
+    DIM ux#, uy#, uz#, vx#, vy#, vz#, nx#, ny#, nz#
+    ux# = swX(b) - swX(a): uy# = swY(b) - swY(a): uz# = swZ(b) - swZ(a)
+    vx# = swX(c) - swX(a): vy# = swY(c) - swY(a): vz# = swZ(c) - swZ(a)
+    nx# = uy# * vz# - uz# * vy#: ny# = uz# * vx# - ux# * vz#: nz# = ux# * vy# - uy# * vx#
+    IF nx# * nx# + ny# * ny# + nz# * nz# < 1E-24 THEN EXIT SUB
+    IF tdN >= UBOUND(tdCol) THEN EXIT SUB
+    tdN = tdN + 1
+    tdV(3 * tdN) = a: tdV(3 * tdN + 1) = b: tdV(3 * tdN + 2) = c
+    tdCol(tdN) = sfCol(f): tdPart(tdN) = sfTag(f): tdLive(tdN) = -1
+END SUB
+
+' ---------------------------------------------------------------- fewer triangles
+
+' Slivers' short edges collapsed; then, while it's over the budget, the
+' edge whose collapse moves the shape least - until the next would show
+SUB TdSimplify
+    DIM t AS LONG, c, s AS LONG, v AS LONG, u AS LONG, e#, su AS LONG, sv AS LONG, cap#, lo#(2), hi#(2), k
+    IF tdN = 0 THEN EXIT SUB
+    REDIM tdHead(swN) AS LONG, tdNext(3 * tdN + 3) AS LONG, tdDead(swN) AS _BYTE, tdVer(swN) AS LONG, tdMark(swN) AS LONG
+    tdStamp = 0
+    FOR t = 1 TO tdN
+        FOR c = 0 TO 2
+            s = 3 * t + c: v = tdV(s): tdNext(s) = tdHead(v): tdHead(v) = s
+        NEXT
+    NEXT
+    ' (slivers: their short edges)
+    FOR t = 1 TO tdN
+        FOR c = 0 TO 2
+            IF tdLive(t) THEN
+                u = tdV(3 * t + c): v = tdV(3 * t + (c + 1) MOD 3)
+                IF TdLen#(u, v) < TD_SHORT THEN
+                    IF TdCan(u, v, 0) THEN
+                        TdCollapse u, v
+                    ELSEIF TdCan(v, u, 0) THEN
+                        TdCollapse v, u
+                    END IF
+                END IF
+            END IF
+        NEXT
+    NEXT
+    IF mdlBudget <= 0 OR tdLiveN <= mdlBudget THEN EXIT SUB
+    ' (how far a collapse may move it: TD_SHOW of its size)
+    lo#(0) = 1E9: lo#(1) = 1E9: lo#(2) = 1E9: hi#(0) = -1E9: hi#(1) = -1E9: hi#(2) = -1E9
+    FOR t = 1 TO tdN
+        IF tdLive(t) THEN
+            FOR c = 0 TO 2
+                v = tdV(3 * t + c)
+                IF swX(v) < lo#(0) THEN lo#(0) = swX(v)
+                IF swX(v) > hi#(0) THEN hi#(0) = swX(v)
+                IF swY(v) < lo#(1) THEN lo#(1) = swY(v)
+                IF swY(v) > hi#(1) THEN hi#(1) = swY(v)
+                IF swZ(v) < lo#(2) THEN lo#(2) = swZ(v)
+                IF swZ(v) > hi#(2) THEN hi#(2) = swZ(v)
+            NEXT
+        END IF
+    NEXT
+    cap# = SQR((hi#(0) - lo#(0)) ^ 2 + (hi#(1) - lo#(1)) ^ 2 + (hi#(2) - lo#(2)) ^ 2) * TD_SHOW
+    REDIM tdQ(11 * swN + 11) AS DOUBLE
+    FOR t = 1 TO tdN
+        IF tdLive(t) THEN TdQuadTri t
+    NEXT
+    hpN = 0: REDIM hpE(tdN * 6 + 64) AS DOUBLE, hpU(tdN * 6 + 64) AS LONG, hpV(tdN * 6 + 64) AS LONG, hpSU(tdN * 6 + 64) AS LONG, hpSV(tdN * 6 + 64) AS LONG
+    FOR t = 1 TO tdN
+        IF tdLive(t) THEN
+            FOR c = 0 TO 2
+                u = tdV(3 * t + c): v = tdV(3 * t + (c + 1) MOD 3)
+                TdPush u, v: TdPush v, u
+            NEXT
+        END IF
+    NEXT
+    DO WHILE tdLiveN > mdlBudget AND hpN > 0
+        TdPop e#, u, v, su, sv
+        IF tdDead(u) = 0 AND tdDead(v) = 0 AND su = tdVer(u) AND sv = tdVer(v) THEN
+            IF e# > cap# THEN EXIT DO
+            IF e# <= TD_LOCAL * TdLen#(u, v) AND TdCan(u, v, -1) THEN
+                TdCollapse u, v
+                FOR k = 0 TO 10: tdQ(11 * v + k) = tdQ(11 * v + k) + tdQ(11 * u + k): NEXT
+                TdNbrs v
+                FOR k = 1 TO nbN: TdPush v, nbW(k): TdPush nbW(k), v: NEXT
+            END IF
+        END IF
+    LOOP
+END SUB
+
+FUNCTION TdLen# (u AS LONG, v AS LONG)
+    TdLen# = SQR((swX(u) - swX(v)) ^ 2 + (swY(u) - swY(v)) ^ 2 + (swZ(u) - swZ(v)) ^ 2)
+END FUNCTION
+
+' Point u's edges out: nbW the point at the other end, nbCnt how many
+' triangles have it, nbMix whether they're of more than one colour
+SUB TdNbrs (u AS LONG)
+    DIM s AS LONG, t AS LONG, c, k
+    nbN = 0: nbOver = 0
+    s = tdHead(u)
+    DO WHILE s
+        t = s \ 3
+        IF tdLive(t) THEN
+            c = s MOD 3
+            FOR k = 1 TO 2
+                TdNbAdd tdV(3 * t + (c + k) MOD 3), tdCol(t)
+            NEXT
+        END IF
+        s = tdNext(s)
+    LOOP
+END SUB
+
+SUB TdNbAdd (w AS LONG, col AS _UNSIGNED LONG)
+    DIM i AS LONG
+    FOR i = 1 TO nbN
+        IF nbW(i) = w THEN
+            nbCnt(i) = nbCnt(i) + 1
+            IF nbCol(i) <> col THEN nbMix(i) = -1
+            EXIT SUB
+        END IF
+    NEXT
+    IF nbN >= TD_NB THEN nbOver = -1: EXIT SUB
+    nbN = nbN + 1: nbW(nbN) = w: nbCnt(nbN) = 1: nbCol(nbN) = col: nbMix(nbN) = 0
+END SUB
+
+' May u go to v? u inside a colour (no border edge at it), or on a border
+' that goes straight on through it along u-v; the points next to both
+' only the ones across u-v (or it would fold); and no triangle round u
+' turned over (strict: nor turned much)
+FUNCTION TdCan (u AS LONG, v AS LONG, strict)
+    DIM i AS LONG, nb, uvB, k AS LONG, s AS LONG, t AS LONG, c, w AS LONG, j, nCom AS LONG
+    DIM ax#, ay#, az#, bx#, by#, bz#, n0x#, n0y#, n0z#, n1x#, n1y#, n1z#, l0#, l1#, p0 AS LONG, p1 AS LONG, p2 AS LONG
+    IF u = v OR tdDead(u) OR tdDead(v) THEN EXIT FUNCTION
+    TdNbrs u
+    IF nbOver THEN EXIT FUNCTION
+    k = -1
+    FOR i = 1 TO nbN
+        IF nbCnt(i) <> 2 OR nbMix(i) THEN
+            nb = nb + 1
+            IF nbW(i) = v THEN uvB = -1
+        END IF
+        IF nbW(i) = v THEN k = nbCnt(i)
+    NEXT
+    IF k < 1 THEN EXIT FUNCTION ' (not an edge)
+    IF nb > 0 AND NOT (nb = 2 AND uvB <> 0) THEN EXIT FUNCTION
+    ' (the link: points next to both)
+    tdStamp = tdStamp + 2
+    FOR i = 1 TO nbN: tdMark(nbW(i)) = tdStamp: NEXT
+    s = tdHead(v)
+    DO WHILE s
+        t = s \ 3
+        IF tdLive(t) THEN
+            c = s MOD 3
+            FOR j = 1 TO 2
+                w = tdV(3 * t + (c + j) MOD 3)
+                IF w <> u AND tdMark(w) = tdStamp THEN tdMark(w) = tdStamp + 1: nCom = nCom + 1
+            NEXT
+        END IF
+        s = tdNext(s)
+    LOOP
+    IF nCom <> k THEN EXIT FUNCTION
+    ' (nothing turned over)
+    s = tdHead(u)
+    DO WHILE s
+        t = s \ 3
+        IF tdLive(t) THEN
+            p0 = tdV(3 * t): p1 = tdV(3 * t + 1): p2 = tdV(3 * t + 2)
+            IF p0 <> v AND p1 <> v AND p2 <> v THEN
+                ax# = swX(p1) - swX(p0): ay# = swY(p1) - swY(p0): az# = swZ(p1) - swZ(p0)
+                bx# = swX(p2) - swX(p0): by# = swY(p2) - swY(p0): bz# = swZ(p2) - swZ(p0)
+                n0x# = ay# * bz# - az# * by#: n0y# = az# * bx# - ax# * bz#: n0z# = ax# * by# - ay# * bx#
+                IF p0 = u THEN p0 = v
+                IF p1 = u THEN p1 = v
+                IF p2 = u THEN p2 = v
+                ax# = swX(p1) - swX(p0): ay# = swY(p1) - swY(p0): az# = swZ(p1) - swZ(p0)
+                bx# = swX(p2) - swX(p0): by# = swY(p2) - swY(p0): bz# = swZ(p2) - swZ(p0)
+                n1x# = ay# * bz# - az# * by#: n1y# = az# * bx# - ax# * bz#: n1z# = ax# * by# - ay# * bx#
+                l0# = SQR(n0x# * n0x# + n0y# * n0y# + n0z# * n0z#): l1# = SQR(n1x# * n1x# + n1y# * n1y# + n1z# * n1z#)
+                IF l1# < 1E-12 THEN EXIT FUNCTION
+                IF strict THEN
+                    IF n0x# * n1x# + n0y# * n1y# + n0z# * n1z# < .7 * l0# * l1# THEN EXIT FUNCTION
+                ELSE
+                    IF n0x# * n1x# + n0y# * n1y# + n0z# * n1z# <= 0 THEN EXIT FUNCTION
+                END IF
+            END IF
+        END IF
+        s = tdNext(s)
+    LOOP
+    TdCan = -1
+END FUNCTION
+
+' u goes to v: the triangles with both go; u's others take v
+SUB TdCollapse (u AS LONG, v AS LONG)
+    DIM s AS LONG, nx AS LONG, t AS LONG
+    s = tdHead(u)
+    DO WHILE s
+        nx = tdNext(s): t = s \ 3
+        IF tdLive(t) THEN
+            IF tdV(3 * t) = v OR tdV(3 * t + 1) = v OR tdV(3 * t + 2) = v THEN
+                tdLive(t) = 0: tdLiveN = tdLiveN - 1
+            ELSE
+                tdV(s) = v: tdNext(s) = tdHead(v): tdHead(v) = s
+            END IF
+        END IF
+        s = nx
+    LOOP
+    tdHead(u) = 0: tdDead(u) = -1: tdVer(v) = tdVer(v) + 1
+END SUB
+
+' Triangle t's plane, weighted by its area, on its corners - and a plane
+' standing up along each border edge (colours meeting, or open), heavier
+SUB TdQuadTri (t AS LONG)
+    DIM a AS LONG, b AS LONG, c AS LONG, ux#, uy#, uz#, vx#, vy#, vz#, nx#, ny#, nz#, l#, k, p AS LONG, q AS LONG, ex#, ey#, ez#, mx#, my#, mz#, el2#
+    a = tdV(3 * t): b = tdV(3 * t + 1): c = tdV(3 * t + 2)
+    ux# = swX(b) - swX(a): uy# = swY(b) - swY(a): uz# = swZ(b) - swZ(a)
+    vx# = swX(c) - swX(a): vy# = swY(c) - swY(a): vz# = swZ(c) - swZ(a)
+    nx# = uy# * vz# - uz# * vy#: ny# = uz# * vx# - ux# * vz#: nz# = ux# * vy# - uy# * vx#
+    l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#): IF l# < 1E-20 THEN EXIT SUB
+    nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+    TdQAdd a, nx#, ny#, nz#, -(nx# * swX(a) + ny# * swY(a) + nz# * swZ(a)), l# / 2
+    TdQAdd b, nx#, ny#, nz#, -(nx# * swX(a) + ny# * swY(a) + nz# * swZ(a)), l# / 2
+    TdQAdd c, nx#, ny#, nz#, -(nx# * swX(a) + ny# * swY(a) + nz# * swZ(a)), l# / 2
+    FOR k = 0 TO 2
+        p = tdV(3 * t + k): q = tdV(3 * t + (k + 1) MOD 3)
+        IF TdBorder(p, q) THEN
+            ex# = swX(q) - swX(p): ey# = swY(q) - swY(p): ez# = swZ(q) - swZ(p)
+            el2# = ex# * ex# + ey# * ey# + ez# * ez#
+            mx# = ey# * nz# - ez# * ny#: my# = ez# * nx# - ex# * nz#: mz# = ex# * ny# - ey# * nx#
+            l# = SQR(mx# * mx# + my# * my# + mz# * mz#)
+            IF l# > 1E-20 THEN
+                mx# = mx# / l#: my# = my# / l#: mz# = mz# / l#
+                TdQAdd p, mx#, my#, mz#, -(mx# * swX(p) + my# * swY(p) + mz# * swZ(p)), el2# * 4
+                TdQAdd q, mx#, my#, mz#, -(mx# * swX(p) + my# * swY(p) + mz# * swZ(p)), el2# * 4
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' Is edge p-q a border: not two triangles, or two of different colours?
+FUNCTION TdBorder (p AS LONG, q AS LONG)
+    DIM i AS LONG
+    TdNbrs p
+    FOR i = 1 TO nbN
+        IF nbW(i) = q THEN TdBorder = (nbCnt(i) <> 2 OR nbMix(i) <> 0): EXIT FUNCTION
+    NEXT
+    TdBorder = -1
+END FUNCTION
+
+SUB TdQAdd (v AS LONG, a#, b#, c#, d#, w#)
+    DIM o AS LONG
+    o = 11 * v
+    tdQ(o) = tdQ(o) + w# * a# * a#: tdQ(o + 1) = tdQ(o + 1) + w# * a# * b#: tdQ(o + 2) = tdQ(o + 2) + w# * a# * c#: tdQ(o + 3) = tdQ(o + 3) + w# * a# * d#
+    tdQ(o + 4) = tdQ(o + 4) + w# * b# * b#: tdQ(o + 5) = tdQ(o + 5) + w# * b# * c#: tdQ(o + 6) = tdQ(o + 6) + w# * b# * d#
+    tdQ(o + 7) = tdQ(o + 7) + w# * c# * c#: tdQ(o + 8) = tdQ(o + 8) + w# * c# * d#
+    tdQ(o + 9) = tdQ(o + 9) + w# * d# * d#: tdQ(o + 10) = tdQ(o + 10) + w#
+END SUB
+
+' How far u going to v moves the shape: the planes round both, at v (their weighted root mean square)
+FUNCTION TdErr# (u AS LONG, v AS LONG)
+    DIM ou AS LONG, ov AS LONG, w#, x#, y#, z#, e#
+    ou = 11 * u: ov = 11 * v
+    w# = tdQ(ou + 10) + tdQ(ov + 10): IF w# <= 0 THEN EXIT FUNCTION
+    x# = swX(v): y# = swY(v): z# = swZ(v)
+    e# = (tdQ(ou) + tdQ(ov)) * x# * x# + 2 * (tdQ(ou + 1) + tdQ(ov + 1)) * x# * y# + 2 * (tdQ(ou + 2) + tdQ(ov + 2)) * x# * z# + 2 * (tdQ(ou + 3) + tdQ(ov + 3)) * x#
+    e# = e# + (tdQ(ou + 4) + tdQ(ov + 4)) * y# * y# + 2 * (tdQ(ou + 5) + tdQ(ov + 5)) * y# * z# + 2 * (tdQ(ou + 6) + tdQ(ov + 6)) * y#
+    e# = e# + (tdQ(ou + 7) + tdQ(ov + 7)) * z# * z# + 2 * (tdQ(ou + 8) + tdQ(ov + 8)) * z# + tdQ(ou + 9) + tdQ(ov + 9)
+    IF e# < 0 THEN e# = 0
+    TdErr# = SQR(e# / w#)
+END FUNCTION
+
+SUB TdPush (u AS LONG, v AS LONG)
+    DIM i AS LONG, p AS LONG, e#
+    IF u = v THEN EXIT SUB
+    e# = TdErr#(u, v)
+    IF hpN + 1 > UBOUND(hpE) THEN
+        i = UBOUND(hpE) * 2
+        REDIM _PRESERVE hpE(i) AS DOUBLE, hpU(i) AS LONG, hpV(i) AS LONG, hpSU(i) AS LONG, hpSV(i) AS LONG
+    END IF
+    hpN = hpN + 1: i = hpN
+    DO WHILE i > 1
+        p = i \ 2
+        IF hpE(p) <= e# THEN EXIT DO
+        hpE(i) = hpE(p): hpU(i) = hpU(p): hpV(i) = hpV(p): hpSU(i) = hpSU(p): hpSV(i) = hpSV(p)
+        i = p
+    LOOP
+    hpE(i) = e#: hpU(i) = u: hpV(i) = v: hpSU(i) = tdVer(u): hpSV(i) = tdVer(v)
+END SUB
+
+SUB TdPop (e#, u AS LONG, v AS LONG, su AS LONG, sv AS LONG)
+    DIM i AS LONG, c AS LONG, le#, lu AS LONG, lv AS LONG, lsu AS LONG, lsv AS LONG
+    e# = hpE(1): u = hpU(1): v = hpV(1): su = hpSU(1): sv = hpSV(1)
+    le# = hpE(hpN): lu = hpU(hpN): lv = hpV(hpN): lsu = hpSU(hpN): lsv = hpSV(hpN)
+    hpN = hpN - 1
+    IF hpN = 0 THEN EXIT SUB
+    i = 1
+    DO
+        c = i * 2
+        IF c > hpN THEN EXIT DO
+        IF c < hpN THEN IF hpE(c + 1) < hpE(c) THEN c = c + 1
+        IF hpE(c) >= le# THEN EXIT DO
+        hpE(i) = hpE(c): hpU(i) = hpU(c): hpV(i) = hpV(c): hpSU(i) = hpSU(c): hpSV(i) = hpSV(c)
+        i = c
+    LOOP
+    hpE(i) = le#: hpU(i) = lu: hpV(i) = lv: hpSU(i) = lsu: hpSV(i) = lsv
+END SUB
+
+' ---------------------------------------------------------------- back as the model's triangles
+
+SUB TdBack
+    DIM t AS LONG, n AS LONG, a AS LONG, b AS LONG, c AS LONG, nx#, ny#, nz#, l#
+    FOR t = 1 TO tdN
+        IF tdLive(t) AND n < MAX_TRI - tdHold THEN
+            a = tdV(3 * t): b = tdV(3 * t + 1): c = tdV(3 * t + 2)
+            nx# = (swY(b) - swY(a)) * (swZ(c) - swZ(a)) - (swZ(b) - swZ(a)) * (swY(c) - swY(a))
+            ny# = (swZ(b) - swZ(a)) * (swX(c) - swX(a)) - (swX(b) - swX(a)) * (swZ(c) - swZ(a))
+            nz# = (swX(b) - swX(a)) * (swY(c) - swY(a)) - (swY(b) - swY(a)) * (swX(c) - swX(a))
+            l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+            IF l# > 1E-14 THEN
+                n = n + 1
+                tA(n).x = swX(a): tA(n).y = swY(a): tA(n).z = swZ(a)
+                tB(n).x = swX(b): tB(n).y = swY(b): tB(n).z = swZ(b)
+                tC(n).x = swX(c): tC(n).y = swY(c): tC(n).z = swZ(c)
+                tNrm(n).x = nx# / l#: tNrm(n).y = ny# / l#: tNrm(n).z = nz# / l#
+                tCol(n) = tdCol(t): tPart(n) = tdPart(t): tFace(n) = 0: tEdge(n) = 7: tTex(n) = 0
+            END IF
+        END IF
+    NEXT
+    sceneTN = n
+END SUB
+
+$CHECKING:ON
+
+' T: the view shows the model as it'll be exported (or as built)
+SUB TidyToggle
+    tidyView = NOT tidyView: meshDirty = -1
+    IF tidyView THEN
+        Msg "Tidy view: the model as EXPORT sends it - hidden faces gone, flat ones joined, cut down to its budget. T: as built"
+    ELSE
+        Msg "As built"
+    END IF
+END SUB
+
+' EXPORT tidied, or as built (the model's own: saved with it)
+SUB TidyExportToggle
+    UndoPush
+    mdlTidy = NOT mdlTidy: ModelChanged
+    Msg IIFS$(mdlTidy, "EXPORT sends it tidied (T shows how) - hidden faces gone, flat ones joined, cut down to the budget", "EXPORT sends it as built: every face")
+END SUB
+
+' The model's budget (0: none); undo: an undo step first
+SUB BudgetSet (v, undo)
+    DIM b AS LONG
+    b = INT(v): IF b < 0 THEN b = 0
+    IF b > MAX_TRI THEN b = MAX_TRI
+    IF b = mdlBudget THEN EXIT SUB
+    IF undo THEN UndoPush
+    mdlBudget = b: ModelChanged
+    Msg "Budget:" + STR$(b) + " triangles" + IIFS$(b = 0, " - none: the export is tidied, not cut down", " - the export's cut down to it, as far as it goes without showing")
+END SUB

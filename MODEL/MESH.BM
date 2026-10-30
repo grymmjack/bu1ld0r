@@ -10,14 +10,15 @@
 
 SUB MeshBuild
     DIM i, k$
-    k$ = ModelText$ + STR$(pfGen) + STR$(meshAll)
+    k$ = ModelText$ + STR$(pfGen) + STR$(meshAll) + STR$(meshGen) + STR$(TidyOn)
     IF k$ = meshKey$ THEN
         tN = holeTN ' (the model as it was: the ghost alone moved - holes aren't cut again)
     ELSE
         meshKey$ = k$
-        tN = 0: usN = 0
+        tN = 0: usN = 0: solN = 0
         MeshRun 1, pN, -1
         sceneTN = tN
+        IF TidyOn THEN TidyRun ' (as it'll be exported)
         FOR i = 1 TO pN
             IF pHole(i) AND pHide(i) = 0 AND meshAll = 0 THEN usN = 0: MeshItem i, i
         NEXT
@@ -28,8 +29,9 @@ SUB MeshBuild
 END SUB
 
 ' Parts q0 to q1 (the model's, or a prefab's) as triangles, each hole cut
-' out of the solid parts before it that it reaches. owner: whose they all
-' count as (-1: each its own). Holes and hidden parts make none here.
+' out of the solid parts before it that it reaches (a hole in a group: only
+' its group's; a KEEP hole leaves only where they overlap). owner: whose
+' they all count as (-1: each its own). Holes and hidden parts make none here.
 SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
     DIM q AS LONG, k, nh, t0 AS LONG, t1 AS LONG, lo AS V3, hi AS V3, la AS LONG, lb AS LONG, m1 AS LONG, m2 AS LONG, o, cut
     FOR q = q0 TO q1
@@ -37,7 +39,7 @@ SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
     NEXT
     IF nh = 0 THEN
         FOR q = q0 TO q1
-            IF Shown(q, owner) THEN MeshItem q, IIF(owner = -1, q, owner)
+            IF Shown(q, owner) THEN t0 = tN: MeshItem q, IIF(owner = -1, q, owner): SolidMark t0 + 1, tN, q
         NEXT
         EXIT SUB
     END IF
@@ -57,16 +59,28 @@ SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
             TriBounds t0 + 1, tN, lo, hi
             la = 0: cut = 0
             FOR k = 1 TO nh
-                IF hq(k) > q AND BoxesMeet(lo, hi, hlo(k), hhi(k)) THEN
-                    IF cut = 0 THEN cut = -1: CsgMark m1, m2: la = CsgFromTris&(t0 + 1, tN, 0): tN = t0
-                    t1 = tN: MeshItem hq(k), IIF(owner = -1, hq(k), owner)
-                    lb = CsgFromTris&(t1 + 1, tN, -1): tN = t1
-                    la = CsgSubtract&(la, lb)
+                IF hq(k) > q AND (pGrp(hq(k)) = 0 OR pGrp(hq(k)) = pGrp(q)) THEN
+                    IF pKeep(hq(k)) OR BoxesMeet(lo, hi, hlo(k), hhi(k)) THEN
+                        IF cut = 0 THEN cut = -1: CsgMark m1, m2: la = CsgFromTris&(t0 + 1, tN, 0): tN = t0
+                        IF la THEN
+                            t1 = tN: MeshItem hq(k), IIF(owner = -1, hq(k), owner)
+                            lb = CsgFromTris&(t1 + 1, tN, -1): tN = t1
+                            la = CsgBool&(la, lb, pKeep(hq(k)))
+                        END IF
+                    END IF
                 END IF
             NEXT
             IF cut THEN CsgEmit la: CsgRelease m1, m2 ' (its pieces in place of it)
+            SolidMark t0 + 1, tN, q
         END IF
     NEXT
+END SUB
+
+' Triangles t0 to t1 are one solid, part q's (a use's: its solids, overlapping - all one here)
+SUB SolidMark (t0 AS LONG, t1 AS LONG, q AS LONG)
+    DIM t AS LONG, s AS LONG
+    solN = solN + 1: s = solN: IF pKind(q) = K_USE THEN s = -s
+    FOR t = t0 TO t1: tSol(t) = s: NEXT
 END SUB
 
 ' Part q is made (not hidden - hiding is the model's own: a prefab's parts all show, and the export has them all)
@@ -75,6 +89,15 @@ FUNCTION Shown (q AS LONG, owner)
 END FUNCTION
 
 ' The box round triangles t0 to t1
+' Triangle a copied over triangle b
+SUB TriCopy (a AS LONG, b AS LONG)
+    tA(b) = tA(a): tB(b) = tB(a): tC(b) = tC(a): tNrm(b) = tNrm(a)
+    tPart(b) = tPart(a): tFace(b) = tFace(a): tCol(b) = tCol(a): tSol(b) = tSol(a): tEdge(b) = tEdge(a)
+    tTex(b) = tTex(a)
+    tU(3 * b) = tU(3 * a): tU(3 * b + 1) = tU(3 * a + 1): tU(3 * b + 2) = tU(3 * a + 2)
+    tW(3 * b) = tW(3 * a): tW(3 * b + 1) = tW(3 * a + 1): tW(3 * b + 2) = tW(3 * a + 2)
+END SUB
+
 SUB TriBounds (t0 AS LONG, t1 AS LONG, lo AS V3, hi AS V3)
     DIM t AS LONG
     lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
@@ -122,6 +145,7 @@ SUB MeshItem (j, owner)
     usCY(usN) = DCos(pRY(j)): usSYr(usN) = DSin(pRY(j))
     usCZ(usN) = DCos(pRZ(j)): usSZr(usN) = DSin(pRZ(j))
     usPX(usN) = pX(j): usPY(usN) = pY(j): usPZ(usN) = pZ(j)
+    usTint(usN) = pTint(j)
     MeshRun pfFirst(pf) + 1, pfFirst(pf) + pfCnt(pf), owner
     usN = usN - 1
 END SUB
@@ -132,7 +156,8 @@ SUB MeshShape (i, owner)
     mkPart = owner: mkCol = pCol(i)
     mkSX = pSX(i): mkSY = pSY(i): mkSZ = pSZ(i)
     kd = pKind(i)
-    IF kd = K_USE THEN ' (a prefab that isn't there: a red box a quarter its size)
+    IF kd = K_MESH THEN IF MbOk(pMesh(i)) = 0 THEN kd = K_USE
+    IF kd = K_USE THEN ' (a prefab that isn't there - or a mesh: a red box a quarter its size)
         kd = K_BOX: mkCol = _RGB32(255, 40, 60): mkSX = mkSX * .25: mkSY = mkSY * .25: mkSZ = mkSZ * .25
     END IF
     mkCX = DCos(pRX(i)): mkSXr = DSin(pRX(i))
@@ -141,6 +166,7 @@ SUB MeshShape (i, owner)
     mkPX = pX(i): mkPY = pY(i): mkPZ = pZ(i)
     s = SegsOf(i)
     SELECT CASE kd
+        CASE K_MESH: MkMesh i
         CASE K_BOX
             mkFace = 0: MkQuad -.5, 0, -.5, .5, 0, -.5, .5, 1, -.5, -.5, 1, -.5, 0, 0, -1 ' (front)
             mkFace = 1: MkQuad .5, 0, -.5, .5, 0, .5, .5, 1, .5, .5, 1, -.5, 1, 0, 0 ' (right)
@@ -242,11 +268,11 @@ END SUB
 
 ' Two triangles, a-b-c and a-c-d: the diagonal a-c isn't an edge of the shape
 SUB MkQuad (ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, hx, hy, hz)
-    DIM e
-    e = mkTriE
-    mkTriE = (mkQuadE AND 1) OR (mkQuadE AND 2) ' (a-b, b-c)
+    DIM e, q
+    e = mkTriE: q = mkQuadE: IF mkCap THEN q = 15
+    mkTriE = (q AND 1) OR (q AND 2) ' (a-b, b-c)
     MkTri ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz
-    mkTriE = (mkQuadE AND 4) \ 2 OR (mkQuadE AND 8) \ 2 ' (c-d, d-a)
+    mkTriE = (q AND 4) \ 2 OR (q AND 8) \ 2 ' (c-d, d-a)
     MkTri ax, ay, az, cx, cy, cz, dx, dy, dz, hx, hy, hz
     mkTriE = e
 END SUB
@@ -269,12 +295,29 @@ SUB MkTri (ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz)
     IF n.x * h.x + n.y * h.y + n.z * h.z < 0 THEN
         tA(t) = a: tB(t) = c: tC(t) = b: n.x = -n.x: n.y = -n.y: n.z = -n.z
         tEdge(t) = (mkTriE AND 2) OR (mkTriE AND 1) * 4 OR (mkTriE AND 4) \ 4 ' (b and c swapped: A-B is what C-A was)
+        IF mkTex THEN tU(3 * t) = mkU(0): tW(3 * t) = mkW(0): tU(3 * t + 1) = mkU(2): tW(3 * t + 1) = mkW(2): tU(3 * t + 2) = mkU(1): tW(3 * t + 2) = mkW(1)
     ELSE
         tA(t) = a: tB(t) = b: tC(t) = c: tEdge(t) = mkTriE
+        IF mkTex THEN tU(3 * t) = mkU(0): tW(3 * t) = mkW(0): tU(3 * t + 1) = mkU(1): tW(3 * t + 1) = mkW(1): tU(3 * t + 2) = mkU(2): tW(3 * t + 2) = mkW(2)
     END IF
+    tTex(t) = mkTex
     tNrm(t) = n: tPart(t) = mkPart: tFace(t) = mkFace: tCol(t) = mkCol
+    IF usN THEN tCol(t) = TintCol~&(mkCol)
     tN = t
 END SUB
+
+' A colour through each prefab use's tint it's in (innermost first)
+FUNCTION TintCol~& (c AS _UNSIGNED LONG)
+    DIM lv, a, r, g, b
+    r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
+    FOR lv = usN TO 1 STEP -1
+        a = _ALPHA32(usTint(lv)) / 255
+        IF a > 0 THEN
+            r = r + (_RED32(usTint(lv)) - r) * a: g = g + (_GREEN32(usTint(lv)) - g) * a: b = b + (_BLUE32(usTint(lv)) - b) * a
+        END IF
+    NEXT
+    TintCol~& = _RGB32(r, g, b)
+END FUNCTION
 
 ' The model's box: lo and hi corners (0 if it's empty)
 SUB MeshBounds (lo AS V3, hi AS V3, selOnly)

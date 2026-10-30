@@ -45,7 +45,17 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
   come from the prefab's file, so it's linked; prefabs can use prefabs.
 - After the numbers, a part's flags, as words: `hole` (it cuts the solid
   parts before it), `hide` (not in the view; still exported), `wire`
-  (lines only), `name=NAME` (no spaces). Older copies ignore them.
+  (lines only), `name=NAME` (no spaces), `keep` (a hole that keeps only
+  the overlap), `group=N`, `tint=RRGGBBAA` (a use's: AA how much).
+  Older copies ignore them.
+- A mesh part: `part mesh  x y z  turns  sizes  RRGGBB 0 0`, then its
+  points (`v x y z`, in its own 1 x 1 x 1) and polygons (`f RRGGBB 1 2 -3
+  ...`: points from 1, less than 0 when the edge on isn't the shape's own).
+  A polygon with a picture on it: `f RRGGBB @REF 1:u:v 2:u:v ...` - REF
+  the picture in `pictures/` without .png (`neon/crate`), u and v each
+  corner's spot on it (0..1 across and down from the top left).
+- `budget N`: the tidied export's triangles at most (0: none); `tidy 1`:
+  EXPORT tidies it (else it's sent as built).
 - Later stages add lines after a part (`face`, `paint`).
 
 ## Stages
@@ -66,17 +76,27 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
    laid out again to fill it, the UI at a whole-number scale - Ctrl+ /
    Ctrl-, F11 full screen).
 3. **Pictures on faces**: any PNG on a part's face, with wrap, slide,
-   stretch, turn and tint (as NEON-CASTER's level faces).
+   stretch, turn and tint (as NEON-CASTER's level faces). Started (0.5.0):
+   a mesh polygon can carry a picture with a spot per corner, drawn
+   perspective-correct (VIEW: FillTriT), saved in the .bld, kept by the
+   edit tools and by tidy, and exported in the one texture (OUT/EXPORT:
+   ExAtlas). NEON-CASTER's props open as models with it (MODEL/IMPORT:
+   OPEN lists them). Then (0.5.0, UI/PICS): the bin's PICTURES tab, a
+   picture dragged or clicked onto a face (fitted), a PNG dropped on the
+   window, and the picked faces' FIT / ACROSS ALL / TURN / FLIP / REPEAT /
+   slide / NO PICTURE; the export cuts repeats (the game clamps). Still to
+   do: tint. Also ALIGN (UI/ALIGN): parts, points, faces, as seen.
 4. **Painting**: brushes straight onto the model, in 3D (every texel within
    the brush's reach, so strokes cross from part to part), on a layer of
    their own over the pictures. Export bakes it all into the one texture.
-5. **Prefabs**: what's left after stage 2 - unlink a use (its parts into
-   the model as parts: needs turns combined into one Z-X-Y set), a use's
-   tint, renaming or moving a prefab (and its uses) from the bin.
-6. **Divide and push/pull**: divide a face across or down (H / V, as the
-   level editor's faces in pieces), push a piece out or in; on round shapes
-   rings along the length. Faces stay flat four-sided pieces. The triangle
-   count on screen, against NEON-CASTER's ~200 a prop.
+5. **Prefabs** (done, 0.4.0): what's left after stage 2 - unlink a use (its parts into
+   the model as parts, as a group: turns combined into one Z-X-Y set, or a
+   mesh part when a scale can't be one part's), a use's tint, renaming or
+   moving a prefab (and its uses) from the bin's right-click menu.
+6. **Divide and push/pull** (done, 0.4.0, as editing): any part's faces and points
+   (E) - mesh parts (`part mesh`, then `v` and `f` lines in the .bld) -
+   picked and moved, sized, turned, pushed out, extruded, inset, divided
+   across or down (H / V), merged, flipped, coloured, taken away.
 7. **Booleans**: holes done (0.3.0) - any part (a prefab too) can be a
    HOLE (C): its shape is taken out of every solid part before it in the
    list (a hole, a slot, a recess), live, so it can still be moved and
@@ -87,8 +107,8 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
    (a hole put on a face drills into it), and the parts list (L: select,
    hide, lines only, rename, order). Still to do: KEEP (only where it
    overlaps: an intersection), and a hole cutting only the parts it's
-   grouped with.
-8. **Retopology**: the mesh tidied for the game, as the last step before
+   grouped with - both done (0.4.0), with APPLY: a hole made for good.
+8. **Retopology** (done, 0.4.0: OUT/TIDY): the mesh tidied for the game, as the last step before
    export (and shown: the count before and after): corners welded, faces
    hidden inside other parts or pressed flat against them taken away,
    flat neighbours of one colour merged into fewer triangles, slivers
@@ -96,7 +116,10 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
    (NEON-CASTER's ~200 a prop, set in the panel), simplified (edge
    collapse, keeping the outline, colour borders and the 8 pictures'
    look). The .bld keeps the parts as built; only the export is reduced.
-9. **Starter prefabs**: toggle, button, knob, dial, screen, vent, handle,
+   (The budget is the model's: `budget N` in the .bld. T shows it tidied.)
+   Since 0.5.0 it's the model's choice (`tidy 1`, EXPORT: TIDIED in the
+   panel): it loses detail, so EXPORT sends the model as built by default.
+9. **Starter prefabs** (done, 0.4.0: `prefabs/starter/`): toggle, button, knob, dial, screen, vent, handle,
    pipe (straight, elbow, T), lamp, antenna (vents and dials use stage 7's
    cuts).
 

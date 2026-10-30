@@ -1,0 +1,240 @@
+name: Build bu1ld0r
+
+on:
+  # Build + release for version tags (vX.Y.Z). Run it by hand from the
+  # Actions tab (workflow_dispatch) to test a build without tagging.
+  push:
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release after building'
+        type: boolean
+        default: false
+      tag:
+        description: 'Tag name for the release (e.g. v1.0.0)'
+        type: string
+        default: ''
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Pinned to the QB64-PE commit bu1ld0r is developed and tested with, so every
+  # release is built the same way. That commit carries its generated compiler
+  # source, so setup builds a working qb64pe directly.
+  QB64PE_REPO: https://github.com/QB64-Phoenix-Edition/QB64pe.git
+  QB64PE_REF: 442faf03972acdb88780ffaf8bbfbbeb344ae2fa
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04   # (an older glibc: the binary runs on more distros)
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential x11-utils mesa-common-dev libglu1-mesa-dev libgl1-mesa-dri \
+            libasound2-dev libpng-dev libportaudio2 \
+            libcurl4-openssl-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev libwayland-dev libxkbcommon-dev \
+            wayland-protocols xvfb
+
+      - name: Build QB64-PE (pinned)
+        run: |
+          mkdir -p "$HOME/.local/share/applications" "$HOME/.local/share/icons"
+          git init -q qb64pe && cd qb64pe
+          git fetch -q --depth 1 "$QB64PE_REPO" "$QB64PE_REF" && git checkout -q FETCH_HEAD
+          chmod +x ./setup_lnx.sh
+          # A non-blank argument: setup doesn't launch the IDE afterwards.
+          ./setup_lnx.sh nogui
+          test -x ./qb64pe || { echo "::error::qb64pe compiler was not built"; exit 1; }
+
+      - name: Compile bu1ld0r
+        run: xvfb-run -a ./qb64pe/qb64pe -w -x -o bu1ld0r.run bu1ld0r.bas
+
+      - name: Dump C++ compile log on failure
+        if: failure()
+        run: |
+          for f in $(find . -name 'compilelog.txt' 2>/dev/null); do echo "--- $f ---"; cat "$f"; done
+
+      - name: Smoke test (open a starter prefab, export it, a screenshot, under Xvfb)
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" timeout 120 ./bu1ld0r.run \
+            prefabs/starter/lamp.bld --export --shot "$PWD/smoke.png" --quit
+          test -f smoke.png && test -s export/lamp.obj || { echo "::error::bu1ld0r didn't run"; exit 1; }
+          rm -rf export bu1ld0r.cfg
+
+      - name: Upload smoke-test screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-screenshot
+          path: smoke.png
+
+      - name: Package
+        run: |
+          PKG=bu1ld0r
+          mkdir -p "pkg/$PKG"
+          cp bu1ld0r.run bu1ld0r.bas _ALL.BI _ALL.BM README.md PLAN.md "pkg/$PKG/"
+          [ -f LICENSE ] && cp LICENSE "pkg/$PKG/"
+          for d in CORE MODEL VIEW UI OUT docs prefabs pictures models; do [ -d "$d" ] && cp -r "$d" "pkg/$PKG/"; done
+          tar -czf bu1ld0r-linux-x64.tar.gz -C pkg "$PKG"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bu1ld0r-linux
+          path: bu1ld0r-linux-x64.tar.gz
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest   # Apple silicon
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build QB64-PE (pinned)
+        run: |
+          git init -q qb64pe && cd qb64pe
+          git fetch -q --depth 1 "$QB64PE_REPO" "$QB64PE_REF" && git checkout -q FETCH_HEAD
+          chmod +x ./setup_osx.command
+          # A non-blank argument: setup doesn't launch the IDE (it would hang the step).
+          ./setup_osx.command nogui
+          test -x ./qb64pe || { echo "::error::qb64pe compiler was not built"; exit 1; }
+
+      - name: Compile bu1ld0r
+        run: ./qb64pe/qb64pe -w -x -o bu1ld0r-mac bu1ld0r.bas
+
+      - name: Dump C++ compile log on failure
+        if: failure()
+        run: |
+          for f in $(find . -name 'compilelog.txt' 2>/dev/null); do echo "--- $f ---"; cat "$f"; done
+
+      - name: Package
+        run: |
+          test -x ./bu1ld0r-mac || { echo "::error::bu1ld0r-mac was not produced"; exit 1; }
+          PKG=bu1ld0r
+          mkdir -p "pkg/$PKG"
+          cp bu1ld0r-mac bu1ld0r.bas _ALL.BI _ALL.BM README.md PLAN.md "pkg/$PKG/"
+          [ -f LICENSE ] && cp LICENSE "pkg/$PKG/"
+          for d in CORE MODEL VIEW UI OUT docs prefabs pictures models; do [ -d "$d" ] && cp -r "$d" "pkg/$PKG/"; done
+          # ditto keeps the program's "can run" permission inside the zip
+          (cd pkg && ditto -c -k --keepParent "$PKG" "../bu1ld0r-macos-arm64.zip")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bu1ld0r-macos-arm64
+          path: bu1ld0r-macos-arm64.zip
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch QB64-PE (pinned)
+        shell: bash
+        run: |
+          git init -q qb64pe && cd qb64pe
+          git fetch -q --depth 1 "$QB64PE_REPO" "$QB64PE_REF" && git checkout -q FETCH_HEAD
+
+      # Upstream QB64-PE's internal/c/parts/audio/extras/qoa_ma_vtable.cpp uses
+      # malloc/free without #include <cstdlib>, which llvm-mingw doesn't pull in
+      # by itself. Add the include (only if it's missing). From grymmjack/DRAW's
+      # workflow.
+      - name: Patch qoa_ma_vtable.cpp (missing <cstdlib>)
+        shell: bash
+        run: |
+          F=qb64pe/internal/c/parts/audio/extras/qoa_ma_vtable.cpp
+          if [ -f "$F" ] && ! grep -q '<cstdlib>' "$F"; then
+            { echo '#include <cstdlib>'; cat "$F"; } > "$F.tmp" && mv "$F.tmp" "$F"
+            echo "patched"
+          fi
+
+      - name: Build QB64-PE (bundled MinGW)
+        shell: cmd
+        run: |
+          cd qb64pe
+          call setup_win.cmd
+          if not exist qb64pe.exe exit /b 1
+
+      - name: Compile bu1ld0r
+        shell: cmd
+        run: qb64pe\qb64pe.exe -w -x -o bu1ld0r.exe bu1ld0r.bas
+
+      - name: Dump C++ compile log on failure
+        if: failure()
+        shell: bash
+        run: |
+          for f in $(find . -name 'compilelog.txt' 2>/dev/null); do echo "--- $f ---"; cat "$f"; done
+
+      - name: Package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "bu1ld0r.exe")) { Write-Error "bu1ld0r.exe was not produced"; exit 1 }
+          $pkg = "pkg\bu1ld0r"
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+          Copy-Item bu1ld0r.exe, bu1ld0r.bas, _ALL.BI, _ALL.BM, README.md, PLAN.md -Destination $pkg
+          if (Test-Path LICENSE) { Copy-Item LICENSE -Destination $pkg }
+          foreach ($d in "CORE", "MODEL", "VIEW", "UI", "OUT", "docs", "prefabs", "pictures", "models") { if (Test-Path $d) { Copy-Item $d -Destination $pkg -Recurse } }
+          Compress-Archive -Path $pkg -DestinationPath bu1ld0r-windows-x64.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bu1ld0r-windows
+          path: bu1ld0r-windows-x64.zip
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release == true
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bu1ld0r-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -lh artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: bu1ld0r ${{ inputs.tag || github.ref_name }}
+          draft: false
+          files: artifacts/*
+          generate_release_notes: true
+          body: |
+            Download the one for your computer, unzip it, and run the program inside.
+            Keep it in its folder: your models, prefabs, pictures and exports are
+            saved in folders beside it.
+
+            | | File | Run |
+            |---|---|---|
+            | Windows 10/11 | `bu1ld0r-windows-x64.zip` | `bu1ld0r.exe` |
+            | Mac with Apple silicon (M1 and later) | `bu1ld0r-macos-arm64.zip` | `bu1ld0r-mac` |
+            | Linux (x86-64) | `bu1ld0r-linux-x64.tar.gz` | `bu1ld0r.run` |
+
+            **macOS:** the program isn't signed, so the first time, right-click it and
+            choose **Open** (or run `xattr -dr com.apple.quarantine bu1ld0r` on the
+            unzipped folder).
+
+            EDIT IN DRAW and OPEN IN KALEIDOTRON (the PICTURES tab's right-click menu)
+            work on Linux only for now.
+
+            The source - `bu1ld0r.bas` and the include files in the folders beside
+            it - is in every download. README.md has the workflows and every key.

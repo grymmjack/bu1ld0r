@@ -1,0 +1,6 @@
+bu1ld0r 1
+name handle
+budget 200
+part cylinder  -0.07 0 0  0 0 0  0.022 0.05 0.022  7C8090  10  0  name=post1
+part cylinder  0.07 0 0  0 0 0  0.022 0.05 0.022  7C8090  10  0  name=post2
+part cylinder  0.085 0.06 0  0 0 90  0.024 0.17 0.024  18181E  10  0  name=grip

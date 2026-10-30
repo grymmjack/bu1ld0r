@@ -1,0 +1,754 @@
+''
+' bu1ld0r - UI/BEVEL.BM
+' =============================================================================
+' BEVEL: see BEVEL.BI. Each time a slider moves, the part's mesh as it was
+' is read into the work again and bevelled afresh (a mesh of its own, not
+' an undo step); APPLY makes that one the part's, with one undo step.
+'
+' How: round each point at a bevelled edge's end, the faces are taken in
+' turn. Each face's corner there is moved in: off both its edges if both
+' are bevelled, else along its other edge - to WIDTH from the bevelled one
+' (so every face stays flat). A face beside neither keeps the point, with
+' the moved points of its neighbours put in its edges (no cracks). Each
+' edge then gets its strip, from the corners moved in one face to those in
+' the other - rounded through where the edge was, SEGMENTS of them - and
+' each point a corner face, if the strips leave a gap round it.
+'
+
+' ---------------------------------------------------------------- the mode
+
+' B, or BEVEL: begun on the picked edges (or faces' edges) - B again: made
+SUB BvStart
+    DIM i AS LONG
+    IF bvOn THEN BvApply: EXIT SUB
+    IF edPart = 0 THEN EXIT SUB
+    IF edMode = ED_POINTS THEN Msg "Bevel works on edges (3: EDGES) or faces (2: FACES): pick some, then B": EXIT SUB
+    IF NOT EdAny THEN Msg "Pick the edges (3) or faces (2) to bevel, then B": EXIT SUB
+    pvOn = 0: pvArm = 0
+    bvBase = pMesh(edPart): bvPrev = 0: bvKind = 1
+    bvPtMode = (edMode = ED_EDGES)
+    bvSN = 0
+    IF bvPtMode THEN EdBegin 0: EdPickedEdges bvSA(), bvSB(), bvSN ' (the edges meant: two opposite sides of a face picked - not the other two)
+    REDIM bvSelV(edVN) AS _BYTE, bvSelF(edFN) AS _BYTE
+    FOR i = 0 TO edVN - 1: bvSelV(i) = edSelV(i): NEXT
+    FOR i = 0 TO edFN - 1: bvSelF(i) = edSelF(i): NEXT
+    IF bvSeg < 1 THEN bvSeg = 1: bvWs = 30 ' (the first one: a chamfer, a third of as wide as it can be)
+    BvGather
+    IF bvNE = 0 AND bvFold > 0 THEN Msg "That edge is folded flat: its two faces lie back to back (a fin, no thickness) - nothing to cut. Inset less, or push in less than the inset, and the edge has a corner": EXIT SUB
+    IF bvNE = 0 THEN Msg "None of those edges can be bevelled: flat between their faces, or the shape's open there": EXIT SUB
+    bvOn = -1: bvDrag = 0
+    edMode = ED_FACES ' (what it makes shows picked)
+    BvPreview
+    Msg "Bevel: WIDTH and SEGMENTS in the panel (drag them, or the wheel over them). Enter or APPLY: make it. Esc: as it was"
+END SUB
+
+' Made: the part keeps what's shown (one undo step), its new faces picked
+SUB BvApply
+    DIM id AS LONG
+    IF NOT bvOn THEN EXIT SUB
+    bvOn = 0: bvDrag = 0
+    IF edPart = 0 THEN EXIT SUB
+    id = pMesh(edPart)
+    IF id = bvBase THEN
+        IF bvPtMode THEN edMode = ED_EDGES
+        Msg "WIDTH is 0: nothing bevelled": EXIT SUB
+    END IF
+    pMesh(edPart) = bvBase: UndoPush: pMesh(edPart) = id
+    edGen = edGen + 1: ovDirty = -1
+    ModelChanged: MeshGcDue
+    IF bvKind = 2 THEN
+        Msg "Loop cut (Ctrl+Z: as it was). Its new edges are picked: drag them, SPLIT or BEVEL them, or 2 and colour the faces"
+    ELSE
+        Msg "Bevelled (Ctrl+Z: as it was). Its new faces are picked: colour them, inset them, push them..."
+    END IF
+END SUB
+
+' Esc: the part as it was, its picking too
+SUB BvCancel
+    IF NOT bvOn THEN EXIT SUB
+    bvOn = 0: bvDrag = 0
+    IF edPart = 0 THEN EXIT SUB
+    IF pMesh(edPart) <> bvPrev THEN EXIT SUB ' (something else changed it meanwhile: left as it is)
+    BvShowBase
+    IF bvPtMode THEN edMode = ED_EDGES
+    MeshGcDue
+    Msg IIFS$(bvKind = 2, "Not cut", "Not bevelled")
+END SUB
+
+' The part's mesh as it was before the bevel, picked as it was
+SUB BvShowBase
+    DIM i AS LONG
+    pMesh(edPart) = bvBase: bvPrev = bvBase
+    edId = bvBase: edVN = mbVN(bvBase): edFN = mbFN(bvBase)
+    REDIM edSelV(edVN) AS _BYTE, edSelF(edFN) AS _BYTE
+    FOR i = 0 TO edVN - 1
+        IF i <= UBOUND(bvSelV) THEN edSelV(i) = bvSelV(i)
+    NEXT
+    FOR i = 0 TO edFN - 1
+        IF i <= UBOUND(bvSelF) AND bvPtMode = 0 THEN edSelF(i) = bvSelF(i)
+    NEXT
+    edGen = edGen + 1: ovDirty = -1: meshDirty = -1: viewDirty = -1
+END SUB
+
+' The bevel made again as the sliders say, and shown
+SUB BvPreview
+    DIM id AS LONG, f AS LONG, nv AS LONG
+    IF bvKind = 2 THEN LcPreview: EXIT SUB
+    IF bvWs <= 0 THEN BvShowBase: EXIT SUB
+    BvGather
+    IF bvNE = 0 THEN BvShowBase: EXIT SUB
+    nv = swN
+    BvBuild
+    BvWeldNew nv
+    id = EmWrite&
+    pMesh(edPart) = id: bvPrev = id
+    edId = id: edVN = mbVN(id): edFN = mbFN(id)
+    REDIM edSelV(edVN) AS _BYTE, edSelF(edFN) AS _BYTE
+    FOR f = 1 TO sfN
+        IF f <= UBOUND(wsF) THEN
+            IF sfMap(f) >= 0 AND wsF(f) THEN edSelF(sfMap(f)) = -1
+        END IF
+    NEXT
+    edGen = edGen + 1: ovDirty = -1: meshDirty = -1: viewDirty = -1
+END SUB
+
+' The new points (past nv0) that landed on the same spot made one - two
+' slid along edges to one corner the mesh holds twice (unwelded): else the
+' corner face between them has no area, and there'd be a gap
+SUB BvWeldNew (nv0 AS LONG)
+    DIM i AS LONG, j AS LONG, hit
+    IF swN <= nv0 + 1 THEN EXIT SUB
+    REDIM rm(swN) AS LONG
+    FOR i = 1 TO swN: rm(i) = i: NEXT
+    FOR i = nv0 + 2 TO swN
+        FOR j = nv0 + 1 TO i - 1
+            IF rm(j) = j THEN
+                IF ABS(swX(i) - swX(j)) + ABS(swY(i) - swY(j)) + ABS(swZ(i) - swZ(j)) < 1E-9 THEN rm(i) = j: hit = -1: EXIT FOR
+            END IF
+        NEXT
+    NEXT
+    IF hit THEN EmRemap rm()
+END SUB
+
+' How wide, in the world (of a cell)
+FUNCTION BvW#
+    BvW# = bvMaxW# * bvWs / 100
+END FUNCTION
+
+' ---------------------------------------------------------------- the edges
+
+' The mesh as it was into the work, and the edges to bevel found: picked
+' (or a picked face's), with a face each side not flat with the other, and
+' the faces all the way round both ends
+SUB BvGather
+    DIM f AS LONG, k AS LONG, n AS LONG, a AS LONG, b AS LONG, take, h AS LONG, v AS LONG, i AS LONG, d AS LONG
+    DIM x#, y#, z#, px#, py#, pz#, l#
+    EmLoad bvBase
+    EmEdgeMap
+    bvNE = 0: bvFold = 0
+    h = 1024: DO WHILE h < scTop * 4: h = h * 2: LOOP
+    REDIM bvHK(h - 1) AS _INTEGER64, bvHV(h - 1) AS LONG
+    REDIM bvEA(64) AS LONG, bvEB(64) AS LONG, bvEF1(64) AS LONG, bvEF2(64) AS LONG
+    REDIM bvVM(swN) AS _BYTE, bvVF(swN) AS LONG
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            FOR k = 0 TO sfCN(f) - 1: bvVF(scV(sfC0(f) + k)) = f: NEXT
+        END IF
+    NEXT
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            n = sfCN(f)
+            FOR k = 0 TO n - 1
+                a = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD n): take = 0
+                IF bvPtMode THEN
+                    FOR i = 1 TO bvSN
+                        IF (bvSA(i) = a AND bvSB(i) = b) OR (bvSA(i) = b AND bvSB(i) = a) THEN take = -1: EXIT FOR
+                    NEXT
+                ELSE
+                    IF f - 1 <= UBOUND(bvSelF) THEN take = bvSelF(f - 1)
+                END IF
+                IF take THEN
+                    IF BvEdge&(a, b) = 0 THEN BvTry a, b
+                END IF
+            NEXT
+        END IF
+    NEXT
+    ' (as wide as it can be: half of any edge a point slides along - nearly all of it if
+    ' nothing slides in from its other end - and half as far as each face beside a
+    ' bevelled edge reaches from it, nearly all if that's its only bevelled edge)
+    bvMaxW# = 1E9
+    FOR v = 1 TO UBOUND(bvVM)
+        IF bvVM(v) THEN
+            d = BvFan&(v): EdW v, x#, y#, z#
+            FOR i = 0 TO d - 1
+                IF BvEdge&(v, bfP(i)) = 0 THEN
+                    EdW bfP(i), px#, py#, pz#
+                    l# = SQR((px# - x#) ^ 2 + (py# - y#) ^ 2 + (pz# - z#) ^ 2)
+                    l# = l# * IIF(bvVM(bfP(i)), .5, .9)
+                    IF l# > 1E-9 AND l# < bvMaxW# THEN bvMaxW# = l#
+                END IF
+            NEXT
+        END IF
+    NEXT
+    FOR i = 1 TO bvNE
+        l# = BvReach#(i, bvEF1(i)) * IIF(BvFaceBev(bvEF1(i)) > 1, .5, .9): IF l# > 1E-9 AND l# < bvMaxW# THEN bvMaxW# = l#
+        l# = BvReach#(i, bvEF2(i)) * IIF(BvFaceBev(bvEF2(i)) > 1, .5, .9): IF l# > 1E-9 AND l# < bvMaxW# THEN bvMaxW# = l#
+    NEXT
+    IF bvMaxW# > 1E8 THEN bvMaxW# = 0
+END SUB
+
+' How many of face f's sides are bevelled
+FUNCTION BvFaceBev (f AS LONG)
+    DIM k AS LONG, n AS LONG, c
+    n = sfCN(f)
+    FOR k = 0 TO n - 1
+        IF BvEdge&(scV(sfC0(f) + k), scV(sfC0(f) + (k + 1) MOD n)) THEN c = c + 1
+    NEXT
+    BvFaceBev = c
+END FUNCTION
+
+' How far face f reaches from edge e's line (in the world)
+FUNCTION BvReach# (e AS LONG, f AS LONG)
+    DIM ax#, ay#, az#, dx#, dy#, dz#, l#, k AS LONG, px#, py#, pz#, t#, m#, h#
+    EdW bvEA(e), ax#, ay#, az#: EdW bvEB(e), dx#, dy#, dz#
+    dx# = dx# - ax#: dy# = dy# - ay#: dz# = dz# - az#: l# = SQR(dx# * dx# + dy# * dy# + dz# * dz#)
+    IF l# < 1E-12 THEN EXIT FUNCTION
+    dx# = dx# / l#: dy# = dy# / l#: dz# = dz# / l#
+    FOR k = 0 TO sfCN(f) - 1
+        EdW scV(sfC0(f) + k), px#, py#, pz#
+        px# = px# - ax#: py# = py# - ay#: pz# = pz# - az#
+        t# = px# * dx# + py# * dy# + pz# * dz#
+        h# = SQR(ABS(px# * px# + py# * py# + pz# * pz# - t# * t#))
+        IF h# > m# THEN m# = h#
+    NEXT
+    BvReach# = m#
+END FUNCTION
+
+' Edge a-b bevelled, if it can be
+SUB BvTry (a AS LONG, b AS LONG)
+    DIM d#, g1 AS LONG, g2 AS LONG, s AS LONG, mask AS LONG, n AS LONG
+    g1 = EmEdgeFind&(a, b): g2 = EmEdgeFind&(b, a)
+    IF g1 = 0 OR g2 = 0 OR g1 = g2 THEN EXIT SUB
+    d# = sfNx(g1) * sfNx(g2) + sfNy(g1) * sfNy(g2) + sfNz(g1) * sfNz(g2)
+    IF d# > .9995 THEN EXIT SUB ' (flat: no edge to cut off)
+    IF d# < -.9995 THEN bvFold = bvFold + 1: EXIT SUB ' (folded flat - two faces back to back, a fin: nothing between them to cut)
+    IF BvFan&(a) = 0 OR BvFan&(b) = 0 THEN EXIT SUB
+    bvNE = bvNE + 1: n = bvNE
+    IF n > UBOUND(bvEA) THEN
+        REDIM _PRESERVE bvEA(n * 2) AS LONG, bvEB(n * 2) AS LONG, bvEF1(n * 2) AS LONG, bvEF2(n * 2) AS LONG
+    END IF
+    bvEA(n) = a: bvEB(n) = b: bvEF1(n) = g1: bvEF2(n) = g2
+    mask = UBOUND(bvHK)
+    s = EmKeyHash&(BvHash&&(a, b), mask)
+    DO WHILE bvHV(s): s = (s + 1) AND mask: LOOP
+    bvHK(s) = BvHash&&(a, b): bvHV(s) = n
+    bvVM(a) = -1: bvVM(b) = -1
+END SUB
+
+FUNCTION BvHash&& (a AS LONG, b AS LONG)
+    IF a < b THEN BvHash&& = a * 2147483648&& + b ELSE BvHash&& = b * 2147483648&& + a
+END FUNCTION
+
+' Which bevelled edge a-b is (0: not one)
+FUNCTION BvEdge& (a AS LONG, b AS LONG)
+    DIM s AS LONG, mask AS LONG, ky AS _INTEGER64
+    mask = UBOUND(bvHK): ky = BvHash&&(a, b)
+    s = EmKeyHash&(ky, mask)
+    DO WHILE bvHV(s)
+        IF bvHK(s) = ky THEN BvEdge& = bvHV(s): EXIT FUNCTION
+        s = (s + 1) AND mask
+    LOOP
+END FUNCTION
+
+' The faces round point v in turn (bfF, the corner bfK, the points before
+' and after it bfP / bfN; each face's bfN is the next one's bfP): how many,
+' 0 if they don't go all the way round
+FUNCTION BvFan& (v AS LONG)
+    DIM f AS LONG, k AS LONG, n AS LONG, c0 AS LONG, d AS LONG, g AS LONG, kk AS LONG
+    IF v > UBOUND(bvVF) THEN EXIT FUNCTION
+    f = bvVF(v): IF f = 0 THEN EXIT FUNCTION
+    DO
+        n = sfCN(f): c0 = sfC0(f): kk = -1
+        FOR k = 0 TO n - 1
+            IF scV(c0 + k) = v THEN kk = k: EXIT FOR
+        NEXT
+        IF kk < 0 OR d > BV_FAN THEN EXIT FUNCTION
+        bfF(d) = f: bfK(d) = kk: bfP(d) = scV(c0 + (kk + n - 1) MOD n): bfN(d) = scV(c0 + (kk + 1) MOD n)
+        d = d + 1
+        g = EmEdgeFind&(bfN(d - 1), v)
+        IF g = 0 THEN EXIT FUNCTION ' (open there)
+        IF g = bfF(0) THEN EXIT DO
+        f = g
+    LOOP
+    bfD = d: BvFan& = d
+END FUNCTION
+
+' ---------------------------------------------------------------- the points
+
+' A new point on edge v-x, WIDTH from the bevelled edge v-y (both from v, in the world)
+FUNCTION BvSlide& (v AS LONG, x AS LONG, y AS LONG)
+    DIM vx#, vy#, vz#, ax#, ay#, az#, bx#, by#, bz#, la#, lb#, s#, cx#, cy#, cz#, d#, p AS LONG
+    EdW v, vx#, vy#, vz#: EdW x, ax#, ay#, az#: EdW y, bx#, by#, bz#
+    ax# = ax# - vx#: ay# = ay# - vy#: az# = az# - vz#: la# = SQR(ax# * ax# + ay# * ay# + az# * az#)
+    bx# = bx# - vx#: by# = by# - vy#: bz# = bz# - vz#: lb# = SQR(bx# * bx# + by# * by# + bz# * bz#)
+    IF la# < 1E-12 OR lb# < 1E-12 THEN la# = 1: lb# = 1
+    ax# = ax# / la#: ay# = ay# / la#: az# = az# / la#: bx# = bx# / lb#: by# = by# / lb#: bz# = bz# / lb#
+    cx# = ay# * bz# - az# * by#: cy# = az# * bx# - ax# * bz#: cz# = ax# * by# - ay# * bx#
+    s# = SQR(cx# * cx# + cy# * cy# + cz# * cz#): IF s# < .15 THEN s# = .15 ' (the angle between them: its sine)
+    d# = BvW# / s#
+    IF bvVM(x) THEN
+        IF d# > la# * .48 THEN d# = la# * .48 ' (a point may slide in from x too)
+    ELSE
+        IF d# > la# * .92 THEN d# = la# * .92
+    END IF
+    p = EmAddV&(0, 0, 0): EdSetW p, vx# + ax# * d#, vy# + ay# * d#, vz# + az# * d#
+    BvSlide& = p
+END FUNCTION
+
+' A new point in face f's corner at v (its edges to p and n both bevelled): WIDTH in from each
+FUNCTION BvCorner& (f AS LONG, v AS LONG, pp AS LONG, nn AS LONG)
+    DIM vx#, vy#, vz#, ax#, ay#, az#, bx#, by#, bz#, la#, lb#, mx#, my#, mz#, lm#, sh#, d#, nx#, ny#, nz#, q AS LONG
+    EdW v, vx#, vy#, vz#: EdW pp, ax#, ay#, az#: EdW nn, bx#, by#, bz#
+    ax# = ax# - vx#: ay# = ay# - vy#: az# = az# - vz#: la# = SQR(ax# * ax# + ay# * ay# + az# * az#)
+    bx# = bx# - vx#: by# = by# - vy#: bz# = bz# - vz#: lb# = SQR(bx# * bx# + by# * by# + bz# * bz#)
+    IF la# < 1E-12 OR lb# < 1E-12 THEN la# = 1: lb# = 1
+    ax# = ax# / la#: ay# = ay# / la#: az# = az# / la#: bx# = bx# / lb#: by# = by# / lb#: bz# = bz# / lb#
+    mx# = ax# + bx#: my# = ay# + by#: mz# = az# + bz#: lm# = SQR(mx# * mx# + my# * my# + mz# * mz#)
+    IF lm# < 1E-6 THEN ' (a straight corner: in, square to them)
+        EdNormW f, nx#, ny#, nz#
+        mx# = ny# * bz# - nz# * by#: my# = nz# * bx# - nx# * bz#: mz# = nx# * by# - ny# * bx#
+        lm# = SQR(mx# * mx# + my# * my# + mz# * mz#): IF lm# < 1E-12 THEN lm# = 1
+    END IF
+    mx# = mx# / lm#: my# = my# / lm#: mz# = mz# / lm#
+    sh# = SQR((ax# - bx#) ^ 2 + (ay# - by#) ^ 2 + (az# - bz#) ^ 2) / 2: IF sh# < .1 THEN sh# = .1 ' (the half angle's sine)
+    d# = BvW# / sh#
+    q = EmAddV&(0, 0, 0): EdSetW q, vx# + mx# * d#, vy# + my# * d#, vz# + mz# * d#
+    BvCorner& = q
+END FUNCTION
+
+' Where the round from s1 to s2 bends towards: the point of edge v-o level with them
+' (v itself if they're beside it, as where one edge is bevelled; down the edge from v at a
+' box's corner, where they're moved in along it too)
+SUB BvCtrl (s1 AS LONG, v AS LONG, s2 AS LONG, o AS LONG, cx#, cy#, cz#)
+    DIM vx#, vy#, vz#, dx#, dy#, dz#, l#, ax#, ay#, az#, bx#, by#, bz#, t#
+    EdW v, vx#, vy#, vz#: EdW o, dx#, dy#, dz#: EdW s1, ax#, ay#, az#: EdW s2, bx#, by#, bz#
+    dx# = dx# - vx#: dy# = dy# - vy#: dz# = dz# - vz#: l# = SQR(dx# * dx# + dy# * dy# + dz# * dz#)
+    cx# = vx#: cy# = vy#: cz# = vz#
+    IF l# < 1E-12 THEN EXIT SUB
+    dx# = dx# / l#: dy# = dy# / l#: dz# = dz# / l#
+    t# = ((ax# - vx#) * dx# + (ay# - vy#) * dy# + (az# - vz#) * dz# + (bx# - vx#) * dx# + (by# - vy#) * dy# + (bz# - vz#) * dz#) / 2
+    cx# = vx# + dx# * t#: cy# = vy# + dy# * t#: cz# = vz# + dz# * t#
+END SUB
+
+' A point on the round from s1 to s2, bent as BvCtrl says (t from 0 to 1)
+FUNCTION BvRound& (s1 AS LONG, v AS LONG, s2 AS LONG, o AS LONG, t#)
+    DIM ax#, ay#, az#, bx#, by#, bz#, cx#, cy#, cz#, u#, q AS LONG
+    EdW s1, ax#, ay#, az#: EdW s2, cx#, cy#, cz#: BvCtrl s1, v, s2, o, bx#, by#, bz#
+    u# = 1 - t#
+    q = EmAddV&(0, 0, 0)
+    EdSetW q, u# * u# * ax# + 2 * u# * t# * bx# + t# * t# * cx#, u# * u# * ay# + 2 * u# * t# * by# + t# * t# * cy#, u# * u# * az# + 2 * u# * t# * bz# + t# * t# * cz#
+    BvRound& = q
+END FUNCTION
+
+' What corner slot c is made: its points from bvRS(c)
+SUB BvSet (c AS LONG, l() AS LONG, n AS LONG)
+    DIM k AS LONG
+    IF bvRN + n > UBOUND(bvRL) THEN REDIM _PRESERVE bvRL((bvRN + n) * 2 + 256) AS LONG
+    bvRS(c) = bvRN + 1: bvRC(c) = n
+    FOR k = 0 TO n - 1: bvRN = bvRN + 1: bvRL(bvRN) = l(k): NEXT
+END SUB
+
+' The one point corner slot c is made (0: not one)
+FUNCTION BvOne& (c AS LONG)
+    IF c > UBOUND(bvRC) THEN EXIT FUNCTION
+    IF bvRC(c) = 1 THEN BvOne& = bvRL(bvRS(c))
+END FUNCTION
+
+' ---------------------------------------------------------------- the bevel
+
+SUB BvBuild
+    DIM v AS LONG, d AS LONG, i AS LONG, im AS LONG, ip AS LONG, other AS LONG, c AS LONG, inB, outB, nl AS LONG
+    DIM e AS LONG, a AS LONG, b AS LONG, g1 AS LONG, g2 AS LONG, k1 AS LONG, k2 AS LONG, j AS LONG, nseg AS LONG, bs AS LONG, s1 AS LONG, s2 AS LONG
+    DIM a1 AS LONG, a2 AS LONG, b1 AS LONG, b2 AS LONG, f AS LONG, nf0 AS LONG, n AS LONG, k AS LONG, cnt AS LONG, r AS LONG
+    DIM x#, y#, z#, x2#, y2#, z2#, nx#, ny#, nz#, sx#, sy#, sz#, pu#, pv#, ok, kk AS LONG, q AS LONG, nv0 AS LONG, qa AS LONG, qb AS LONG
+    DIM lst(BV_FAN * (BV_SEGMAX + 2)) AS LONG, ru(EM_MAXC) AS SINGLE, rw(EM_MAXC) AS SINGLE
+    DIM pfV(0) AS LONG, pfA(0) AS LONG, pfB(0) AS LONG, pfI(0) AS LONG, pfN AS LONG
+    nseg = bvSeg: IF nseg < 1 THEN nseg = 1
+    IF nseg > BV_SEGMAX THEN nseg = BV_SEGMAX
+    nf0 = sfN: nv0 = swN
+    REDIM bvRS(scTop) AS LONG, bvRC(scTop) AS LONG, bvRL(1024) AS LONG: bvRN = 0
+    REDIM bvPA((bvNE + 1) * (BV_SEGMAX + 1)) AS LONG, bvPB((bvNE + 1) * (BV_SEGMAX + 1)) AS LONG
+    REDIM pfV(bvNE * 2 + 2) AS LONG, pfA(bvNE * 2 + 2) AS LONG, pfB(bvNE * 2 + 2) AS LONG, pfI(bvNE * 2 + 2) AS LONG
+
+    ' 1: round each point, what each face's corner there is made
+    FOR v = 1 TO nv0
+        IF bvVM(v) THEN
+            d = BvFan&(v)
+            FOR i = 0 TO d - 1 ' (the moved point on each edge that isn't bevelled, if a face beside it needs one)
+                bfSl(i) = 0
+                IF BvEdge&(v, bfP(i)) = 0 THEN
+                    im = (i + d - 1) MOD d: other = 0
+                    IF BvEdge&(v, bfP(im)) THEN
+                        other = bfP(im)
+                    ELSEIF BvEdge&(v, bfN(i)) THEN
+                        other = bfN(i)
+                    END IF
+                    IF other THEN bfSl(i) = BvSlide&(v, bfP(i), other)
+                END IF
+            NEXT
+            FOR i = 0 TO d - 1
+                ip = (i + 1) MOD d
+                c = sfC0(bfF(i)) + bfK(i)
+                inB = (BvEdge&(v, bfP(i)) <> 0): outB = (BvEdge&(v, bfN(i)) <> 0)
+                nl = 0
+                IF inB AND outB THEN
+                    lst(0) = BvCorner&(bfF(i), v, bfP(i), bfN(i)): nl = 1
+                ELSEIF inB THEN
+                    lst(0) = bfSl(ip): nl = 1
+                ELSEIF outB THEN
+                    lst(0) = bfSl(i): nl = 1
+                ELSE
+                    IF bfSl(i) THEN lst(nl) = bfSl(i): nl = nl + 1
+                    IF bfSl(i) = 0 OR bfSl(ip) = 0 THEN lst(nl) = v: nl = nl + 1
+                    IF bfSl(ip) THEN lst(nl) = bfSl(ip): nl = nl + 1
+                END IF
+                IF nl = 1 AND lst(0) = 0 THEN lst(0) = v ' (never met)
+                BvSet c, lst(), nl
+            NEXT
+        END IF
+    NEXT
+
+    ' 2: each edge's ends rounded (shared by two edges at a point that meet the same corners)
+    FOR e = 1 TO bvNE
+        a = bvEA(e): b = bvEB(e): g1 = bvEF1(e): g2 = bvEF2(e)
+        k1 = EmCornerOf&(g1, a, b): k2 = EmCornerOf&(g2, b, a)
+        IF k1 < 0 OR k2 < 0 THEN EXIT SUB
+        a1 = BvOne&(sfC0(g1) + k1): b1 = BvOne&(sfC0(g1) + (k1 + 1) MOD sfCN(g1))
+        b2 = BvOne&(sfC0(g2) + k2): a2 = BvOne&(sfC0(g2) + (k2 + 1) MOD sfCN(g2))
+        IF a1 = 0 OR a2 = 0 OR b1 = 0 OR b2 = 0 THEN EXIT SUB
+        bs = e * (BV_SEGMAX + 1)
+        bvPA(bs) = a1: bvPA(bs + nseg) = a2: bvPB(bs) = b1: bvPB(bs + nseg) = b2
+        FOR k = 0 TO 1 ' (each end: the round made, or the one already made between the same two)
+            IF k = 0 THEN v = a: s1 = a1: s2 = a2 ELSE v = b: s1 = b1: s2 = b2
+            r = 0
+            FOR i = 1 TO pfN
+                IF pfV(i) = v AND pfA(i) = s2 AND pfB(i) = s1 THEN r = -i: EXIT FOR
+                IF pfV(i) = v AND pfA(i) = s1 AND pfB(i) = s2 THEN r = i: EXIT FOR
+            NEXT
+            FOR j = 1 TO nseg - 1
+                IF r > 0 THEN
+                    q = BvRL2&(pfI(r), j)
+                ELSEIF r < 0 THEN
+                    q = BvRL2&(pfI(-r), nseg - j)
+                ELSE
+                    q = BvRound&(s1, v, s2, IIF(k = 0, b, a), j / nseg)
+                END IF
+                IF k = 0 THEN bvPA(bs + j) = q ELSE bvPB(bs + j) = q
+            NEXT
+            IF r = 0 THEN
+                pfN = pfN + 1: pfV(pfN) = v: pfA(pfN) = s1: pfB(pfN) = s2: pfI(pfN) = bs * 2 + k ' (where its points are: PA or PB of edge e)
+            END IF
+        NEXT
+    NEXT
+
+    ' (a face beside none of them, cut off between two moved points that one round joins - a box's
+    ' end when one edge is bevelled: the round goes in its edge, so it stays one face)
+    FOR c = 1 TO UBOUND(bvRC)
+        IF bvRC(c) = 2 AND nseg > 1 THEN
+            s1 = bvRL(bvRS(c)): s2 = bvRL(bvRS(c) + 1): v = scV(c): r = 0
+            IF s1 <> v AND s2 <> v THEN
+                FOR i = 1 TO pfN
+                    IF pfV(i) = v AND pfA(i) = s1 AND pfB(i) = s2 THEN r = i: EXIT FOR
+                    IF pfV(i) = v AND pfA(i) = s2 AND pfB(i) = s1 THEN r = -i: EXIT FOR
+                NEXT
+                IF r THEN
+                    lst(0) = s1
+                    FOR j = 1 TO nseg - 1
+                        IF r > 0 THEN lst(j) = BvRL2&(pfI(r), j) ELSE lst(j) = BvRL2&(pfI(-r), nseg - j)
+                    NEXT
+                    lst(nseg) = s2
+                    BvSet c, lst(), nseg + 1
+                END IF
+            END IF
+        END IF
+    NEXT
+
+    ' 3: round each point, a corner face where the strips will leave a gap (before the faces round it go: the walk round needs them)
+    FOR v = 1 TO nv0
+        IF bvVM(v) THEN
+            d = BvFan&(v): cnt = 0
+            nx# = 0: ny# = 0: nz# = 0
+            FOR i = 0 TO d - 1
+                EdNormW bfF(i), x#, y#, z#: nx# = nx# + x#: ny# = ny# + y#: nz# = nz# + z#
+                e = BvEdge&(v, bfP(i))
+                IF e THEN ' (its round, from the face before to this one)
+                    bs = e * (BV_SEGMAX + 1)
+                    FOR j = 1 TO nseg - 1
+                        IF v = bvEA(e) THEN lst(cnt) = bvPA(bs + j) ELSE lst(cnt) = bvPB(bs + nseg - j)
+                        cnt = cnt + 1
+                    NEXT
+                END IF
+                c = sfC0(bfF(i)) + bfK(i)
+                FOR j = 0 TO bvRC(c) - 1
+                    kk = bvRL(bvRS(c) + j)
+                    IF cnt = 0 THEN
+                        lst(cnt) = kk: cnt = cnt + 1
+                    ELSEIF lst(cnt - 1) <> kk THEN
+                        lst(cnt) = kk: cnt = cnt + 1
+                    END IF
+                NEXT
+            NEXT
+            IF cnt > 1 THEN
+                IF lst(cnt - 1) = lst(0) THEN cnt = cnt - 1
+            END IF
+            IF cnt >= 3 AND cnt < EM_MAXC THEN
+                ' (its way out: as the faces round it face, else turned round; none if it has no area)
+                sx# = 0: sy# = 0: sz# = 0
+                FOR j = 0 TO cnt - 1
+                    EdW lst(j), x#, y#, z#: EdW lst((j + 1) MOD cnt), x2#, y2#, z2#
+                    sx# = sx# + (y# - y2#) * (z# + z2#): sy# = sy# + (z# - z2#) * (x# + x2#): sz# = sz# + (x# - x2#) * (y# + y2#)
+                NEXT
+                IF SQR(sx# * sx# + sy# * sy# + sz# * sz#) > BvW# * BvW# * .01 THEN
+                    IF sx# * nx# + sy# * ny# + sz# * nz# < 0 THEN
+                        FOR j = 0 TO cnt - 1: emL(j) = lst(cnt - 1 - j): emE(j) = 1: NEXT
+                    ELSE
+                        FOR j = 0 TO cnt - 1: emL(j) = lst(j): emE(j) = 1: NEXT
+                    END IF
+                    IF nseg = 1 THEN
+                        r = EmAddF&(cnt, sfCol(bfF(0)))
+                    ELSE
+                        ' (rounded: a fan of flat triangles round a point on the round - the middle of
+                        ' a curved patch whose edges are the strips' rounds, all bent towards where v was)
+                        FOR j = 0 TO cnt - 1: lst(j) = emL(j): NEXT
+                        x2# = 0: y2# = 0: z2# = 0: kk = 0
+                        FOR i = 0 TO d - 1
+                            c = sfC0(bfF(i)) + bfK(i)
+                            FOR j = 0 TO bvRC(c) - 1
+                                IF bvRL(bvRS(c) + j) <> v THEN
+                                    EdW bvRL(bvRS(c) + j), x#, y#, z#: x2# = x2# + x#: y2# = y2# + y#: z2# = z2# + z#: kk = kk + 1
+                                END IF
+                            NEXT
+                        NEXT
+                        EdW v, x#, y#, z#
+                        IF kk THEN x2# = x2# / kk: y2# = y2# / kk: z2# = z2# / kk ELSE x2# = x#: y2# = y#: z2# = z#
+                        ' (as a curved triangle's middle: a third its corners', two thirds where its rounds bend to)
+                        sx# = 0: sy# = 0: sz# = 0: k = 0
+                        FOR i = 0 TO d - 1
+                            IF BvEdge&(v, bfP(i)) THEN
+                                s1 = BvOne&(sfC0(bfF((i + d - 1) MOD d)) + bfK((i + d - 1) MOD d)): s2 = BvOne&(sfC0(bfF(i)) + bfK(i))
+                                IF s1 > 0 AND s2 > 0 THEN
+                                    BvCtrl s1, v, s2, bfP(i), pu#, pv#, nx#: sx# = sx# + pu#: sy# = sy# + pv#: sz# = sz# + nx#: k = k + 1
+                                END IF
+                            END IF
+                        NEXT
+                        IF k THEN sx# = sx# / k: sy# = sy# / k: sz# = sz# / k ELSE sx# = x#: sy# = y#: sz# = z#
+                        q = EmAddV&(0, 0, 0): EdSetW q, x2# / 3 + sx# * 2 / 3, y2# / 3 + sy# * 2 / 3, z2# / 3 + sz# * 2 / 3
+                        FOR j = 0 TO cnt - 1
+                            emL(0) = q: emL(1) = lst(j): emL(2) = lst((j + 1) MOD cnt)
+                            emE(0) = 0: emE(1) = 1: emE(2) = 0
+                            r = EmAddF&(3, sfCol(bfF(0)))
+                        NEXT
+                    END IF
+                END IF
+            END IF
+        END IF
+    NEXT
+
+    qa = sfN
+
+    ' 4: the faces made again with their corners' new points
+    FOR f = 1 TO nf0
+        IF sfLive(f) THEN
+            n = sfCN(f): cnt = 0: ok = 0
+            FOR k = 0 TO n - 1
+                IF bvRC(sfC0(f) + k) THEN ok = -1
+            NEXT
+            IF ok THEN
+                FOR k = 0 TO n - 1
+                    c = sfC0(f) + k
+                    IF bvRC(c) = 0 THEN
+                        nl = 1: lst(0) = scV(c)
+                    ELSE
+                        nl = bvRC(c)
+                        FOR j = 0 TO nl - 1: lst(j) = bvRL(bvRS(c) + j): NEXT
+                    END IF
+                    FOR j = 0 TO nl - 1
+                        IF cnt < EM_MAXC THEN
+                            emL(cnt) = lst(j)
+                            IF j = nl - 1 THEN
+                                emE(cnt) = scE(c)
+                            ELSEIF lst(j + 1) = scV(c) THEN
+                                emE(cnt) = scE(sfC0(f) + (k + n - 1) MOD n) ' (along the edge into it)
+                            ELSEIF lst(j) = scV(c) THEN
+                                emE(cnt) = scE(c)
+                            ELSE
+                                emE(cnt) = 1
+                            END IF
+                            IF sfTex(f) THEN
+                                IF lst(j) = scV(c) THEN
+                                    ru(cnt) = scTU(c): rw(cnt) = scTV(c)
+                                ELSE
+                                    q = lst(j)
+                                    IF PicUVAt(f, swX(q), swY(q), swZ(q), pu#, pv#) THEN ru(cnt) = pu#: rw(cnt) = pv# ELSE ru(cnt) = scTU(c): rw(cnt) = scTV(c)
+                                END IF
+                            END IF
+                            cnt = cnt + 1
+                        END IF
+                    NEXT
+                NEXT
+                IF cnt >= 3 THEN
+                    IF sfTex(f) THEN
+                        emTex = sfTex(f)
+                        FOR j = 0 TO cnt - 1: emU(j) = ru(j): emW(j) = rw(j): NEXT
+                    END IF
+                    r = EmAddF&(cnt, sfCol(f))
+                END IF
+                sfLive(f) = 0
+            END IF
+        END IF
+    NEXT
+
+    qb = sfN
+
+    ' 5: each edge's strip, from its a-to-b face to the other
+    FOR e = 1 TO bvNE
+        bs = e * (BV_SEGMAX + 1)
+        FOR j = 0 TO nseg - 1
+            emL(0) = bvPB(bs + j): emL(1) = bvPA(bs + j): emL(2) = bvPA(bs + j + 1): emL(3) = bvPB(bs + j + 1)
+            emE(0) = 1: emE(1) = 1: emE(2) = 1: emE(3) = 1
+            r = EmAddF&(4, sfCol(bvEF1(e)))
+        NEXT
+    NEXT
+
+    REDIM wsV(swN) AS _BYTE, wsF(sfN) AS _BYTE ' (the corner faces and the strips picked)
+    FOR f = nf0 + 1 TO qa: wsF(f) = -1: NEXT
+    FOR f = qb + 1 TO sfN: wsF(f) = -1: NEXT
+END SUB
+
+' Point j of a round already made: i says where (2 x its edge's base, + 1 if its b end)
+FUNCTION BvRL2& (i AS LONG, j AS LONG)
+    IF i AND 1 THEN BvRL2& = bvPB(i \ 2 + j) ELSE BvRL2& = bvPA(i \ 2 + j)
+END FUNCTION
+
+' ---------------------------------------------------------------- the panel, while bevelling
+
+SUB BvSlideRect (s, x, y, w, h)
+    x = PX0: w = 226: h = 16
+    IF s = 1 THEN y = 128 ELSE y = 176
+END SUB
+
+FUNCTION BvSlideAt (x, y)
+    DIM s, rx, ry, rw, rh
+    IF NOT bvOn THEN EXIT FUNCTION
+    FOR s = 1 TO 2
+        BvSlideRect s, rx, ry, rw, rh
+        IF InRect(x, y, rx - 4, ry - 4, rw + 8, rh + 8) THEN BvSlideAt = s
+    NEXT
+END FUNCTION
+
+' Where slider s is, 0 to 100
+FUNCTION BvSlideVal (s)
+    IF bvKind = 2 THEN
+        IF s = 1 THEN BvSlideVal = lcPos ELSE BvSlideVal = (lcCuts - 1) * 100 / (LC_MAX - 1)
+        EXIT FUNCTION
+    END IF
+    IF s = 1 THEN BvSlideVal = bvWs ELSE BvSlideVal = (bvSeg - 1) * 100 / (BV_SEGMAX - 1)
+END FUNCTION
+
+SUB BvSlideSet (s, v)
+    DIM n
+    IF v < 0 THEN v = 0
+    IF v > 100 THEN v = 100
+    IF bvKind = 2 THEN
+        IF s = 1 THEN
+            n = INT(v + .5)
+            IF n <> lcPos THEN lcPos = n: BvPreview
+        ELSE
+            n = 1 + INT(v / 100 * (LC_MAX - 1) + .5)
+            IF n <> lcCuts THEN lcCuts = n: BvPreview
+        END IF
+        EXIT SUB
+    END IF
+    IF s = 1 THEN
+        n = INT(v + .5)
+        IF n <> bvWs THEN bvWs = n: BvPreview
+    ELSE
+        n = 1 + INT(v / 100 * (BV_SEGMAX - 1) + .5)
+        IF n <> bvSeg THEN bvSeg = n: BvPreview
+    END IF
+END SUB
+
+SUB BvSlideDraw (s)
+    DIM x, y, w, h, kx, hot
+    BvSlideRect s, x, y, w, h
+    hot = (BvSlideAt(mX, mY) = s AND bvDrag = 0) OR bvDrag = s
+    kx = x + w * BvSlideVal(s) / 100
+    LINE (x, y + 6)-(x + w, y + 9), cLine, BF
+    LINE (x, y + 6)-(kx, y + 9), IIFC~&(hot, cHi, _RGB32(110, 90, 160)), BF
+    LINE (kx - 3, y)-(kx + 3, y + h - 1), IIFC~&(hot, cHi, cText), BF
+    LINE (kx - 3, y)-(kx + 3, y + h - 1), cBg, B
+END SUB
+
+' 1 APPLY, 2 CANCEL
+SUB BvBtn (k, x, y, w, h)
+    x = PX0 + (k - 1) * 118: y = 206: w = 112: h = 24
+END SUB
+
+SUB BvDraw
+    DIM x, y, w, h
+    IF bvKind = 2 THEN LcDraw: EXIT SUB
+    Txt PX0, 86, "BEVEL", cHi
+    Txt PX0 + 56, 86, LTRIM$(STR$(bvNE)) + IIFS$(bvNE = 1, " EDGE", " EDGES"), cText
+    Txt PX0, 110, "WIDTH", cDim: Txt PX0 + 104, 110, Fmt$(BvW#), cText
+    BvSlideDraw 1
+    Txt PX0, 158, "SEGMENTS", cDim: Txt PX0 + 104, 158, LTRIM$(STR$(bvSeg)) + IIFS$(bvSeg = 1, " (flat)", " (round)"), cText
+    BvSlideDraw 2
+    BvBtn 1, x, y, w, h: Btn x, y, w, h, "APPLY  Enter", 0
+    BvBtn 2, x, y, w, h: Btn x, y, w, h, "CANCEL  Esc", 0
+    Txt PX0, 244, "Drag a slider, or turn", cDim
+    Txt PX0, 260, "the wheel over it", cDim
+    Txt PX0, 284, "It's shown as it would be:", cDim
+    Txt PX0, 300, "APPLY makes it (its new", cDim
+    Txt PX0, 316, "faces picked); Esc: as", cDim
+    Txt PX0, 332, "it was", cDim
+END SUB
+
+' A press in the panel while bevelling (all of it's the bevel's)
+SUB BvClick
+    DIM s, x, y, w, h
+    s = BvSlideAt(mX, mY)
+    IF s THEN
+        bvDrag = s: BvSlideRect s, x, y, w, h: BvSlideSet s, (mX - x) / w * 100
+        EXIT SUB
+    END IF
+    BvBtn 1, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN BvApply: EXIT SUB
+    BvBtn 2, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN BvCancel: EXIT SUB
+END SUB
+
+' Each frame: a slider being dragged
+SUB BvFrame
+    DIM x, y, w, h
+    IF bvDrag = 0 THEN EXIT SUB
+    IF NOT bvOn OR NOT mB1 THEN bvDrag = 0: EXIT SUB
+    BvSlideRect bvDrag, x, y, w, h: BvSlideSet bvDrag, (mX - x) / w * 100
+END SUB
+
+' The wheel over a slider (up: more)
+SUB BvWheel (dir)
+    DIM s
+    s = BvSlideAt(mX, mY)
+    IF s = 1 THEN BvSlideSet 1, BvSlideVal(1) + dir * IIF(kShift, 10, IIF(kAlt, 1, 3))
+    IF s = 2 THEN BvSlideSet 2, BvSlideVal(2) + dir * 100 / (IIF(bvKind = 2, LC_MAX, BV_SEGMAX) - 1)
+END SUB
+
+' A key while bevelling: Enter / B makes it, Esc leaves it as it was; the view's keys still work
+FUNCTION BvKey (k&)
+    BvKey = -1
+    SELECT CASE k&
+        CASE 27: BvCancel
+        CASE 13: BvApply
+        CASE 98, 66: IF bvKind = 1 THEN BvApply
+        CASE 111, 79: IF bvKind = 2 THEN BvApply
+        CASE 102, 70, 18176, 119, 87, 19200, 19712, 18432, 20480: BvKey = 0 ' (F, Home, W, the arrows: the view)
+    END SELECT
+END FUNCTION

@@ -1,0 +1,7 @@
+bu1ld0r 1
+name toggle
+budget 200
+part box  0 0 0  0 0 0  0.12 0.02 0.16  2A2A36  0  0
+part cylinder  0 0.02 0  0 0 0  0.05 0.03 0.05  B8BCC8  12  0  name=collar
+part cylinder  0 0.05 0  20 0 0  0.016 0.09 0.016  B8BCC8  8  0  name=lever
+part sphere  0 0.1196 0.0308  0 0 0  0.03 0.03 0.03  E03030  10  1  name=tip

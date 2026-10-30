@@ -22,14 +22,79 @@ SUB ListBtn (k, x, y, w, h)
     x = BIN_W + 6 + (k - 1) * 100: y = ListFootY + 4: w = 96: h = 22
 END SUB
 
-' The part in the row at y (0: none)
-FUNCTION ListPartAt (x, y)
-    DIM r, i
+' The rows, in the model's order: a group's folder where its first part
+' is, then its parts (all of them, wherever they are), unless it's shut
+SUB ListRowsMake
+    DIM i, j, g
+    lrN = 0
+    FOR i = 1 TO pN: lrDone(i) = 0: NEXT
+    FOR i = 1 TO pN
+        IF lrDone(i) = 0 THEN
+            g = pGrp(i)
+            IF g = 0 THEN
+                lrN = lrN + 1: lrPart(lrN) = i: lrHead(lrN) = 0: lrGrp(lrN) = 0: lrDone(i) = -1
+            ELSE
+                lrN = lrN + 1: lrPart(lrN) = i: lrHead(lrN) = -1: lrGrp(lrN) = g
+                FOR j = i TO pN
+                    IF pGrp(j) = g AND lrDone(j) = 0 THEN
+                        lrDone(j) = -1
+                        IF ListShut(g) = 0 THEN lrN = lrN + 1: lrPart(lrN) = j: lrHead(lrN) = 0: lrGrp(lrN) = g
+                    END IF
+                NEXT
+            END IF
+        END IF
+    NEXT
+END SUB
+
+FUNCTION ListShut (g)
+    IF g >= 1 AND g <= MAX_PARTS THEN ListShut = grpShut(g)
+END FUNCTION
+
+' The row at y (0: none)
+FUNCTION ListRowAt (x, y)
+    DIM r
     IF listOn = 0 OR x < BIN_W OR x >= BIN_W + LIST_W OR y < ListY0 THEN EXIT FUNCTION
     r = (y - ListY0) \ LIST_ROW
     IF r >= ListRows THEN EXIT FUNCTION
-    i = listTop + 1 + r
-    IF i <= pN THEN ListPartAt = i
+    ListRowsMake
+    r = listTop + 1 + r
+    IF r <= lrN THEN ListRowAt = r
+END FUNCTION
+
+' The part in the row at y (0: none - a group's row: its first part)
+FUNCTION ListPartAt (x, y)
+    DIM r
+    r = ListRowAt(x, y)
+    IF r THEN ListPartAt = lrPart(r)
+END FUNCTION
+
+' Part i's row (its group's, when that's shut; 0: none)
+FUNCTION ListRowOf (i)
+    DIM r
+    FOR r = 1 TO lrN
+        IF lrPart(r) = i AND (lrHead(r) = 0 OR ListShut(lrGrp(r)) <> 0) THEN ListRowOf = r: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Are all group g's parts selected / hidden?
+FUNCTION GroupAll (g, what)
+    DIM i, n
+    FOR i = 1 TO pN
+        IF pGrp(i) = g THEN
+            n = n + 1
+            IF what = 0 AND pSel(i) = 0 THEN EXIT FUNCTION
+            IF what = 1 AND pHide(i) = 0 THEN EXIT FUNCTION
+        END IF
+    NEXT
+    GroupAll = (n > 0)
+END FUNCTION
+
+FUNCTION GroupCount (g)
+    DIM i, n
+    FOR i = 1 TO pN
+        IF pGrp(i) = g THEN n = n + 1
+    NEXT
+    GroupCount = n
 END FUNCTION
 
 FUNCTION ListName$ (i)
@@ -61,77 +126,122 @@ SUB ListToggle
 END SUB
 
 SUB ListDraw
-    DIM x0, y, r, i, rows, c AS _UNSIGNED LONG, t$, w, x, h, k, p
+    DIM x0, y, r, i, rows, c AS _UNSIGNED LONG, t$, w, x, h, k, p, ind, g, rr
     x0 = BIN_W
     LINE (x0, TOP_H)-(x0 + LIST_W - 1, scrH - BAR_H - 1), cPanel, BF
     LINE (x0 + LIST_W - 1, TOP_H)-(x0 + LIST_W - 1, scrH - BAR_H - 1), cLine
     Txt x0 + 8, TOP_H + 6, "PARTS", cHi
     IF pN THEN Txt x0 + 56, TOP_H + 6, LTRIM$(STR$(pN)), cDim
+    ListRowsMake
     rows = ListRows
-    IF listTop > pN - rows THEN listTop = pN - rows
-    IF listTop < 0 THEN listTop = 0
     IF listFollow THEN ' (a part picked in the view: its row shown)
         p = SelFirst
         IF p > 0 THEN
-            IF p <= listTop THEN listTop = p - 1
-            IF p > listTop + rows THEN listTop = p - rows
+            rr = ListRowOf(p)
+            IF rr > 0 AND pGrp(p) <> 0 AND SelCount > 1 THEN IF GroupAll(pGrp(p), 0) THEN rr = rr - 1 ' (its group's row)
+            IF rr > 0 THEN
+                IF rr <= listTop THEN listTop = rr - 1
+                IF rr > listTop + rows THEN listTop = rr - rows
+            END IF
         END IF
         listFollow = 0
     END IF
+    IF listTop > lrN - rows THEN listTop = lrN - rows
+    IF listTop < 0 THEN listTop = 0
     IF pN = 0 THEN Txt x0 + 8, ListY0 + 4, "(none yet)", cDim
     FOR r = 0 TO rows - 1
-        i = listTop + 1 + r: IF i > pN THEN EXIT FOR
+        rr = listTop + 1 + r: IF rr > lrN THEN EXIT FOR
+        i = lrPart(rr): g = lrGrp(rr)
         y = ListY0 + r * LIST_ROW
-        IF pSel(i) THEN
-            LINE (x0 + 2, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(60, 36, 104), BF
-        ELSEIF i = hoverPart OR ListPartAt(mX, mY) = i THEN
-            LINE (x0 + 2, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(34, 30, 56), BF
-        END IF
-        ' (shown: a dot - hollow if hidden)
-        IF pHide(i) THEN CIRCLE (x0 + 10, y + 8), 4, cDim ELSE CIRCLE (x0 + 10, y + 8), 4, cText: PAINT (x0 + 10, y + 8), cText, cText
-        ' (solid: a filled square in its colour; lines only: just its edge)
-        c = WireCol~&(pCol(i)): IF pKind(i) = K_USE THEN c = cText
-        IF pHole(i) THEN c = HOLE_WIRE
-        IF pWire(i) THEN LINE (x0 + 21, y + 4)-(x0 + 29, y + 12), c, B ELSE LINE (x0 + 21, y + 4)-(x0 + 29, y + 12), c, BF
-        t$ = RIGHT$("   " + LTRIM$(STR$(i)), 3)
-        Txt x0 + 34, y + 1, t$, cDim
-        IF typeField = F_PNAME AND listEdit = i THEN
-            FieldDraw F_PNAME
+        IF lrHead(rr) THEN ' (a group: a folder)
+            IF GroupAll(g, 0) THEN
+                LINE (x0 + 2, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(60, 36, 104), BF
+            ELSEIF ListRowAt(mX, mY) = rr THEN
+                LINE (x0 + 2, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(34, 30, 56), BF
+            END IF
+            IF GroupAll(g, 1) THEN CIRCLE (x0 + 10, y + 8), 4, cDim ELSE CIRCLE (x0 + 10, y + 8), 4, cText: PAINT (x0 + 10, y + 8), cText, cText
+            Txt x0 + 20, y + 1, IIFS$(ListShut(g), CHR$(16), CHR$(31)), cHi
+            LINE (x0 + 34, y + 4)-(x0 + 50, y + 13), _RGB32(220, 170, 60), BF ' (a folder)
+            LINE (x0 + 34, y + 2)-(x0 + 41, y + 4), _RGB32(220, 170, 60), BF
+            Txt x0 + 56, y + 1, "GROUP" + STR$(g) + " (" + LTRIM$(STR$(GroupCount(g))) + ")", IIFC~&(GroupAll(g, 1), cDim, cHi)
         ELSE
-            t$ = ListName$(i): IF pHole(i) THEN t$ = "-" + t$
-            w = (LIST_W - 66) \ 8: IF LEN(t$) > w THEN t$ = LEFT$(t$, w - 1) + "~"
-            c = cText
+            ind = 0: IF g THEN ind = 12
+            IF pSel(i) THEN
+                LINE (x0 + 2 + ind, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(60, 36, 104), BF
+            ELSEIF i = hoverPart OR ListRowAt(mX, mY) = rr THEN
+                LINE (x0 + 2 + ind, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(34, 30, 56), BF
+            END IF
+            IF g THEN LINE (x0 + 6, y)-(x0 + 6, y + LIST_ROW - 1), cLine: LINE (x0 + 6, y + 8)-(x0 + 12, y + 8), cLine
+            ' (shown: a dot - hollow if hidden)
+            IF pHide(i) THEN CIRCLE (x0 + 10 + ind, y + 8), 4, cDim ELSE CIRCLE (x0 + 10 + ind, y + 8), 4, cText: PAINT (x0 + 10 + ind, y + 8), cText, cText
+            ' (solid: a filled square in its colour; lines only: just its edge)
+            c = WireCol~&(pCol(i)): IF pKind(i) = K_USE THEN c = cText
             IF pHole(i) THEN c = HOLE_WIRE
-            IF pHide(i) THEN c = cDim
-            Txt x0 + 62, y + 1, t$, c
+            IF pWire(i) THEN LINE (x0 + 21 + ind, y + 4)-(x0 + 29 + ind, y + 12), c, B ELSE LINE (x0 + 21 + ind, y + 4)-(x0 + 29 + ind, y + 12), c, BF
+            t$ = RIGHT$("   " + LTRIM$(STR$(i)), 3)
+            Txt x0 + 34 + ind, y + 1, t$, cDim
+            IF typeField = F_PNAME AND listEdit = i THEN
+                FieldDraw F_PNAME
+            ELSE
+                t$ = ListName$(i): IF pHole(i) THEN t$ = IIFS$(pKeep(i), "&", "-") + t$
+                w = (LIST_W - 66 - ind) \ 8: IF LEN(t$) > w THEN t$ = LEFT$(t$, w - 1) + "~"
+                c = cText
+                IF pHole(i) THEN c = HOLE_WIRE
+                IF pHide(i) THEN c = cDim
+                Txt x0 + 62 + ind, y + 1, t$, c
+            END IF
         END IF
     NEXT
     IF listTop > 0 THEN Txt x0 + LIST_W - 20, ListY0 - 18, CHR$(24), cDim ' (more above / below)
-    IF listTop + rows < pN THEN Txt x0 + LIST_W - 20, ListFootY - 16, CHR$(25), cDim
+    IF listTop + rows < lrN THEN Txt x0 + LIST_W - 20, ListFootY - 16, CHR$(25), cDim
     FOR k = 1 TO 2
         ListBtn k, x, y, w, h: Btn x, y, w, h, IIFS$(k = 1, "UP", "DOWN"), 0
     NEXT
 END SUB
 
 SUB ListClick
-    DIM i, k, x, y, w, h, x0
+    DIM i, k, x, y, w, h, x0, r, g, j, hd
     FOR k = 1 TO 2
         ListBtn k, x, y, w, h
         IF InRect(mX, mY, x, y, w, h) THEN ListMove IIF(k = 1, -1, 1): EXIT SUB
     NEXT
-    i = ListPartAt(mX, mY)
-    IF i = 0 THEN
+    r = ListRowAt(mX, mY)
+    IF r = 0 THEN
         IF mY >= ListY0 AND mY < ListFootY AND NOT kShift THEN SelNone: ovDirty = -1
         EXIT SUB
     END IF
     IF placeKind THEN PlaceStop
     x0 = BIN_W
-    IF mX < x0 + 17 THEN ' (shown / hidden)
+    i = lrPart(r)
+    IF lrHead(r) THEN ' (a group's row: the whole group)
+        g = lrGrp(r)
+        IF mX < x0 + 17 THEN ' (shown / hidden: all of it)
+            UndoPush: hd = NOT GroupAll(g, 1)
+            FOR j = 1 TO pN
+                IF pGrp(j) = g THEN pHide(j) = hd
+            NEXT
+            ModelChanged: Msg "Group" + STR$(g) + IIFS$(hd, " hidden (the export still has it)", " shown")
+            EXIT SUB
+        END IF
+        IF mX < x0 + 32 THEN ' (folded up / open)
+            IF g <= MAX_PARTS THEN grpShut(g) = NOT grpShut(g)
+            EXIT SUB
+        END IF
+        IF kShift = 0 THEN SelNone
+        hd = NOT (kShift <> 0 AND GroupAll(g, 0))
+        FOR j = 1 TO pN
+            IF pGrp(j) = g THEN pSel(j) = hd
+        NEXT
+        IF hd THEN Msg "Group" + STR$(g) + ": all" + STR$(GroupCount(g)) + " parts - they move, turn and size as one (click one of them: just it)"
+        ovDirty = -1
+        EXIT SUB
+    END IF
+    IF mX < x0 + 17 + IIF(lrGrp(r) <> 0, 12, 0) THEN ' (shown / hidden)
         UndoPush: pHide(i) = NOT pHide(i): ModelChanged
         Msg IIFS$(pHide(i), ListName$(i) + " hidden (the export still has it)", ListName$(i) + " shown")
         EXIT SUB
     END IF
-    IF mX < x0 + 32 THEN ' (solid / lines)
+    IF mX < x0 + 32 + IIF(lrGrp(r) <> 0, 12, 0) THEN ' (solid / lines)
         UndoPush: pWire(i) = NOT pWire(i): ModelChanged
         Msg IIFS$(pWire(i), ListName$(i) + " as lines only (pick it here)", ListName$(i) + " solid")
         EXIT SUB
@@ -141,7 +251,7 @@ SUB ListClick
     ELSE
         IF listClickP = i AND TIMER(.001) - listClickT < .45 AND TIMER(.001) >= listClickT THEN ' (twice: rename it)
             SelNone: pSel(i) = -1
-            listEdit = i: typeField = F_PNAME: typeBuf$ = ListName$(i): typeFresh = -1
+            listEdit = i: TypeStart F_PNAME, ListName$(i), -1
             listClickP = 0: ovDirty = -1
             EXIT SUB
         END IF
@@ -152,8 +262,9 @@ SUB ListClick
 END SUB
 
 SUB ListWheel
+    ListRowsMake
     listTop = listTop + SGN(mWheel) * 3
-    IF listTop > pN - ListRows THEN listTop = pN - ListRows
+    IF listTop > lrN - ListRows THEN listTop = lrN - ListRows
     IF listTop < 0 THEN listTop = 0
 END SUB
 

@@ -1,0 +1,6 @@
+bu1ld0r 1
+name knob
+budget 200
+part cylinder  0 0 0  0 0 0  0.07 0.035 0.07  18181E  16  0  name=body
+part cylinder  0 0.035 0  0 0 0  0.058 0.006 0.058  7C8090  16  0  name=top
+part box  0 0.041 -0.018  0 0 0  0.006 0.004 0.024  F0F0F0  0  0  name=mark

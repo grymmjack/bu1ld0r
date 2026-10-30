@@ -1,0 +1,1810 @@
+''
+' bu1ld0r - UI/EDIT.BM
+' =============================================================================
+' Editing a part's faces and points. Each edit loads the part's mesh into
+' the work (MODEL/EMESH), changes it there - in the world's terms, the
+' part's place, turns and size undone after - and makes a new mesh of it.
+'
+
+' ---------------------------------------------------------------- in and out
+
+' E: the selected part's faces and points to edit (made a mesh part first)
+SUB EdToggle
+    DIM p, id AS LONG
+    IF edPart THEN EdOff: Msg "Done editing its faces and points": EXIT SUB
+    IF SelCount <> 1 THEN Msg "Select one part, then E (EDIT) edits its faces and points": EXIT SUB
+    p = SelFirst
+    PlaceStop
+    pmRef$ = "" ' (a picture armed: let go - clicks in E pick)
+    IF pKind(p) <> K_MESH THEN
+        UndoPush
+        id = PartMeshOf&(p)
+        IF mbFN(id) = 0 THEN undoN = undoN - 1: Msg "Nothing there to edit": EXIT SUB
+        MakeMeshPart p, id
+        ModelChanged
+        Msg "It's a mesh part now (Ctrl+Z: as it was). Faces (2) or points (1): click, Shift adds, drag a box; drag to move. E extrude, I inset, H/V divide, M merge. Esc: done"
+    ELSE
+        Msg "Faces (2) or points (1): click, Shift adds, drag a box; drag to move. E extrude, I inset, H/V divide, M merge, N flip. Esc: done"
+    END IF
+    edPart = p: edMode = ED_FACES: EdSelReset
+END SUB
+
+' Part p made a mesh part, of mesh id (its place, turns and size kept)
+SUB MakeMeshPart (p, id AS LONG)
+    pKind(p) = K_MESH: pMesh(p) = id: pRef$(p) = "": pTint(p) = 0: pSeg(p) = 0: pAmt(p) = 0
+    IF mbFN(id) > 0 THEN pCol(p) = mfCol(mbF0(id) + 1)
+END SUB
+
+SUB EdOff
+    IF bvOn THEN BvCancel
+    pvOn = 0: pvArm = 0: pvDrag = 0
+    edPart = 0: edArm = 0: edDrag = 0: edRect = 0: ovDirty = -1
+END SUB
+
+SUB EdSelReset
+    edId = pMesh(edPart): edVN = mbVN(edId): edFN = mbFN(edId)
+    REDIM edSelV(edVN) AS _BYTE, edSelF(edFN) AS _BYTE
+    edPkN = 0
+    edGen = edGen + 1: ovDirty = -1
+END SUB
+
+' Each frame: still editing? (the part gone, or another picked: no; an undo: the picking kept if it fits)
+SUB EdCheck
+    IF edPart = 0 THEN EXIT SUB
+    IF edPart > pN THEN EdOff: EXIT SUB
+    IF pKind(edPart) <> K_MESH OR MbOk(pMesh(edPart)) = 0 THEN EdOff: EXIT SUB
+    IF SelCount = 0 THEN pSel(edPart) = -1: ovDirty = -1 ' (an undo forgets what's selected)
+    IF SelCount <> 1 OR pSel(edPart) = 0 THEN EdOff: EXIT SUB
+    IF pMesh(edPart) <> edId THEN
+        IF mbVN(pMesh(edPart)) <> edVN OR mbFN(pMesh(edPart)) <> edFN THEN EdSelReset ELSE edId = pMesh(edPart): edGen = edGen + 1
+    END IF
+    IF placeKind THEN PlaceStop
+END SUB
+
+' Part p's shape as a mesh, in its own space
+FUNCTION PartMeshOf& (p)
+    DIM t0 AS LONG
+    t0 = tN
+    IF pKind(p) = K_USE THEN
+        usN = 0: MeshItem p, p
+        PartMeshOf& = EmFromTris&(t0 + 1, tN, p, 0)
+    ELSEIF pKind(p) = K_MESH THEN
+        EmLoad pMesh(p): PartMeshOf& = EmWrite&
+    ELSE
+        PartCopy p, P_SWAP
+        pX(P_SWAP) = 0: pY(P_SWAP) = 0: pZ(P_SWAP) = 0: pRX(P_SWAP) = 0: pRY(P_SWAP) = 0: pRZ(P_SWAP) = 0
+        pSX(P_SWAP) = 1: pSY(P_SWAP) = 1: pSZ(P_SWAP) = 1
+        usN = 0: mkCap = -1: MeshShape P_SWAP, p: mkCap = 0
+        PartMeshOf& = EmFromTris&(t0 + 1, tN, 0, 0)
+    END IF
+    tN = t0
+END FUNCTION
+
+' ---------------------------------------------------------------- the work
+
+' The part's mesh into the work, with what's picked (push: an undo step first)
+SUB EdBegin (push)
+    DIM w AS LONG, f AS LONG, i AS LONG
+    IF push THEN UndoPush
+    EmLoad pMesh(edPart)
+    REDIM wsV(swN) AS _BYTE, wsF(sfN) AS _BYTE
+    FOR w = 1 TO swN
+        IF w - 1 <= edVN THEN wsV(w) = edSelV(w - 1)
+    NEXT
+    FOR f = 1 TO sfN
+        IF f - 1 <= edFN THEN wsF(f) = edSelF(f - 1)
+    NEXT
+    wkPkN = edPkN: REDIM wkPkA(wkPkN + 8) AS LONG, wkPkB(wkPkN + 8) AS LONG
+    FOR i = 1 TO edPkN: wkPkA(i) = edPkA(i) + 1: wkPkB(i) = edPkB(i) + 1: NEXT
+END SUB
+
+' An edge clicked (the work's points): kept with the picking
+SUB EdWkPkAdd (a AS LONG, b AS LONG)
+    wkPkN = wkPkN + 1
+    IF wkPkN > UBOUND(wkPkA) THEN REDIM _PRESERVE wkPkA(wkPkN + 31) AS LONG: REDIM _PRESERVE wkPkB(wkPkN + 31) AS LONG
+    wkPkA(wkPkN) = a: wkPkB(wkPkN) = b
+END SUB
+
+' Which of the mesh's points are on a clicked edge (both its points still picked)
+SUB EdPkInMake
+    DIM i AS LONG, a AS LONG, b AS LONG
+    REDIM edPkIn(edVN) AS _BYTE
+    IF edMode <> ED_EDGES THEN EXIT SUB
+    FOR i = 1 TO edPkN
+        a = edPkA(i): b = edPkB(i)
+        IF a >= 0 AND b >= 0 AND a <= edVN AND b <= edVN THEN
+            IF edSelV(a) <> 0 AND edSelV(b) <> 0 THEN edPkIn(a) = -1: edPkIn(b) = -1
+        END IF
+    NEXT
+END SUB
+
+' Is the mesh's edge a-b (both points picked) one that's meant? Not if both its
+' points are clicked edges' and it isn't one (EdPkInMake first)
+FUNCTION EdEdgeMeant (a AS LONG, b AS LONG)
+    DIM i AS LONG
+    EdEdgeMeant = -1
+    IF a > UBOUND(edPkIn) OR b > UBOUND(edPkIn) THEN EXIT FUNCTION
+    IF edPkIn(a) = 0 OR edPkIn(b) = 0 THEN EXIT FUNCTION
+    FOR i = 1 TO edPkN
+        IF (edPkA(i) = a AND edPkB(i) = b) OR (edPkA(i) = b AND edPkB(i) = a) THEN EXIT FUNCTION
+    NEXT
+    EdEdgeMeant = 0
+END FUNCTION
+
+' An edge clicked on or off (the mesh's points)
+SUB EdPkMark (a AS LONG, b AS LONG, pk)
+    DIM i AS LONG, j AS LONG
+    FOR i = 1 TO edPkN
+        IF (edPkA(i) = a AND edPkB(i) = b) OR (edPkA(i) = b AND edPkB(i) = a) THEN
+            FOR j = i TO edPkN - 1: edPkA(j) = edPkA(j + 1): edPkB(j) = edPkB(j + 1): NEXT
+            edPkN = edPkN - 1: EXIT FOR
+        END IF
+    NEXT
+    IF pk THEN
+        edPkN = edPkN + 1
+        IF edPkN > UBOUND(edPkA) THEN REDIM _PRESERVE edPkA(edPkN + 31) AS LONG: REDIM _PRESERVE edPkB(edPkN + 31) AS LONG
+        edPkA(edPkN) = a: edPkB(edPkN) = b
+    END IF
+END SUB
+
+' The picked edges of the work (both points picked, a line of the shape's
+' own), each once: in EDGES those clicked, and others only if their points
+' aren't all the clicked ones' (two opposite sides of a four-sided face
+' clicked: not the other two)
+SUB EdPickedEdges (ea() AS LONG, eb() AS LONG, n AS LONG)
+    DIM f AS LONG, k AS LONG, m AS LONG, a AS LONG, b AS LONG, i AS LONG, dup, take
+    REDIM ea(64) AS LONG, eb(64) AS LONG: n = 0
+    REDIM inL(swN) AS _BYTE
+    IF edMode = ED_EDGES THEN
+        FOR i = 1 TO wkPkN
+            a = wkPkA(i): b = wkPkB(i)
+            IF a >= 1 AND b >= 1 AND a <= swN AND b <= swN THEN
+                IF wsV(a) <> 0 AND wsV(b) <> 0 THEN inL(a) = -1: inL(b) = -1
+            END IF
+        NEXT
+    END IF
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            m = sfCN(f)
+            FOR k = 0 TO m - 1
+                a = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD m)
+                IF scE(sfC0(f) + k) <> 0 AND wsV(a) <> 0 AND wsV(b) <> 0 THEN
+                    take = -1
+                    IF inL(a) <> 0 AND inL(b) <> 0 THEN
+                        take = 0
+                        FOR i = 1 TO wkPkN
+                            IF (wkPkA(i) = a AND wkPkB(i) = b) OR (wkPkA(i) = b AND wkPkB(i) = a) THEN take = -1: EXIT FOR
+                        NEXT
+                    END IF
+                    IF take THEN
+                        dup = 0
+                        FOR i = 1 TO n
+                            IF (ea(i) = a AND eb(i) = b) OR (ea(i) = b AND eb(i) = a) THEN dup = -1: EXIT FOR
+                        NEXT
+                        IF dup = 0 THEN
+                            n = n + 1
+                            IF n > UBOUND(ea) THEN REDIM _PRESERVE ea(n * 2) AS LONG: REDIM _PRESERVE eb(n * 2) AS LONG
+                            ea(n) = a: eb(n) = b
+                        END IF
+                    END IF
+                END IF
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+SUB EdWsRoom
+    IF UBOUND(wsV) < swN THEN REDIM _PRESERVE wsV(swN + 256) AS _BYTE
+    IF UBOUND(wsF) < sfN THEN REDIM _PRESERVE wsF(sfN + 256) AS _BYTE
+END SUB
+
+' The work made the part's new mesh, the picking carried over
+SUB EdCommit
+    DIM id AS LONG, w AS LONG, f AS LONG, a AS LONG, b AS LONG
+    EdWsRoom
+    PicUnsquash ' (a picture squashed to a line - an extruded side's: spread out)
+    id = EmWrite&
+    edId = id: edVN = mbVN(id): edFN = mbFN(id)
+    REDIM edSelV(edVN) AS _BYTE, edSelF(edFN) AS _BYTE
+    FOR w = 1 TO swN
+        IF swMap(w) >= 0 AND wsV(w) THEN edSelV(swMap(w)) = -1
+    NEXT
+    FOR f = 1 TO sfN
+        IF sfMap(f) >= 0 AND wsF(f) THEN edSelF(sfMap(f)) = -1
+    NEXT
+    edPkN = 0: REDIM edPkA(wkPkN + 1) AS LONG, edPkB(wkPkN + 1) AS LONG
+    FOR w = 1 TO wkPkN
+        a = wkPkA(w): b = wkPkB(w)
+        IF a >= 1 AND b >= 1 AND a <= UBOUND(swMap) AND b <= UBOUND(swMap) THEN
+            IF swMap(a) >= 0 AND swMap(b) >= 0 THEN edPkN = edPkN + 1: edPkA(edPkN) = swMap(a): edPkB(edPkN) = swMap(b)
+        END IF
+    NEXT
+    pMesh(edPart) = id
+    IF edFN > 0 THEN pCol(edPart) = mfCol(mbF0(id) + 1)
+    edGen = edGen + 1: ovDirty = -1
+    ModelChanged: MeshGcDue
+END SUB
+
+' The work's points an edit moves: those picked, or the picked faces' corners - how many
+FUNCTION EdMoving&
+    DIM f AS LONG, k AS LONG, n AS LONG, w AS LONG
+    REDIM edMv(swN) AS _BYTE
+    IF EdPtMode THEN
+        FOR w = 1 TO swN
+            IF wsV(w) THEN edMv(w) = -1
+        NEXT
+    ELSE
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND wsF(f) THEN
+                FOR k = 0 TO sfCN(f) - 1: edMv(scV(sfC0(f) + k)) = -1: NEXT
+            END IF
+        NEXT
+    END IF
+    FOR w = 1 TO swN
+        IF edMv(w) THEN n = n + 1
+    NEXT
+    EdMoving& = n
+END FUNCTION
+
+' Work point w in the world, and put back from it
+SUB EdW (w AS LONG, x#, y#, z#)
+    x# = swX(w): y# = swY(w): z# = swZ(w): PartFwd edPart, x#, y#, z#
+END SUB
+
+SUB EdSetW (w AS LONG, x#, y#, z#)
+    DIM a#, b#, c#
+    a# = x#: b# = y#: c# = z#: PartInv edPart, a#, b#, c#
+    swX(w) = a#: swY(w) = b#: swZ(w) = c#
+END SUB
+
+' Work polygon f's way out in the world (length 1)
+SUB EdNormW (f AS LONG, x#, y#, z#)
+    DIM h AS V3, l#
+    h.x = sfNx(f) / pSX(edPart): h.y = sfNy(f) / pSY(edPart): h.z = sfNz(f) / pSZ(edPart)
+    RotZXY h, DCos(pRX(edPart)), DSin(pRX(edPart)), DCos(pRY(edPart)), DSin(pRY(edPart)), DCos(pRZ(edPart)), DSin(pRZ(edPart))
+    l# = SQR(CDBL(h.x) * h.x + CDBL(h.y) * h.y + CDBL(h.z) * h.z): IF l# < 1E-20 THEN l# = 1
+    x# = h.x / l#: y# = h.y / l#: z# = h.z / l#
+END SUB
+
+' The moving points' middle (their box's) in the world
+SUB EdCentre (cx#, cy#, cz#)
+    DIM w AS LONG, x#, y#, z#, lx#, ly#, lz#, hx#, hy#, hz#
+    lx# = 1E30: ly# = 1E30: lz# = 1E30: hx# = -1E30: hy# = -1E30: hz# = -1E30
+    FOR w = 1 TO swN
+        IF edMv(w) THEN
+            EdW w, x#, y#, z#
+            IF x# < lx# THEN lx# = x#
+            IF y# < ly# THEN ly# = y#
+            IF z# < lz# THEN lz# = z#
+            IF x# > hx# THEN hx# = x#
+            IF y# > hy# THEN hy# = y#
+            IF z# > hz# THEN hz# = z#
+        END IF
+    NEXT
+    cx# = (lx# + hx#) / 2: cy# = (ly# + hy#) / 2: cz# = (lz# + hz#) / 2
+END SUB
+
+' ---------------------------------------------------------------- what's picked
+
+FUNCTION EdAny
+    DIM i AS LONG
+    IF EdPtMode THEN
+        FOR i = 0 TO edVN - 1
+            IF edSelV(i) THEN EdAny = -1: EXIT FUNCTION
+        NEXT
+    ELSE
+        FOR i = 0 TO edFN - 1
+            IF edSelF(i) THEN EdAny = -1: EXIT FUNCTION
+        NEXT
+    END IF
+END FUNCTION
+
+SUB EdSelClear
+    DIM i AS LONG
+    FOR i = 0 TO edVN: edSelV(i) = 0: NEXT
+    FOR i = 0 TO edFN: edSelF(i) = 0: NEXT
+    edPkN = 0
+    edGen = edGen + 1: ovDirty = -1
+END SUB
+
+SUB EdSelAll
+    DIM i AS LONG
+    IF EdPtMode THEN
+        FOR i = 0 TO edVN - 1: edSelV(i) = -1: NEXT
+    ELSE
+        FOR i = 0 TO edFN - 1: edSelF(i) = -1: NEXT
+    END IF
+    edPkN = 0
+    edGen = edGen + 1: ovDirty = -1
+END SUB
+
+' Points, edges or faces: what's picked carried across (faces -> their corners;
+' points or edges -> faces all of whose corners are; points <-> edges: the same points)
+SUB EdSetMode (m)
+    DIM f AS LONG, g AS LONG, k AS LONG, all, id AS LONG
+    IF m = edMode THEN EXIT SUB
+    id = pMesh(edPart)
+    IF m <> ED_FACES AND edMode = ED_FACES THEN
+        FOR f = 0 TO edFN - 1
+            IF edSelF(f) THEN
+                g = mbF0(id) + 1 + f
+                FOR k = 0 TO mfCN(g) - 1: edSelV(mcV(mfC0(g) + k)) = -1: NEXT
+            END IF
+        NEXT
+    ELSEIF m = ED_FACES THEN
+        FOR f = 0 TO edFN - 1
+            g = mbF0(id) + 1 + f: all = -1
+            FOR k = 0 TO mfCN(g) - 1
+                IF edSelV(mcV(mfC0(g) + k)) = 0 THEN all = 0: EXIT FOR
+            NEXT
+            edSelF(f) = all
+        NEXT
+    END IF
+    edMode = m: edGen = edGen + 1: ovDirty = -1: IF m <> ED_FACES THEN pvOn = 0
+    IF m <> ED_EDGES THEN edPkN = 0
+    SELECT CASE m
+        CASE ED_POINTS: Msg "Points: click one (Shift adds) or drag a box; drag to move them. M: merge into one"
+        CASE ED_EDGES: Msg "Edges: click a line (Shift adds) or drag a box; drag to move it - its two points go with it. S split, J connect two, O loop round, B bevel, M one point"
+        CASE ELSE: Msg "Faces: click one (Shift adds) or drag a box; drag to move. E extrude, I inset, H/V divide, M join into one (Shift+M: to a point)"
+    END SELECT
+END SUB
+
+' Picking points or edges (both pick points): not faces
+FUNCTION EdPtMode
+    EdPtMode = (edMode <> ED_FACES)
+END FUNCTION
+
+' The picked points' box in the world, and how many (kept until the picking or the mesh changes)
+SUB EdBox
+    DIM k$, id AS LONG, f AS LONG, g AS LONG, k AS LONG, v AS LONG, x#, y#, z#
+    k$ = STR$(pMesh(edPart)) + STR$(edGen) + STR$(edMode) + STR$(pX(edPart)) + STR$(pY(edPart)) + STR$(pZ(edPart)) + STR$(pRX(edPart)) + STR$(pRY(edPart)) + STR$(pRZ(edPart)) + STR$(pSX(edPart)) + STR$(pSY(edPart)) + STR$(pSZ(edPart))
+    IF k$ = edBoxKey$ THEN EXIT SUB
+    edBoxKey$ = k$
+    id = pMesh(edPart)
+    REDIM mv(edVN) AS _BYTE
+    IF EdPtMode THEN
+        FOR v = 0 TO edVN - 1: mv(v) = edSelV(v): NEXT
+    ELSE
+        FOR f = 0 TO edFN - 1
+            IF edSelF(f) THEN
+                g = mbF0(id) + 1 + f
+                FOR k = 0 TO mfCN(g) - 1: mv(mcV(mfC0(g) + k)) = -1: NEXT
+            END IF
+        NEXT
+    END IF
+    edLo.x = 1E9: edLo.y = 1E9: edLo.z = 1E9: edHi.x = -1E9: edHi.y = -1E9: edHi.z = -1E9: edCnt = 0
+    FOR v = 0 TO edVN - 1
+        IF mv(v) THEN
+            MbPt id, v, x, y, z: x# = x: y# = y: z# = z: PartFwd edPart, x#, y#, z#
+            IF x# < edLo.x THEN edLo.x = x#
+            IF y# < edLo.y THEN edLo.y = y#
+            IF z# < edLo.z THEN edLo.z = z#
+            IF x# > edHi.x THEN edHi.x = x#
+            IF y# > edHi.y THEN edHi.y = y#
+            IF z# > edHi.z THEN edHi.z = z#
+            edCnt = edCnt + 1
+        END IF
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- the edits (each on the work)
+
+SUB EdMoveWork (dx#, dy#, dz#)
+    DIM w AS LONG, x#, y#, z#
+    FOR w = 1 TO swN
+        IF edMv(w) THEN EdW w, x#, y#, z#: x# = x# + dx#: y# = y# + dy#: z# = z# + dz#: EdSetW w, x#, y#, z#
+    NEXT
+END SUB
+
+SUB EdScaleWork (kx#, ky#, kz#)
+    DIM w AS LONG, x#, y#, z#, cx#, cy#, cz#
+    EdCentre cx#, cy#, cz#
+    FOR w = 1 TO swN
+        IF edMv(w) THEN
+            EdW w, x#, y#, z#
+            x# = cx# + (x# - cx#) * kx#: y# = cy# + (y# - cy#) * ky#: z# = cz# + (z# - cz#) * kz#
+            EdSetW w, x#, y#, z#
+        END IF
+    NEXT
+END SUB
+
+' Turned d degrees round the world's axis ax (1 X, 2 Y, 3 Z), about their middle
+SUB EdTurnWork (ax, d)
+    DIM w AS LONG, x#, y#, z#, cx#, cy#, cz#, c#, s#, a#, b#
+    EdCentre cx#, cy#, cz#
+    c# = DCos(d): s# = DSin(d)
+    FOR w = 1 TO swN
+        IF edMv(w) THEN
+            EdW w, x#, y#, z#
+            x# = x# - cx#: y# = y# - cy#: z# = z# - cz#
+            SELECT CASE ax
+                CASE 1: a# = y# * c# - z# * s#: b# = y# * s# + z# * c#: y# = a#: z# = b#
+                CASE 2: a# = x# * c# + z# * s#: b# = -x# * s# + z# * c#: x# = a#: z# = b#
+                CASE ELSE: a# = x# * c# - y# * s#: b# = x# * s# + y# * c#: x# = a#: y# = b#
+            END SELECT
+            x# = x# + cx#: y# = y# + cy#: z# = z# + cz#
+            EdSetW w, x#, y#, z#
+        END IF
+    NEXT
+END SUB
+
+' Pushed d out along the way they face (each point: the faces round it that
+' are picked - or, picking points, all of them)
+SUB EdPushWork (d#)
+    DIM f AS LONG, k AS LONG, w AS LONG, x#, y#, z#, l#
+    REDIM nx(swN) AS DOUBLE, ny(swN) AS DOUBLE, nz(swN) AS DOUBLE
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND (wsF(f) <> 0 OR EdPtMode) THEN
+            EdNormW f, x#, y#, z#
+            FOR k = 0 TO sfCN(f) - 1
+                w = scV(sfC0(f) + k): nx(w) = nx(w) + x#: ny(w) = ny(w) + y#: nz(w) = nz(w) + z#
+            NEXT
+        END IF
+    NEXT
+    FOR w = 1 TO swN
+        IF edMv(w) THEN
+            l# = SQR(nx(w) ^ 2 + ny(w) ^ 2 + nz(w) ^ 2)
+            IF l# > 1E-9 THEN
+                EdW w, x#, y#, z#
+                x# = x# + nx(w) / l# * d#: y# = y# + ny(w) / l# * d#: z# = z# + nz(w) / l# * d#
+                EdSetW w, x#, y#, z#
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' A step for the keys and the wheel: the snap (Shift 4 of them, Alt a quarter)
+FUNCTION EdStep#
+    DIM st#
+    st# = snapStep: IF st# <= 0 THEN st# = 1 / 64
+    IF kShift THEN st# = st# * 4 ELSE IF kAlt THEN st# = st# / 4
+    EdStep# = st#
+END FUNCTION
+
+FUNCTION EdNeed
+    IF EdAny THEN EdNeed = -1 ELSE Msg IIFS$(EdPtMode, "Pick some points first (click, Shift adds, or drag a box)", "Pick some faces first (click, Shift adds, or drag a box)")
+END FUNCTION
+
+' The simple ones, as one undo step each (push 0: one's been made already)
+SUB EdMoveBy (dx#, dy#, dz#, push)
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin push: IF EdMoving& THEN EdMoveWork dx#, dy#, dz#
+    EdCommit
+END SUB
+
+SUB EdScaleBy (kx#, ky#, kz#, push)
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin push: IF EdMoving& THEN EdScaleWork kx#, ky#, kz#
+    EdCommit
+END SUB
+
+SUB EdTurnBy (ax, d, push)
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin push: IF EdMoving& THEN EdTurnWork ax, d
+    EdCommit
+END SUB
+
+SUB EdPushBy (d#, push)
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin push: IF EdMoving& THEN EdPushWork d#
+    EdCommit
+END SUB
+
+' E: the picked faces pushed out a step, with sides joining them to where they were
+SUB EdExtrude
+    DIM f AS LONG, k AS LONG, n AS LONG, a AS LONG, b AS LONG, q AS LONG, nf AS LONG, r AS LONG, nv0 AS LONG, side, w AS LONG
+    IF edMode <> ED_FACES THEN Msg "Extrude works on faces: 2 (FACES), pick some, then E": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    EmEdgeMap
+    nf = sfN: nv0 = swN
+    REDIM nv(nv0) AS LONG
+    FOR f = 1 TO nf
+        IF sfLive(f) AND wsF(f) THEN
+            FOR k = 0 TO sfCN(f) - 1
+                a = scV(sfC0(f) + k)
+                IF nv(a) = 0 THEN nv(a) = EmAddV&(swX(a), swY(a), swZ(a))
+            NEXT
+        END IF
+    NEXT
+    FOR f = 1 TO nf ' (a side for each edge on the picked faces' rim)
+        IF sfLive(f) AND wsF(f) THEN
+            n = sfCN(f)
+            FOR k = 0 TO n - 1
+                a = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD n)
+                q = EmEdgeFind&(b, a): side = -1
+                IF q > 0 THEN IF wsF(q) THEN side = 0
+                IF side THEN
+                    emL(0) = a: emL(1) = b: emL(2) = nv(b): emL(3) = nv(a)
+                    emE(0) = 1: emE(1) = 1: emE(2) = 1: emE(3) = 1
+                    IF sfTex(f) THEN ' (its picture: the rim's edge of it, drawn out along the side)
+                        emTex = sfTex(f)
+                        emU(0) = scTU(sfC0(f) + k): emW(0) = scTV(sfC0(f) + k)
+                        emU(1) = scTU(sfC0(f) + (k + 1) MOD n): emW(1) = scTV(sfC0(f) + (k + 1) MOD n)
+                        emU(2) = emU(1): emW(2) = emW(1): emU(3) = emU(0): emW(3) = emW(0)
+                    END IF
+                    r = EmAddF&(4, sfCol(f))
+                END IF
+            NEXT
+        END IF
+    NEXT
+    FOR f = 1 TO nf ' (the faces onto their new corners)
+        IF sfLive(f) AND wsF(f) THEN
+            FOR k = 0 TO sfCN(f) - 1: scV(sfC0(f) + k) = nv(scV(sfC0(f) + k)): NEXT
+        END IF
+    NEXT
+    EdWsRoom
+    FOR w = 1 TO swN: wsV(w) = (w > nv0): NEXT
+    IF EdMoving& THEN EdPushWork EdStep#
+    EdCommit
+    Msg "Extruded: PUSH (the wheel over it, or drag) takes it further out or in"
+END SUB
+
+' I: each picked face inset - a smaller copy in it, a ring of faces round it
+SUB EdInset
+    DIM f AS LONG, k AS LONG, n AS LONG, c0 AS LONG, nf AS LONG, r AS LONG, cx#, cy#, cz#, a AS LONG, nv0 AS LONG, w AS LONG
+    DIM nk(EM_MAXC) AS LONG, cv(EM_MAXC) AS LONG, ou(EM_MAXC), ow(EM_MAXC), iu(EM_MAXC), iw(EM_MAXC), cu, cw, tx
+    IF edMode <> ED_FACES THEN Msg "Inset works on faces: 2 (FACES), pick some, then I": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    nf = sfN: nv0 = swN
+    FOR f = 1 TO nf
+        IF sfLive(f) AND wsF(f) THEN
+            n = sfCN(f): c0 = sfC0(f): cx# = 0: cy# = 0: cz# = 0
+            FOR k = 0 TO n - 1: a = scV(c0 + k): cv(k) = a: cx# = cx# + swX(a): cy# = cy# + swY(a): cz# = cz# + swZ(a): NEXT
+            cx# = cx# / n: cy# = cy# / n: cz# = cz# / n
+            tx = sfTex(f): cu = 0: cw = 0
+            FOR k = 0 TO n - 1: ou(k) = scTU(c0 + k): ow(k) = scTV(c0 + k): cu = cu + ou(k) / n: cw = cw + ow(k) / n: NEXT
+            FOR k = 0 TO n - 1
+                a = cv(k)
+                nk(k) = EmAddV&(swX(a) + (cx# - swX(a)) * .25, swY(a) + (cy# - swY(a)) * .25, swZ(a) + (cz# - swZ(a)) * .25)
+                iu(k) = ou(k) + (cu - ou(k)) * .25: iw(k) = ow(k) + (cw - ow(k)) * .25
+            NEXT
+            FOR k = 0 TO n - 1
+                emL(0) = cv(k): emL(1) = cv((k + 1) MOD n): emL(2) = nk((k + 1) MOD n): emL(3) = nk(k)
+                emE(0) = 1: emE(1) = 1: emE(2) = 1: emE(3) = 1
+                IF tx THEN
+                    emTex = tx
+                    emU(0) = ou(k): emW(0) = ow(k): emU(1) = ou((k + 1) MOD n): emW(1) = ow((k + 1) MOD n)
+                    emU(2) = iu((k + 1) MOD n): emW(2) = iw((k + 1) MOD n): emU(3) = iu(k): emW(3) = iw(k)
+                END IF
+                r = EmAddF&(4, sfCol(f))
+            NEXT
+            FOR k = 0 TO n - 1: scV(c0 + k) = nk(k): scTU(c0 + k) = iu(k): scTV(c0 + k) = iw(k): NEXT
+        END IF
+    NEXT
+    EdWsRoom
+    FOR w = 1 TO swN: wsV(w) = (w > nv0): NEXT
+    EdCommit
+    Msg "Inset: SIZE makes the inner face bigger or smaller, PUSH takes it in or out (a ring, a recess, a boss)"
+END SUB
+
+' H / V: each picked four-sided face cut in two - across (the cut level as
+' you see it) or down; the faces beside it get the new corners too
+SUB EdDivide (across)
+    DIM tt#, f AS LONG, k, j, c0 AS LONG, nf AS LONG, r AS LONG, u0#, u1#, m1 AS LONG, m2 AS LONG, cnt, n AS LONG, m AS LONG, i AS LONG, hit
+    DIM c(3) AS LONG, e(3), a AS LONG, b AS LONG, cu(3), cw(3), m1u, m1w, m2u, m2w, tx, nu(EM_MAXC), nw(EM_MAXC)
+    IF edMode <> ED_FACES THEN Msg "Divide works on faces: 2 (FACES), pick some, then H (across) or V (down)": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    nf = sfN
+    REDIM ceA(nf * 2 + 4) AS LONG, ceB(nf * 2 + 4) AS LONG, ceM(nf * 2 + 4) AS LONG
+    DIM ceN AS LONG
+    FOR f = 1 TO nf
+        IF sfLive(f) AND wsF(f) AND sfCN(f) = 4 THEN
+            c0 = sfC0(f)
+            u0# = EdUpness#(scV(c0), scV(c0 + 1)) + EdUpness#(scV(c0 + 2), scV(c0 + 3))
+            u1# = EdUpness#(scV(c0 + 1), scV(c0 + 2)) + EdUpness#(scV(c0 + 3), scV(c0))
+            k = 0: IF (u1# > u0#) = (across <> 0) THEN k = 1 ' (across: the edges that go up the screen most are cut)
+            FOR j = 0 TO 3: c(j) = scV(c0 + (k + j) MOD 4): e(j) = scE(c0 + (k + j) MOD 4): cu(j) = scTU(c0 + (k + j) MOD 4): cw(j) = scTV(c0 + (k + j) MOD 4): NEXT
+            m1 = EdMidOf&(c(0), c(1), ceA(), ceB(), ceM(), ceN)
+            m2 = EdMidOf&(c(2), c(3), ceA(), ceB(), ceM(), ceN)
+            tx = sfTex(f): m1u = (cu(0) + cu(1)) / 2: m1w = (cw(0) + cw(1)) / 2: m2u = (cu(2) + cu(3)) / 2: m2w = (cw(2) + cw(3)) / 2
+            emL(0) = c(0): emL(1) = m1: emL(2) = m2: emL(3) = c(3): emE(0) = e(0): emE(1) = 1: emE(2) = e(2): emE(3) = e(3)
+            IF tx THEN emTex = tx: emU(0) = cu(0): emW(0) = cw(0): emU(1) = m1u: emW(1) = m1w: emU(2) = m2u: emW(2) = m2w: emU(3) = cu(3): emW(3) = cw(3)
+            r = EmAddF&(4, sfCol(f)): EdWsRoom: wsF(r) = -1
+            emL(0) = m1: emL(1) = c(1): emL(2) = c(2): emL(3) = m2: emE(0) = e(0): emE(1) = e(1): emE(2) = e(2): emE(3) = 1
+            IF tx THEN emTex = tx: emU(0) = m1u: emW(0) = m1w: emU(1) = cu(1): emW(1) = cw(1): emU(2) = cu(2): emW(2) = cw(2): emU(3) = m2u: emW(3) = m2w
+            r = EmAddF&(4, sfCol(f)): EdWsRoom: wsF(r) = -1
+            sfLive(f) = 0: cnt = cnt + 1
+        ELSEIF sfLive(f) AND wsF(f) THEN ' (any other shape: cut through its middle, across the screen or down it)
+            IF EdDivideAny(f, across, ceA(), ceB(), ceM(), ceN) THEN cnt = cnt + 1
+        END IF
+    NEXT
+    IF cnt = 0 THEN EdCommit: Msg "None of those faces could be cut in two (a face the cut would cross more than twice)": EXIT SUB
+    EdInsertCuts ceA(), ceB(), ceM(), ceN
+    EdCommit
+    Msg LTRIM$(STR$(cnt)) + " divided " + IIFS$(across, "across", "down") + ": each half picked (PUSH one out, or divide again)"
+END SUB
+
+' The points made on edges (ceA-ceB's ceM) put into each face that has one of
+' those edges as a side - the faces beside a cut or split keep no cracks
+SUB EdInsertCuts (ceA() AS LONG, ceB() AS LONG, ceM() AS LONG, ceN AS LONG)
+    DIM tt#, f AS LONG, k, nf AS LONG, r AS LONG, n AS LONG, m AS LONG, i AS LONG, hit, a AS LONG, b AS LONG
+    DIM nu(EM_MAXC), nw(EM_MAXC)
+    nf = sfN
+    FOR f = 1 TO nf
+        IF sfLive(f) THEN
+            n = sfCN(f): m = 0: hit = 0
+            FOR k = 0 TO n - 1
+                a = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD n)
+                emL(m) = a: emE(m) = scE(sfC0(f) + k): nu(m) = scTU(sfC0(f) + k): nw(m) = scTV(sfC0(f) + k): m = m + 1
+                FOR i = 1 TO ceN
+                    IF (ceA(i) = a AND ceB(i) = b) OR (ceA(i) = b AND ceB(i) = a) THEN
+                        IF m < EM_MAXC THEN
+                            emL(m) = ceM(i): emE(m) = scE(sfC0(f) + k): tt# = EdAlong#(a, b, ceM(i))
+                            nu(m) = scTU(sfC0(f) + k) + (scTU(sfC0(f) + (k + 1) MOD n) - scTU(sfC0(f) + k)) * tt#
+                            nw(m) = scTV(sfC0(f) + k) + (scTV(sfC0(f) + (k + 1) MOD n) - scTV(sfC0(f) + k)) * tt#
+                            m = m + 1: hit = -1
+                        END IF
+                        EXIT FOR
+                    END IF
+                NEXT
+            NEXT
+            IF hit THEN
+                IF sfTex(f) THEN
+                    emTex = sfTex(f)
+                    FOR k = 0 TO m - 1: emU(k) = nu(k): emW(k) = nw(k): NEXT
+                END IF
+                r = EmAddF&(m, sfCol(f)): EdWsRoom: wsF(r) = wsF(f): sfLive(f) = 0
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' Work face f (not four-sided) cut in two by a line through its middle - across the screen
+' (across) or down it - where it crosses the face's edges; false: it crosses more than twice
+FUNCTION EdDivideAny (f AS LONG, across, ceA() AS LONG, ceB() AS LONG, ceM() AS LONG, ceN AS LONG)
+    DIM n AS LONG, k AS LONG, j AS LONG, c0 AS LONG, a AS LONG, b AS LONG, i AS LONG, m AS LONG, z1 AS LONG, z2 AS LONG, r AS LONG, zc AS LONG
+    DIM nx#, ny#, nz#, dx#, dy#, dz#, d#, x#, y#, z#, lo#, hi#, hm#, t#, eps#, npos AS LONG, nneg AS LONG
+    DIM h#(EM_MAXC), lv(EM_MAXC * 2) AS LONG, le(EM_MAXC * 2), lu(EM_MAXC * 2), lw(EM_MAXC * 2), ls(EM_MAXC * 2)
+    n = sfCN(f): c0 = sfC0(f)
+    IF n < 3 OR n > EM_MAXC - 2 THEN EXIT FUNCTION
+    EdNormW f, nx#, ny#, nz#
+    IF across THEN dx# = cUX: dy# = cUY: dz# = cUZ ELSE dx# = cRX: dy# = cRY: dz# = cRZ
+    d# = dx# * nx# + dy# * ny# + dz# * nz#: dx# = dx# - d# * nx#: dy# = dy# - d# * ny#: dz# = dz# - d# * nz#
+    d# = SQR(dx# * dx# + dy# * dy# + dz# * dz#)
+    IF d# < .05 THEN ' (seen edge on: up the face the way the eye looks instead)
+        dx# = cFX: dy# = cFY: dz# = cFZ
+        d# = dx# * nx# + dy# * ny# + dz# * nz#: dx# = dx# - d# * nx#: dy# = dy# - d# * ny#: dz# = dz# - d# * nz#
+        d# = SQR(dx# * dx# + dy# * dy# + dz# * dz#): IF d# < 1E-9 THEN EXIT FUNCTION
+    END IF
+    lo# = 1E+30: hi# = -1E+30
+    FOR k = 0 TO n - 1
+        EdW scV(c0 + k), x#, y#, z#: h#(k) = (x# * dx# + y# * dy# + z# * dz#) / d#
+        IF h#(k) < lo# THEN lo# = h#(k)
+        IF h#(k) > hi# THEN hi# = h#(k)
+    NEXT
+    hm# = (lo# + hi#) / 2: eps# = (hi# - lo#) * .0001
+    IF hi# - lo# < 1E-9 THEN EXIT FUNCTION
+    ' (round it: each corner, and where an edge crosses the line - a corner on it counts as a crossing)
+    FOR k = 0 TO n - 1
+        j = (k + 1) MOD n
+        lv(m) = scV(c0 + k): le(m) = scE(c0 + k): lu(m) = scTU(c0 + k): lw(m) = scTV(c0 + k)
+        IF ABS(h#(k) - hm#) <= eps# THEN ls(m) = 0: zc = zc + 1 ELSE ls(m) = SGN(h#(k) - hm#)
+        IF ls(m) > 0 THEN npos = npos + 1
+        IF ls(m) < 0 THEN nneg = nneg + 1
+        m = m + 1
+        IF (h#(k) - hm# > eps# AND h#(j) - hm# < -eps#) OR (h#(k) - hm# < -eps# AND h#(j) - hm# > eps#) THEN
+            a = scV(c0 + k): b = scV(c0 + j): t# = (hm# - h#(k)) / (h#(j) - h#(k))
+            lv(m) = EdCutOf&(a, b, t#, ceA(), ceB(), ceM(), ceN): le(m) = scE(c0 + k): ls(m) = 0: zc = zc + 1
+            lu(m) = scTU(c0 + k) + (scTU(c0 + j) - scTU(c0 + k)) * t#: lw(m) = scTV(c0 + k) + (scTV(c0 + j) - scTV(c0 + k)) * t#
+            m = m + 1
+        END IF
+    NEXT
+    IF zc <> 2 OR npos = 0 OR nneg = 0 THEN EXIT FUNCTION
+    z1 = -1
+    FOR k = 0 TO m - 1
+        IF ls(k) = 0 THEN
+            IF z1 < 0 THEN z1 = k ELSE z2 = k
+        END IF
+    NEXT
+    ' (the two halves: z1 round to z2, and z2 round to z1 - each closed by the cut)
+    FOR i = 0 TO 1
+        r = 0: k = IIF(i = 0, z1, z2): j = IIF(i = 0, z2, z1)
+        DO
+            emL(r) = lv(k): emE(r) = le(k)
+            IF sfTex(f) THEN emU(r) = lu(k): emW(r) = lw(k)
+            r = r + 1
+            IF k = j THEN EXIT DO
+            k = (k + 1) MOD m
+        LOOP
+        emE(r - 1) = 1
+        IF sfTex(f) THEN emTex = sfTex(f)
+        r = EmAddF&(r, sfCol(f)): EdWsRoom: wsF(r) = -1
+    NEXT
+    sfLive(f) = 0
+    EdDivideAny = -1
+END FUNCTION
+
+' The point t of the way from work point a to b (made once: the face beside shares it)
+FUNCTION EdCutOf& (a AS LONG, b AS LONG, t#, ceA() AS LONG, ceB() AS LONG, ceM() AS LONG, ceN AS LONG)
+    DIM i AS LONG
+    FOR i = 1 TO ceN
+        IF (ceA(i) = a AND ceB(i) = b) OR (ceA(i) = b AND ceB(i) = a) THEN EdCutOf& = ceM(i): EXIT FUNCTION
+    NEXT
+    ceN = ceN + 1: ceA(ceN) = a: ceB(ceN) = b
+    ceM(ceN) = EmAddV&(swX(a) + (swX(b) - swX(a)) * t#, swY(a) + (swY(b) - swY(a)) * t#, swZ(a) + (swZ(b) - swZ(a)) * t#)
+    EdCutOf& = ceM(ceN)
+END FUNCTION
+
+' How far along work points a to b point p is (0 at a, 1 at b)
+FUNCTION EdAlong# (a AS LONG, b AS LONG, p AS LONG)
+    DIM dx#, dy#, dz#, l#
+    dx# = swX(b) - swX(a): dy# = swY(b) - swY(a): dz# = swZ(b) - swZ(a): l# = dx# * dx# + dy# * dy# + dz# * dz#
+    IF l# < 1E-18 THEN EdAlong# = .5: EXIT FUNCTION
+    EdAlong# = ((swX(p) - swX(a)) * dx# + (swY(p) - swY(a)) * dy# + (swZ(p) - swZ(a)) * dz#) / l#
+END FUNCTION
+
+' How much the edge between work points a and b goes up the screen (0 across it, 1 straight up)
+FUNCTION EdUpness# (a AS LONG, b AS LONG)
+    DIM ax#, ay#, az#, bx#, by#, bz#, dx#, dy#, dz#, u#, r#
+    EdW a, ax#, ay#, az#: EdW b, bx#, by#, bz#
+    dx# = bx# - ax#: dy# = by# - ay#: dz# = bz# - az#
+    u# = ABS(dx# * cUX + dy# * cUY + dz# * cUZ): r# = ABS(dx# * cRX + dy# * cRY + dz# * cRZ)
+    IF u# + r# > 1E-12 THEN EdUpness# = u# / (u# + r#)
+END FUNCTION
+
+' The point halfway along a to b (made once: the face beside shares it)
+FUNCTION EdMidOf& (a AS LONG, b AS LONG, ceA() AS LONG, ceB() AS LONG, ceM() AS LONG, ceN AS LONG)
+    DIM i AS LONG
+    FOR i = 1 TO ceN
+        IF (ceA(i) = a AND ceB(i) = b) OR (ceA(i) = b AND ceB(i) = a) THEN EdMidOf& = ceM(i): EXIT FUNCTION
+    NEXT
+    ceN = ceN + 1: ceA(ceN) = a: ceB(ceN) = b
+    ceM(ceN) = EmAddV&((swX(a) + swX(b)) / 2, (swY(a) + swY(b)) / 2, (swZ(a) + swZ(b)) / 2)
+    EdMidOf& = ceM(ceN)
+END FUNCTION
+
+' S: each picked edge cut in two at its middle - the faces both sides get the
+' point (S again: in four). The halves stay picked: drag the new point.
+SUB EdSplit
+    DIM n AS LONG, i AS LONG, m AS LONG, ceN AS LONG
+    IF edMode = ED_FACES THEN Msg "Split works on edges: 3 (EDGES), pick some, then S - each cut in two at its middle": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    REDIM ea(0) AS LONG, eb(0) AS LONG
+    EdPickedEdges ea(), eb(), n
+    IF n = 0 THEN EdCommit: Msg "Pick an edge first: both its points (3: EDGES, then click its line)": EXIT SUB
+    REDIM ceA(n + 4) AS LONG, ceB(n + 4) AS LONG, ceM(n + 4) AS LONG
+    FOR i = 1 TO n: m = EdMidOf&(ea(i), eb(i), ceA(), ceB(), ceM(), ceN): NEXT
+    EdInsertCuts ceA(), ceB(), ceM(), ceN
+    EdWsRoom
+    wkPkN = 0
+    FOR i = 1 TO ceN
+        wsV(ceM(i)) = -1
+        EdWkPkAdd ceA(i), ceM(i): EdWkPkAdd ceM(i), ceB(i)
+    NEXT
+    EdCommit
+    Msg LTRIM$(STR$(ceN)) + IIFS$(ceN = 1, " edge", " edges") + " split in two (S again: in four). 1 (POINTS) and drag the new point, or J: a line from it across a face"
+END SUB
+
+' J: a line across a face - between the middles of two of its picked edges
+' (EDGES), or two of its picked corners not next to each other (POINTS) -
+' cutting it in two. Each face with two picked; the new edges are picked.
+SUB EdConnect
+    DIM f AS LONG, nf AS LONG, n AS LONG, ne AS LONG, k AS LONG, j AS LONG, a AS LONG, b AS LONG, i AS LONG, m AS LONG
+    DIM cnt AS LONG, cuts AS LONG, many AS LONG, z1 AS LONG, z2 AS LONG, r AS LONG, c0 AS LONG, side, ceN AS LONG, nN AS LONG, ok
+    DIM lv(EM_MAXC * 2) AS LONG, la(EM_MAXC * 2) AS LONG, lb(EM_MAXC * 2) AS LONG, le(EM_MAXC * 2), lu(EM_MAXC * 2), lw(EM_MAXC * 2), ls(EM_MAXC * 2)
+    IF edMode = ED_FACES THEN Msg "Connect: pick two edges of a face (3: EDGES) or two of its corners (1: POINTS), then J": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    REDIM ea(0) AS LONG, eb(0) AS LONG
+    IF edMode = ED_EDGES THEN EdPickedEdges ea(), eb(), ne
+    nf = sfN
+    REDIM ceA(nf * 2 + 4) AS LONG, ceB(nf * 2 + 4) AS LONG, ceM(nf * 2 + 4) AS LONG
+    REDIM nA(nf + 4) AS LONG, nB(nf + 4) AS LONG
+    FOR f = 1 TO nf
+        IF sfLive(f) AND sfCN(f) <= EM_MAXC - 2 THEN
+            n = sfCN(f): c0 = sfC0(f): m = 0: cnt = 0
+            ' (round it: each corner, and in EDGES each picked side's middle - made only if it's cut)
+            FOR k = 0 TO n - 1
+                j = (k + 1) MOD n: a = scV(c0 + k): b = scV(c0 + j)
+                lv(m) = a: le(m) = scE(c0 + k): lu(m) = scTU(c0 + k): lw(m) = scTV(c0 + k): ls(m) = 0
+                IF edMode <> ED_EDGES THEN
+                    IF wsV(a) THEN ls(m) = 1: cnt = cnt + 1
+                END IF
+                m = m + 1
+                IF edMode = ED_EDGES THEN
+                    side = 0
+                    FOR i = 1 TO ne
+                        IF (ea(i) = a AND eb(i) = b) OR (ea(i) = b AND eb(i) = a) THEN side = -1: EXIT FOR
+                    NEXT
+                    IF side THEN
+                        lv(m) = 0: la(m) = a: lb(m) = b: le(m) = scE(c0 + k)
+                        lu(m) = (scTU(c0 + k) + scTU(c0 + j)) / 2: lw(m) = (scTV(c0 + k) + scTV(c0 + j)) / 2
+                        ls(m) = 1: cnt = cnt + 1: m = m + 1
+                    END IF
+                END IF
+            NEXT
+            IF cnt = 2 THEN
+                z1 = -1
+                FOR k = 0 TO m - 1
+                    IF ls(k) THEN
+                        IF z1 < 0 THEN z1 = k ELSE z2 = k
+                    END IF
+                NEXT
+                ok = -1
+                IF edMode <> ED_EDGES AND (z2 - z1 = 1 OR (z1 = 0 AND z2 = m - 1)) THEN ok = 0 ' (corners next to each other: an edge already)
+                IF ok THEN
+                    IF lv(z1) = 0 THEN lv(z1) = EdMidOf&(la(z1), lb(z1), ceA(), ceB(), ceM(), ceN)
+                    IF lv(z2) = 0 THEN lv(z2) = EdMidOf&(la(z2), lb(z2), ceA(), ceB(), ceM(), ceN)
+                    ' (the two halves: z1 round to z2, and z2 round to z1 - each closed by the new edge)
+                    FOR i = 0 TO 1
+                        r = 0: k = IIF(i = 0, z1, z2): j = IIF(i = 0, z2, z1)
+                        DO
+                            emL(r) = lv(k): emE(r) = le(k)
+                            IF sfTex(f) THEN emU(r) = lu(k): emW(r) = lw(k)
+                            r = r + 1
+                            IF k = j THEN EXIT DO
+                            k = (k + 1) MOD m
+                        LOOP
+                        emE(r - 1) = 1
+                        IF sfTex(f) THEN emTex = sfTex(f)
+                        r = EmAddF&(r, sfCol(f)): EdWsRoom: wsF(r) = 0
+                    NEXT
+                    sfLive(f) = 0: cuts = cuts + 1
+                    nN = nN + 1: nA(nN) = lv(z1): nB(nN) = lv(z2)
+                END IF
+            ELSEIF cnt > 2 THEN
+                many = many + 1
+            END IF
+        END IF
+    NEXT
+    IF cuts = 0 THEN
+        EdCommit
+        IF many THEN
+            Msg "More than two picked on a face: pick just two of its edges (or corners), then J"
+        ELSE
+            Msg "Pick two edges of one face (3: EDGES), or two of its corners that aren't next to each other (1: POINTS), then J"
+        END IF
+        EXIT SUB
+    END IF
+    IF ceN THEN EdInsertCuts ceA(), ceB(), ceM(), ceN
+    EdWsRoom
+    FOR i = 1 TO swN: wsV(i) = 0: NEXT
+    FOR f = 1 TO sfN: wsF(f) = 0: NEXT
+    wkPkN = 0
+    FOR i = 1 TO nN: wsV(nA(i)) = -1: wsV(nB(i)) = -1: EdWkPkAdd nA(i), nB(i): NEXT
+    EdCommit
+    Msg LTRIM$(STR$(cuts)) + IIFS$(cuts = 1, " face", " faces") + " cut in two by a new edge (picked: drag it, or 1 and drag its points)"
+END SUB
+
+' Delete: the picked faces taken away (points: every face on them; edges: every face along them). None left: the part goes.
+SUB EdDelete
+    DIM f AS LONG, k AS LONG, n AS LONG, cnt AS LONG, live AS LONG
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            IF edMode = ED_FACES THEN
+                IF wsF(f) THEN sfLive(f) = 0
+            ELSEIF edMode = ED_EDGES THEN ' (a face goes if one of its edges is picked)
+                FOR k = 0 TO sfCN(f) - 1
+                    IF wsV(scV(sfC0(f) + k)) AND wsV(scV(sfC0(f) + (k + 1) MOD sfCN(f))) THEN sfLive(f) = 0: EXIT FOR
+                NEXT
+            ELSE
+                FOR k = 0 TO sfCN(f) - 1
+                    IF wsV(scV(sfC0(f) + k)) THEN sfLive(f) = 0: EXIT FOR
+                NEXT
+            END IF
+            IF sfLive(f) = 0 THEN cnt = cnt + 1 ELSE live = live + 1
+        END IF
+    NEXT
+    IF live = 0 THEN
+        n = edPart: EdOff
+        FOR k = n TO pN - 1: PartCopy k + 1, k: pSel(k) = 0: NEXT
+        pN = pN - 1: ModelChanged
+        Msg "No faces left: the part's gone (Ctrl+Z: back)"
+        EXIT SUB
+    END IF
+    FOR f = 1 TO sfN: wsF(f) = 0: NEXT
+    EdCommit
+    Msg LTRIM$(STR$(cnt)) + " face" + IIFS$(cnt = 1, "", "s") + " taken away (the mesh is open there: Ctrl+Z puts them back)"
+END SUB
+
+' M: picked points made one, at their middle; picked faces each drawn to a point at theirs
+SUB EdMerge (toPoint)
+    DIM f AS LONG, k AS LONG, n AS LONG, w AS LONG, t AS LONG, cx#, cy#, cz#, cnt AS LONG, m AS LONG, r AS LONG, nf AS LONG
+    IF NOT EdNeed THEN EXIT SUB
+    IF edMode = ED_FACES AND toPoint = 0 THEN EdJoinFaces: EXIT SUB
+    EdBegin -1
+    REDIM rm(swN) AS LONG
+    FOR w = 1 TO swN: rm(w) = w: NEXT
+    IF EdPtMode THEN
+        FOR w = 1 TO swN
+            IF wsV(w) THEN cx# = cx# + swX(w): cy# = cy# + swY(w): cz# = cz# + swZ(w): cnt = cnt + 1
+        NEXT
+        IF cnt < 2 THEN EdCommit: Msg "Pick two points or more to merge": EXIT SUB
+        t = EmAddV&(cx# / cnt, cy# / cnt, cz# / cnt): REDIM _PRESERVE rm(swN) AS LONG: rm(t) = t
+        FOR w = 1 TO swN - 1
+            IF wsV(w) THEN rm(w) = t
+        NEXT
+        EdWsRoom: FOR w = 1 TO swN: wsV(w) = (w = t): NEXT
+    ELSE
+        nf = sfN
+        FOR f = 1 TO nf
+            IF sfLive(f) AND wsF(f) THEN
+                n = sfCN(f): cx# = 0: cy# = 0: cz# = 0
+                FOR k = 0 TO n - 1: w = scV(sfC0(f) + k): cx# = cx# + swX(w): cy# = cy# + swY(w): cz# = cz# + swZ(w): NEXT
+                t = EmAddV&(cx# / n, cy# / n, cz# / n): REDIM _PRESERVE rm(swN) AS LONG: rm(t) = t
+                FOR k = 0 TO n - 1: rm(scV(sfC0(f) + k)) = t: NEXT
+                cnt = cnt + 1
+            END IF
+        NEXT
+    END IF
+    EmRemap rm()
+    EdWsRoom: FOR f = 1 TO sfN: wsF(f) = 0: NEXT
+    EdCommit
+    Msg IIFS$(EdPtMode, LTRIM$(STR$(cnt)) + " points made one", LTRIM$(STR$(cnt)) + " face" + IIFS$(cnt = 1, "", "s") + " drawn to a point (a cone, a pyramid)")
+END SUB
+
+' M on faces: the picked faces that touch joined into one (the edges between
+' them dissolved), and corners left on a straight edge taken out. Their
+' picture: as it was, if it runs on across them; else the biggest one's,
+' stretched over the whole face.
+SUB EdJoinFaces
+    DIM f AS LONG, k AS LONG, n AS LONG, u AS LONG, v AS LONG, q AS LONG, j AS LONG, m AS LONG, r AS LONG, ok, did, cnt AS LONG, joins AS LONG
+    DIM b AS LONG, i AS LONG, pu#, pv#, u0#, u1#, v0#, v1#, e0#, e1#, f0#, f1#, guard AS LONG, jok, bnt, flat AS LONG, w AS LONG, d#, ox#, oy#, oz#
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN cnt = cnt + 1
+    NEXT
+    IF cnt < 2 THEN EdCommit: Msg "Pick two faces or more that touch, then M joins them into one (Shift+M: each drawn to a point)": EXIT SUB
+    REDIM big(sfN + 64) AS LONG, fit(sfN + 64) AS _BYTE, bent(sfN + 64) AS _BYTE
+    FOR f = 1 TO sfN: big(f) = f: fit(f) = -1: NEXT
+    DO
+        did = 0: guard = guard + 1
+        EmEdgeMap
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND wsF(f) THEN
+                n = sfCN(f)
+                FOR k = 0 TO n - 1
+                    u = scV(sfC0(f) + k): v = scV(sfC0(f) + (k + 1) MOD n)
+                    q = EmEdgeFind&(v, u)
+                    IF q > 0 AND q <> f THEN
+                        IF sfLive(q) AND wsF(q) THEN
+                            j = EmCornerOf&(q, v, u)
+                            IF j >= 0 THEN
+                                ok = -1
+                                IF sfTex(f) <> sfTex(q) THEN
+                                    ok = 0
+                                ELSEIF sfTex(f) THEN
+                                    ok = EmTexFits(f, q)
+                                END IF
+                                ok = ok AND fit(f) AND fit(q)
+                                b = big(f): IF EmArea#(big(q)) > EmArea#(b) THEN b = big(q)
+                                bnt = bent(f) OR bent(q) OR (sfNx(f) * sfNx(q) + sfNy(f) * sfNy(q) + sfNz(f) * sfNz(q) < .995)
+                                m = EmJoin&(f, k, q, j, jok)
+                                IF jok THEN
+                                    IF sfTex(f) THEN EmJoinSpots f, q, m
+                                    emTag = sfTag(f): r = EmAddF&(m, sfCol(b))
+                                    EdWsRoom: wsF(r) = -1
+                                    IF r > UBOUND(big) THEN REDIM _PRESERVE big(r + 64) AS LONG: REDIM _PRESERVE fit(r + 64) AS _BYTE: REDIM _PRESERVE bent(r + 64) AS _BYTE
+                                    big(r) = b: fit(r) = ok AND NOT bnt: bent(r) = bnt
+                                    sfLive(f) = 0: sfLive(q) = 0: did = -1: joins = joins + 1
+                                    EXIT FOR
+                                END IF
+                            END IF
+                        END IF
+                    END IF
+                NEXT
+                IF did THEN EXIT FOR
+            END IF
+        NEXT
+    LOOP WHILE did AND guard < 10000
+    IF joins = 0 THEN EdCommit: Msg "None of the picked faces touches another picked one (or joining them would go round a hole)": EXIT SUB
+    ' (faces that met at an angle: the joined one laid flat on the biggest one's plane - its corners moved onto it)
+    FOR r = 1 TO sfN
+        IF sfLive(r) AND wsF(r) THEN
+            IF r <= UBOUND(bent) THEN
+                IF bent(r) AND big(r) <> r THEN
+                    b = big(r): w = scV(sfC0(b)): ox# = swX(w): oy# = swY(w): oz# = swZ(w)
+                    FOR i = 0 TO sfCN(r) - 1
+                        w = scV(sfC0(r) + i)
+                        d# = (swX(w) - ox#) * sfNx(b) + (swY(w) - oy#) * sfNy(b) + (swZ(w) - oz#) * sfNz(b)
+                        swX(w) = swX(w) - d# * sfNx(b): swY(w) = swY(w) - d# * sfNy(b): swZ(w) = swZ(w) - d# * sfNz(b)
+                    NEXT
+                    flat = flat + 1
+                END IF
+            END IF
+        END IF
+    NEXT
+    IF flat THEN
+        FOR f = 1 TO sfN
+            IF sfLive(f) THEN EmNormal f
+        NEXT
+    END IF
+    ' (a picture that didn't run on: the biggest face's, stretched over the face)
+    FOR r = 1 TO sfN
+        IF sfLive(r) AND wsF(r) THEN
+            IF r <= UBOUND(big) THEN
+                b = big(r)
+                IF fit(r) = 0 AND b <> r THEN
+                    sfTex(r) = sfTex(b)
+                    IF sfTex(b) THEN
+                        u0# = 1E+30: u1# = -1E+30: v0# = 1E+30: v1# = -1E+30
+                        FOR i = 0 TO sfCN(b) - 1
+                            pu# = scTU(sfC0(b) + i): pv# = scTV(sfC0(b) + i)
+                            IF pu# < u0# THEN u0# = pu#
+                            IF pu# > u1# THEN u1# = pu#
+                            IF pv# < v0# THEN v0# = pv#
+                            IF pv# > v1# THEN v1# = pv#
+                        NEXT
+                        e0# = 1E+30: e1# = -1E+30: f0# = 1E+30: f1# = -1E+30
+                        FOR i = 0 TO sfCN(r) - 1
+                            IF EmTexAt(b, scV(sfC0(r) + i), pu#, pv#) THEN
+                                scTU(sfC0(r) + i) = pu#: scTV(sfC0(r) + i) = pv#
+                            END IF
+                            pu# = scTU(sfC0(r) + i): pv# = scTV(sfC0(r) + i)
+                            IF pu# < e0# THEN e0# = pu#
+                            IF pu# > e1# THEN e1# = pu#
+                            IF pv# < f0# THEN f0# = pv#
+                            IF pv# > f1# THEN f1# = pv#
+                        NEXT
+                        FOR i = 0 TO sfCN(r) - 1 ' (carried-on spots squeezed back into the biggest face's own)
+                            IF e1# - e0# > 1E-9 THEN scTU(sfC0(r) + i) = u0# + (scTU(sfC0(r) + i) - e0#) / (e1# - e0#) * (u1# - u0#)
+                            IF f1# - f0# > 1E-9 THEN scTV(sfC0(r) + i) = v0# + (scTV(sfC0(r) + i) - f0#) / (f1# - f0#) * (v1# - v0#)
+                        NEXT
+                    END IF
+                END IF
+            END IF
+        END IF
+    NEXT
+    EdStraighten ' (corners on a straight edge out - where every face using them has them straight)
+    EdCommit
+    cnt = 0
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN cnt = cnt + 1
+    NEXT
+    Msg "Joined into " + LTRIM$(STR$(cnt)) + " face" + IIFS$(cnt = 1, "", "s") + IIFS$(flat > 0, " - laid flat on the biggest one's plane (its corners moved onto it)", "") + ". Ctrl+Z: back; Shift+M instead draws each face to a point"
+END SUB
+
+' The picked faces' corners that lie on a straight edge taken out, when
+' every live face using that point has it on a straight edge too
+SUB EdStraighten
+    DIM f AS LONG, k AS LONG, n AS LONG, p AS LONG, a AS LONG, c AS LONG, g AS LONG, i AS LONG, m AS LONG, r AS LONG, ok, did, guard AS LONG
+    DO
+        did = 0: guard = guard + 1
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND wsF(f) AND sfCN(f) > 3 THEN
+                n = sfCN(f)
+                FOR k = 0 TO n - 1
+                    p = scV(sfC0(f) + k)
+                    ok = -1
+                    FOR g = 1 TO sfN ' (every face with p: straight there, and more than 3 corners)
+                        IF sfLive(g) THEN
+                            FOR i = 0 TO sfCN(g) - 1
+                                IF scV(sfC0(g) + i) = p THEN
+                                    a = scV(sfC0(g) + (i + sfCN(g) - 1) MOD sfCN(g)): c = scV(sfC0(g) + (i + 1) MOD sfCN(g))
+                                    IF sfCN(g) <= 3 OR NOT EdStraightAt(a, p, c) THEN ok = 0
+                                    EXIT FOR
+                                END IF
+                            NEXT
+                        END IF
+                        IF ok = 0 THEN EXIT FOR
+                    NEXT
+                    IF ok THEN
+                        FOR g = 1 TO sfN
+                            IF sfLive(g) THEN
+                                m = 0
+                                FOR i = 0 TO sfCN(g) - 1
+                                    IF scV(sfC0(g) + i) <> p THEN
+                                        emL(m) = scV(sfC0(g) + i): emE(m) = scE(sfC0(g) + i): emU(m) = scTU(sfC0(g) + i): emW(m) = scTV(sfC0(g) + i): m = m + 1
+                                    END IF
+                                NEXT
+                                IF m < sfCN(g) THEN
+                                    emTex = sfTex(g): emTag = sfTag(g)
+                                    r = EmAddF&(m, sfCol(g)): EdWsRoom: wsF(r) = wsF(g): sfLive(g) = 0
+                                END IF
+                            END IF
+                        NEXT
+                        did = -1: EXIT FOR
+                    END IF
+                NEXT
+                IF did THEN EXIT FOR
+            END IF
+        NEXT
+    LOOP WHILE did AND guard < 10000
+END SUB
+
+' Is b on the straight line from a to c (between them)?
+FUNCTION EdStraightAt (a AS LONG, b AS LONG, c AS LONG)
+    DIM ux#, uy#, uz#, vx#, vy#, vz#, cx#, cy#, cz#, lu#, lv#
+    ux# = swX(b) - swX(a): uy# = swY(b) - swY(a): uz# = swZ(b) - swZ(a)
+    vx# = swX(c) - swX(b): vy# = swY(c) - swY(b): vz# = swZ(c) - swZ(b)
+    lu# = ux# * ux# + uy# * uy# + uz# * uz#: lv# = vx# * vx# + vy# * vy# + vz# * vz#
+    IF lu# < 1E-18 OR lv# < 1E-18 THEN EXIT FUNCTION
+    IF ux# * vx# + uy# * vy# + uz# * vz# <= 0 THEN EXIT FUNCTION
+    cx# = uy# * vz# - uz# * vy#: cy# = uz# * vx# - ux# * vz#: cz# = ux# * vy# - uy# * vx#
+    EdStraightAt = (cx# * cx# + cy# * cy# + cz# * cz#) < 1E-10 * lu# * lv#
+END FUNCTION
+
+' Every live work polygon's corners through rm(): a corner the same as the one before it dropped, a polygon left with under 3 gone
+SUB EmRemap (rm() AS LONG)
+    DIM f AS LONG, k AS LONG, n AS LONG, m AS LONG, a AS LONG, nf AS LONG, r AS LONG, ch
+    DIM nu(EM_MAXC), nw(EM_MAXC)
+    nf = sfN
+    FOR f = 1 TO nf
+        IF sfLive(f) THEN
+            n = sfCN(f): m = 0: ch = 0
+            FOR k = 0 TO n - 1
+                a = rm(scV(sfC0(f) + k)): IF a <> scV(sfC0(f) + k) THEN ch = -1
+                IF m > 0 THEN
+                    IF emL(m - 1) = a THEN emE(m - 1) = scE(sfC0(f) + k): a = 0
+                END IF
+                IF a THEN emL(m) = a: emE(m) = scE(sfC0(f) + k): nu(m) = scTU(sfC0(f) + k): nw(m) = scTV(sfC0(f) + k): m = m + 1
+            NEXT
+            IF m > 1 THEN IF emL(m - 1) = emL(0) THEN m = m - 1
+            IF ch THEN
+                sfLive(f) = 0
+                IF m >= 3 THEN
+                    IF sfTex(f) THEN
+                        emTex = sfTex(f)
+                        FOR k = 0 TO m - 1: emU(k) = nu(k): emW(k) = nw(k): NEXT
+                    END IF
+                    r = EmAddF&(m, sfCol(f))
+                END IF
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' N: the picked faces turned to face the other way
+SUB EdFlip
+    DIM f AS LONG, k AS LONG, n AS LONG, c0 AS LONG, cnt AS LONG
+    DIM tv(EM_MAXC) AS LONG, te(EM_MAXC), ku(EM_MAXC), kw(EM_MAXC)
+    IF edMode <> ED_FACES THEN Msg "Flip works on faces: 2 (FACES), pick some, then N": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN
+            n = sfCN(f): c0 = sfC0(f)
+            FOR k = 0 TO n - 1: tv(k) = scV(c0 + k): te(k) = scE(c0 + k): ku(k) = scTU(c0 + k): kw(k) = scTV(c0 + k): NEXT
+            FOR k = 0 TO n - 1
+                scV(c0 + k) = tv(n - 1 - k): scTU(c0 + k) = ku(n - 1 - k): scTV(c0 + k) = kw(n - 1 - k)
+                scE(c0 + k) = te((2 * n - 2 - k) MOD n)
+            NEXT
+            cnt = cnt + 1
+        END IF
+    NEXT
+    EdCommit
+    Msg LTRIM$(STR$(cnt)) + " face" + IIFS$(cnt = 1, "", "s") + " turned to face the other way"
+END SUB
+
+' A colour on the picked faces (none picked: the whole mesh)
+SUB EdColour (c AS _UNSIGNED LONG, push)
+    DIM f AS LONG, hasOne
+    EdBegin push
+    FOR f = 1 TO sfN
+        IF wsF(f) AND edMode = ED_FACES THEN hasOne = -1
+    NEXT
+    FOR f = 1 TO sfN
+        IF hasOne = 0 OR wsF(f) <> 0 THEN sfCol(f) = c: sfTex(f) = 0 ' (a picture on it comes off: the colour shows)
+    NEXT
+    EdCommit
+END SUB
+
+' ---------------------------------------------------------------- picking
+
+' The face of the part under view pixel (lx, ly): -1 none
+FUNCTION EdFaceAt& (lx, ly)
+    DIM t AS LONG
+    EdFaceAt& = -1
+    t = PickTri(lx, ly)
+    IF t > 0 AND t <= sceneTN THEN
+        IF tPart(t) = edPart AND tFace(t) < edFN THEN EdFaceAt& = tFace(t)
+    END IF
+END FUNCTION
+
+' Point v (from 0) of the part on the view: where, how near (q: 1 / ahead), and whether nothing hides it
+SUB EdPtScreen (v AS LONG, sx, sy, q, seen)
+    DIM x, y, z, x#, y#, z#, vx, vy, vz, i AS LONG
+    seen = 0: q = 0
+    MbPt pMesh(edPart), v, x, y, z: x# = x: y# = y: z# = z: PartFwd edPart, x#, y#, z#
+    CamSpace x#, y#, z#, vx, vy, vz
+    IF vz < .01 THEN sx = -1000: sy = -1000: EXIT SUB
+    sx = cMidX + vx / vz * cFoc: sy = cMidY - vy / vz * cFoc: q = 1 / vz
+    IF sx < 0 OR sy < 0 OR sx >= vW OR sy >= vH THEN EXIT SUB
+    i = INT(sy) * vW + INT(sx)
+    seen = (rZ(i) <= q * 1.004 + .00001) OR viewWire
+END SUB
+
+' The point of the part nearest the pointer, within 9 pixels (one in sight first): -1 none
+FUNCTION EdPointAt& (lx, ly)
+    DIM v AS LONG, sx, sy, q, seen, d, best AS LONG, bd, bs
+    best = -1: bd = 1E9: bs = 0
+    FOR v = 0 TO edVN - 1
+        EdPtScreen v, sx, sy, q, seen
+        d = (sx - lx) ^ 2 + (sy - ly) ^ 2
+        IF d <= 81 THEN
+            IF (seen AND bs = 0) OR ((seen <> 0) = (bs <> 0) AND d < bd) THEN best = v: bd = d: bs = seen
+        END IF
+    NEXT
+    EdPointAt& = best
+END FUNCTION
+
+' A press in the view: pick (Shift: add or take away), get ready to drag - or start a box
+SUB EdPress (lx, ly)
+    DIM h AS LONG, t AS LONG, ok, n AS V3, x, y, z, x#, y#, z#, pk, x2, y2, z2
+    IF bvOn THEN EXIT SUB ' (bevelling: the picking stays as it was)
+    IF pvOn AND edMode = ED_FACES AND NOT kShift THEN ' (moving the picture: a press on a picked face grabs it)
+        h = EdFaceAt&(lx, ly)
+        IF h >= 0 THEN
+            IF edSelF(h) THEN pvArm = -1: pvF = h: dragPX = mX: dragPY = mY: EXIT SUB
+        END IF
+    END IF
+    SELECT CASE edMode
+        CASE ED_FACES: h = EdFaceAt&(lx, ly)
+        CASE ED_EDGES: h = -1: IF EdEdgeAt(lx, ly) THEN h = edEA
+        CASE ELSE: h = EdPointAt&(lx, ly)
+    END SELECT
+    IF h >= 0 THEN
+        SELECT CASE edMode
+            CASE ED_FACES: pk = edSelF(h)
+            CASE ED_EDGES: pk = edSelV(edEA) AND edSelV(edEB)
+            CASE ELSE: pk = edSelV(h)
+        END SELECT
+        IF kShift THEN
+            pk = NOT pk
+        ELSEIF pk = 0 THEN
+            EdSelClear: pk = -1
+        END IF
+        SELECT CASE edMode
+            CASE ED_FACES: edSelF(h) = pk
+            CASE ED_EDGES: edSelV(edEA) = pk: edSelV(edEB) = pk: EdPkMark edEA, edEB, pk
+            CASE ELSE: edSelV(h) = pk
+        END SELECT
+        IF pk THEN
+            edArm = -1: dragPX = mX: dragPY = mY
+            IF edMode = ED_FACES THEN
+                t = PickTri(lx, ly): n = tNrm(t)
+                RayPlane lx, ly, tA(t), n, dragG, ok
+                IF ok = 0 THEN dragG = tA(t)
+            ELSE
+                MbPt pMesh(edPart), h, x, y, z
+                IF edMode = ED_EDGES THEN MbPt pMesh(edPart), edEB, x2, y2, z2: x = (x + x2) / 2: y = (y + y2) / 2: z = (z + z2) / 2 ' (an edge: grabbed by its middle)
+                x# = x: y# = y: z# = z: PartFwd edPart, x#, y#, z#
+                dragG.x = x#: dragG.y = y#: dragG.z = z#
+            END IF
+        END IF
+    ELSE
+        IF NOT kShift THEN EdSelClear
+        edRect = -1: edRX0 = lx: edRY0 = ly
+    END IF
+    edGen = edGen + 1: ovDirty = -1
+END SUB
+
+' The edge of the part nearest the pointer, within 7 pixels (one in sight
+' first): -1 if there's one, its ends' points in edEA and edEB
+FUNCTION EdEdgeAt (lx, ly)
+    DIM id AS LONG, f AS LONG, g AS LONG, n AS LONG, k AS LONG, a AS LONG, b AS LONG, i AS LONG
+    DIM ax, ay, aq, sa, bx, by, bq, sb, dx, dy, l, s, d, bd, bseen, seen, mx, my, mq
+    id = pMesh(edPart): bd = 1E9: bseen = 0
+    FOR f = 0 TO edFN - 1
+        g = mbF0(id) + 1 + f: n = mfCN(g)
+        FOR k = 0 TO n - 1
+            IF mcE(mfC0(g) + k) THEN
+                a = mcV(mfC0(g) + k): b = mcV(mfC0(g) + (k + 1) MOD n)
+                EdPtScreen a, ax, ay, aq, sa
+                EdPtScreen b, bx, by, bq, sb
+                IF ax > -999 AND bx > -999 THEN
+                    dx = bx - ax: dy = by - ay: l = dx * dx + dy * dy
+                    IF l < 1 THEN s = 0 ELSE s = ((lx - ax) * dx + (ly - ay) * dy) / l
+                    IF s < 0 THEN s = 0
+                    IF s > 1 THEN s = 1
+                    mx = ax + dx * s: my = ay + dy * s
+                    d = (lx - mx) ^ 2 + (ly - my) ^ 2
+                    IF d <= 49 THEN
+                        mq = aq + (bq - aq) * s: seen = viewWire
+                        IF seen = 0 THEN
+                            IF mx >= 0 AND my >= 0 AND mx < vW AND my < vH THEN
+                                i = INT(my) * vW + INT(mx): seen = (rZ(i) <= mq * 1.006 + .00001)
+                            END IF
+                        END IF
+                        IF (seen <> 0 AND bseen = 0) OR ((seen <> 0) = (bseen <> 0) AND d < bd) THEN
+                            edEA = a: edEB = b: bd = d: bseen = seen: EdEdgeAt = -1
+                        END IF
+                    END IF
+                END IF
+            END IF
+        NEXT
+    NEXT
+END FUNCTION
+
+' How many of the part's edges have both their points picked
+FUNCTION EdEdgeCount&
+    DIM id AS LONG, f AS LONG, g AS LONG, n AS LONG, k AS LONG, a AS LONG, b AS LONG, i AS LONG, cnt AS LONG, dup
+    id = pMesh(edPart)
+    REDIM ea(0) AS LONG, eb(0) AS LONG
+    EdPkInMake
+    FOR f = 0 TO edFN - 1
+        g = mbF0(id) + 1 + f: n = mfCN(g)
+        FOR k = 0 TO n - 1
+            IF mcE(mfC0(g) + k) THEN
+                a = mcV(mfC0(g) + k): b = mcV(mfC0(g) + (k + 1) MOD n)
+                IF edSelV(a) <> 0 AND edSelV(b) <> 0 AND EdEdgeMeant(a, b) <> 0 THEN
+                    IF a > b THEN SWAP a, b
+                    dup = 0
+                    FOR i = 1 TO cnt
+                        IF ea(i) = a AND eb(i) = b THEN dup = -1: EXIT FOR
+                    NEXT
+                    IF dup = 0 THEN
+                        cnt = cnt + 1
+                        IF cnt > UBOUND(ea) THEN REDIM _PRESERVE ea(cnt + 63) AS LONG: REDIM _PRESERVE eb(cnt + 63) AS LONG
+                        ea(cnt) = a: eb(cnt) = b
+                    END IF
+                END IF
+            END IF
+        NEXT
+    NEXT
+    EdEdgeCount& = cnt
+END FUNCTION
+
+' The drag begun: the picked points' places kept, an undo step made
+SUB EdDragStart
+    DIM w AS LONG, l, x#, y#, z#
+    edDrag = -1: dragVert = kShift: dragLX0 = dragPX - vX0: dragLY0 = dragPY - vY0
+    EdBegin -1
+    IF EdMoving& = 0 THEN edDrag = 0: EXIT SUB
+    REDIM edX0(swN) AS DOUBLE, edY0(swN) AS DOUBLE, edZ0(swN) AS DOUBLE
+    FOR w = 1 TO swN
+        IF edMv(w) THEN EdW w, x#, y#, z#: edX0(w) = x#: edY0(w) = y#: edZ0(w) = z#
+    NEXT
+    IF dragVert THEN
+        dragN.x = cFX: dragN.y = 0: dragN.z = cFZ
+        l = SQR(dragN.x * dragN.x + dragN.z * dragN.z): IF l < 1E-6 THEN dragN.x = 0: dragN.z = 1: l = 1
+        dragN.x = dragN.x / l: dragN.z = dragN.z / l
+    ELSE
+        dragN.x = 0: dragN.y = 1: dragN.z = 0
+    END IF
+    dragX0(0) = 1E9 ' (the last step made: none yet)
+END SUB
+
+SUB EdDragUpdate (lx, ly)
+    DIM hit AS V3, ok, dx#, dy#, dz#, w AS LONG, x#, y#, z#, a, ax, ay, az, d#
+    a = DragAxisNow: dragAxis = a
+    IF a THEN ' (along one axis)
+        AxisVec a, ax, ay, az
+        d# = AxisAt#(lx, ly, dragG, a) - AxisAt#(dragLX0, dragLY0, dragG, a)
+        dx# = ax * d#: dy# = ay * d#: dz# = az * d#
+    ELSE
+        RayPlane lx, ly, dragG, dragN, hit, ok
+        IF ok = 0 THEN EXIT SUB
+        dx# = hit.x - dragG.x: dy# = hit.y - dragG.y: dz# = hit.z - dragG.z
+        IF dragVert THEN dx# = 0: dz# = 0 ELSE dy# = 0
+    END IF
+    IF snapStep > 0 AND NOT kAlt THEN
+        dx# = INT(dx# / snapStep + .5) * snapStep: dy# = INT(dy# / snapStep + .5) * snapStep: dz# = INT(dz# / snapStep + .5) * snapStep
+    END IF
+    IF dx# = dragX0(0) AND dy# = dragY0(0) AND dz# = dragZ0(0) THEN EXIT SUB
+    dragX0(0) = dx#: dragY0(0) = dy#: dragZ0(0) = dz#
+    FOR w = 1 TO swN
+        IF edMv(w) THEN x# = edX0(w) + dx#: y# = edY0(w) + dy#: z# = edZ0(w) + dz#: EdSetW w, x#, y#, z#
+    NEXT
+    EdCommit
+END SUB
+
+' The box let go: what's in it picked (only what's in sight, but in wireframe all)
+SUB EdRectEnd (lx, ly)
+    DIM x0, y0, x1, y1, v AS LONG, f AS LONG, g AS LONG, k AS LONG, sx, sy, q, seen, id AS LONG, cx#, cy#, cz#, x, y, z, vx, vy, vz, n, t AS LONG
+    x0 = edRX0: x1 = lx: IF x1 < x0 THEN SWAP x0, x1
+    y0 = edRY0: y1 = ly: IF y1 < y0 THEN SWAP y0, y1
+    edRect = 0: ovDirty = -1: edGen = edGen + 1
+    IF x1 - x0 < 3 AND y1 - y0 < 3 THEN EXIT SUB ' (a click on nothing)
+    id = pMesh(edPart)
+    IF EdPtMode THEN
+        FOR v = 0 TO edVN - 1
+            EdPtScreen v, sx, sy, q, seen
+            IF seen AND sx >= x0 AND sx <= x1 AND sy >= y0 AND sy <= y1 THEN edSelV(v) = -1
+        NEXT
+    ELSE
+        FOR f = 0 TO edFN - 1
+            g = mbF0(id) + 1 + f: n = mfCN(g): cx# = 0: cy# = 0: cz# = 0
+            FOR k = 0 TO n - 1
+                MbPt id, mcV(mfC0(g) + k), x, y, z: cx# = cx# + x: cy# = cy# + y: cz# = cz# + z
+            NEXT
+            cx# = cx# / n: cy# = cy# / n: cz# = cz# / n: PartFwd edPart, cx#, cy#, cz#
+            CamSpace cx#, cy#, cz#, vx, vy, vz
+            IF vz > .01 THEN
+                sx = cMidX + vx / vz * cFoc: sy = cMidY - vy / vz * cFoc
+                IF sx >= x0 AND sx <= x1 AND sy >= y0 AND sy <= y1 THEN
+                    seen = viewWire
+                    IF seen = 0 THEN
+                        t = PickTri(sx, sy)
+                        IF t > 0 AND t <= sceneTN THEN seen = (tPart(t) = edPart AND tFace(t) = f)
+                    END IF
+                    IF seen THEN edSelF(f) = -1
+                END IF
+            END IF
+        NEXT
+    END IF
+END SUB
+
+' ---------------------------------------------------------------- keys
+
+' A key while editing: -1 if it was one of the edit's
+FUNCTION EdKey (k&)
+    DIM st#
+    IF bvOn THEN EdKey = BvKey(k&): EXIT FUNCTION ' (bevelling: its keys only)
+    EdKey = -1
+    st# = EdStep#
+    SELECT CASE k&
+        CASE 27: IF EdAny THEN EdSelClear ELSE EdOff: Msg "Done editing its faces and points"
+        CASE 13: EdOff: Msg "Done editing its faces and points"
+        CASE 49: EdSetMode ED_POINTS
+        CASE 50: EdSetMode ED_FACES
+        CASE 51: EdSetMode ED_EDGES
+        CASE 9: EdSetMode IIF(edMode = ED_POINTS, ED_EDGES, IIF(edMode = ED_EDGES, ED_FACES, ED_POINTS)) ' (Tab: points, edges, faces)
+        CASE 101, 69: EdExtrude ' (E)
+        CASE 105, 73: EdInset ' (I)
+        CASE 98, 66: BvStart ' (B)
+        CASE 115, 83: EdSplit ' (S)
+        CASE 106, 74: EdConnect ' (J)
+        CASE 111, 79: LcStart ' (O: a loop cut)
+        CASE 104, 72: EdDivide -1 ' (H)
+        CASE 118, 86: EdDivide 0 ' (V)
+        CASE 109: EdMerge 0 ' (M: points made one, faces joined)
+        CASE 77: EdMerge -1 ' (Shift+M: faces each drawn to a point)
+        CASE 110, 78: EdFlip ' (N)
+        CASE 112, 80: PvToggle ' (P: move the picture by hand)
+        CASE 21248: EdDelete ' (Delete - X, Y and Z held keep a drag to their axis)
+        CASE 18688: EdMoveBy 0, st#, 0, -1 ' (PgUp)
+        CASE 20736: EdMoveBy 0, -st#, 0, -1 ' (PgDn)
+        CASE 19200, 19712, 18432, 20480
+            IF NOT EdAny THEN EdKey = 0: EXIT FUNCTION ' (nothing picked: the view turns)
+            EdNudge k&, st#
+        CASE 114: EdTurnBy 2, 15, -1 ' (R)
+        CASE 82: EdTurnBy 2, -15, -1 ' (Shift+R)
+        CASE 61, 43: EdScaleBy 1.1, 1.1, 1.1, -1 ' (=, +)
+        CASE 45, 95: EdScaleBy 1 / 1.1, 1 / 1.1, 1 / 1.1, -1 ' (-)
+        CASE ELSE: EdKey = 0
+    END SELECT
+END FUNCTION
+
+' An arrow: the picked ones a step across the ground, the way you're looking
+SUB EdNudge (k&, st#)
+    DIM ax
+    IF k& = 19200 OR k& = 19712 THEN
+        IF ABS(cRX) >= ABS(cRZ) THEN ax = 1 * SGN(cRX) ELSE ax = 3 * SGN(cRZ)
+        IF k& = 19200 THEN ax = -ax
+    ELSE
+        IF ABS(cFX) >= ABS(cFZ) THEN ax = 1 * SGN(cFX) ELSE ax = 3 * SGN(cFZ)
+        IF k& = 20480 THEN ax = -ax
+    END IF
+    IF ABS(ax) = 1 THEN EdMoveBy st# * SGN(ax), 0, 0, -1 ELSE EdMoveBy 0, 0, st# * SGN(ax), -1
+END SUB
+
+' ---------------------------------------------------------------- the panel's fields, while editing
+
+' CENTRE (the picked ones' middle), TURN BY, SIZE (their box), PUSH, COLOUR
+FUNCTION EdFieldValue$ (f)
+    DIM id AS LONG, g AS LONG, i AS LONG
+    EdBox
+    SELECT CASE f
+        CASE F_PX: EdFieldValue$ = Fmt$((edLo.x + edHi.x) / 2)
+        CASE F_PY: EdFieldValue$ = Fmt$((edLo.y + edHi.y) / 2)
+        CASE F_PZ: EdFieldValue$ = Fmt$((edLo.z + edHi.z) / 2)
+        CASE F_RX TO F_RZ, F_AMT: EdFieldValue$ = "0"
+        CASE F_SX: EdFieldValue$ = Fmt$(edHi.x - edLo.x)
+        CASE F_SY: EdFieldValue$ = Fmt$(edHi.y - edLo.y)
+        CASE F_SZ: EdFieldValue$ = Fmt$(edHi.z - edLo.z)
+        CASE F_COL
+            id = pMesh(edPart): EdFieldValue$ = HexCol$(pCol(edPart))
+            FOR i = 0 TO edFN - 1
+                IF edSelF(i) AND edMode = ED_FACES THEN g = mbF0(id) + 1 + i: EdFieldValue$ = HexCol$(mfCol(g)): EXIT FOR
+            NEXT
+    END SELECT
+END FUNCTION
+
+FUNCTION EdFieldShown (f)
+    SELECT CASE f
+        CASE F_COL: EdFieldShown = -1
+        CASE F_SEG: EdFieldShown = 0
+        CASE ELSE: EdBox: EdFieldShown = (edCnt > 0)
+    END SELECT
+END FUNCTION
+
+' A typed value (its undo step's made)
+SUB EdFieldApply (f, v$)
+    DIM v#, d#, c AS _UNSIGNED LONG, ok
+    v# = VAL(v$)
+    EdBox
+    SELECT CASE f
+        CASE F_PX: EdMoveBy v# - (edLo.x + edHi.x) / 2, 0, 0, 0
+        CASE F_PY: EdMoveBy 0, v# - (edLo.y + edHi.y) / 2, 0, 0
+        CASE F_PZ: EdMoveBy 0, 0, v# - (edLo.z + edHi.z) / 2, 0
+        CASE F_RX: EdTurnBy 1, v#, 0
+        CASE F_RY: EdTurnBy 2, v#, 0
+        CASE F_RZ: EdTurnBy 3, v#, 0
+        CASE F_SX TO F_SZ
+            SELECT CASE f
+                CASE F_SX: d# = edHi.x - edLo.x
+                CASE F_SY: d# = edHi.y - edLo.y
+                CASE F_SZ: d# = edHi.z - edLo.z
+            END SELECT
+            IF d# < 1E-6 THEN Msg "Flat that way: nothing to size (move a point instead)": EXIT SUB
+            IF v# < 0 THEN v# = 0
+            SELECT CASE f
+                CASE F_SX: EdScaleBy v# / d#, 1, 1, 0
+                CASE F_SY: EdScaleBy 1, v# / d#, 1, 0
+                CASE F_SZ: EdScaleBy 1, 1, v# / d#, 0
+            END SELECT
+        CASE F_AMT: EdPushBy v#, 0
+        CASE F_COL
+            c = ParseCol~&(v$, ok): IF ok = 0 THEN Msg "A colour is 6 hex digits: RRGGBB": EXIT SUB
+            curCol = c: EdColour c, 0
+    END SELECT
+END SUB
+
+' The wheel over a field: a step (a run of them one undo step)
+SUB EdFieldWheel (f, dir)
+    DIM push, st#, k#
+    IF typeField = f THEN typeField = 0
+    IF f = F_COL OR f = F_SEG THEN EXIT SUB
+    push = (f <> edWheelF OR TIMER(0.001) - edWheelT > 1 OR TIMER(0.001) < edWheelT)
+    edWheelF = f: edWheelT = TIMER(0.001)
+    st# = EdStep#
+    k# = 1.1: IF kShift THEN k# = 1.5 ELSE IF kAlt THEN k# = 1.01
+    IF dir < 0 THEN k# = 1 / k#
+    SELECT CASE f
+        CASE F_PX: EdMoveBy st# * dir, 0, 0, push
+        CASE F_PY: EdMoveBy 0, st# * dir, 0, push
+        CASE F_PZ: EdMoveBy 0, 0, st# * dir, push
+        CASE F_RX TO F_RZ: EdTurnBy f - F_RX + 1, dir * IIF(kShift, 45, IIF(kAlt, 1, 15)), push
+        CASE F_SX: EdScaleBy k#, 1, 1, push
+        CASE F_SY: EdScaleBy 1, k#, 1, push
+        CASE F_SZ: EdScaleBy 1, 1, k#, push
+        CASE F_AMT: EdPushBy st# * dir, push
+    END SELECT
+END SUB
+
+' ---------------------------------------------------------------- the panel, while editing
+
+' 1 POINTS, 12 EDGES, 2 FACES, 3 DONE; three across: 4 EXTRUDE, 5 INSET, 13 BEVEL, 6 DIVIDE -, 7 DIVIDE |, 8 MERGE, 9 FLIP, 10 DELETE, 11 ALL
+SUB EdBtn (k, x, y, w, h)
+    DIM i
+    h = 22
+    SELECT CASE k
+        CASE 1: x = PX0: y = 58: w = 56
+        CASE 12: x = PX0 + 59: y = 58: w = 56
+        CASE 2: x = PX0 + 118: y = 58: w = 56
+        CASE 3: x = PX0 + 177: y = 58: w = 56
+        CASE 4 TO 11, 13 TO 16
+            i = k - 4: IF k = 13 THEN i = 2 ELSE IF k >= 14 THEN i = k - 5 ELSE IF k >= 6 THEN i = k - 3
+            x = PX0 + (i MOD 3) * 78: y = 486 + (i \ 3) * 28: w = 74
+        CASE ELSE: x = -100: y = -100: w = 0
+    END SELECT
+END SUB
+
+FUNCTION EdBtnName$ (k)
+    SELECT CASE k
+        CASE 1: EdBtnName$ = "POINTS"
+        CASE 2: EdBtnName$ = "FACES"
+        CASE 3: EdBtnName$ = "DONE"
+        CASE 4: EdBtnName$ = "EXTRUDE E"
+        CASE 5: EdBtnName$ = "INSET I"
+        CASE 6: EdBtnName$ = "DIVIDE-H"
+        CASE 7: EdBtnName$ = "DIVIDE|V"
+        CASE 8: EdBtnName$ = "MERGE M"
+        CASE 9: EdBtnName$ = "FLIP N"
+        CASE 10: EdBtnName$ = "DELETE"
+        CASE 11: EdBtnName$ = "ALL"
+        CASE 12: EdBtnName$ = "EDGES"
+        CASE 13: EdBtnName$ = "BEVEL B"
+        CASE 14: EdBtnName$ = "SPLIT S"
+        CASE 15: EdBtnName$ = "CONNECT J"
+        CASE 16: EdBtnName$ = "LOOP O"
+    END SELECT
+END FUNCTION
+
+SUB EdPanelDraw
+    DIM x, y, w, h, k, n AS LONG, i AS LONG, t$, c AS _UNSIGNED LONG
+    Txt PX0, 36, "EDITING PART" + STR$(edPart), cHi
+    FOR k = 1 TO 12
+        IF k = 4 THEN k = 12
+        EdBtn k, x, y, w, h: Btn x, y, w, h, EdBtnName$(k), (k = 1 AND edMode = ED_POINTS AND bvOn = 0) OR (k = 2 AND edMode = ED_FACES AND bvOn = 0) OR (k = 12 AND edMode = ED_EDGES)
+    NEXT
+    IF bvOn THEN BvDraw: EXIT SUB
+    EdBox
+    IF edMode = ED_EDGES THEN
+        n = EdEdgeCount&: t$ = LTRIM$(STR$(n)) + IIFS$(n = 1, " EDGE PICKED", " EDGES PICKED")
+    ELSEIF EdPtMode THEN
+        FOR i = 0 TO edVN - 1
+            IF edSelV(i) THEN n = n + 1
+        NEXT
+        t$ = LTRIM$(STR$(n)) + " OF" + STR$(edVN) + " POINTS PICKED"
+    ELSE
+        FOR i = 0 TO edFN - 1
+            IF edSelF(i) THEN n = n + 1
+        NEXT
+        t$ = LTRIM$(STR$(n)) + " OF" + STR$(edFN) + " FACES PICKED"
+    END IF
+    IF edCnt > 0 THEN
+        Txt PX0, 86, "CENTRE      X  Y  Z", cDim
+        Txt PX0, 132, "TURN BY     X  Y  Z", cDim
+        Txt PX0, 178, "SIZE        X  Y  Z", cDim
+        Txt PX0, 228, t$, cText
+        Txt PX0, 254, "PUSH OUT", cDim
+        FOR k = F_PX TO F_SZ: FieldDraw k: NEXT
+        FieldDraw F_AMT
+    ELSE
+        Txt PX0, 86, t$, cText
+        Txt PX0, 106, "Click one (Shift adds),", cDim
+        Txt PX0, 122, "or drag a box round some", cDim
+        Txt PX0, 146, "1 points 2 faces 3 edges", cDim
+        Txt PX0, 162, "Ctrl+A: all  Esc: done", cDim
+    END IF
+    Txt PX0, 284, "COLOUR", cDim
+    c = VAL("&H" + EdFieldValue$(F_COL)) OR &HFF000000
+    FieldDraw F_COL
+    FOR k = 0 TO NUM_PAL - 1
+        PalRect k, x, y, w, h
+        LINE (x, y)-(x + w - 1, y + h - 1), palCol(k), BF
+        LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(palCol(k) = c, cHi, cLine), B
+    NEXT
+    Txt PX0, 432, "SNAP (OF A CELL)  Alt: none", cDim
+    FOR k = 11 TO 15
+        PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (snapStep = SnapOf(k - 11))
+    NEXT
+    FOR k = 4 TO 16
+        IF k <> 12 THEN EdBtn k, x, y, w, h: Btn x, y, w, h, EdBtnName$(k), 0
+    NEXT
+    y = 606
+    AlDraw 604: y = 682
+    IF EdPicShown THEN
+        EdPicDraw
+    ELSEIF y + 64 < scrH - BAR_H THEN
+        Txt PX0, y, "Drag: move (Shift: up/down)", cDim
+        Txt PX0, y + 16, "Arrows PgUp PgDn: nudge", cDim
+        Txt PX0, y + 32, "= -: size   R: turn", cDim
+        Txt PX0, y + 48, "Ctrl+Z: undo each one", cDim
+    END IF
+END SUB
+
+SUB EdPanelClick
+    DIM k, x, y, w, h, i
+    IF bvOn THEN BvClick: EXIT SUB
+    IF EdPicClick THEN EXIT SUB
+    IF AlClick(604) THEN EXIT SUB
+    FOR k = 1 TO 16
+        EdBtn k, x, y, w, h
+        IF w > 0 AND InRect(mX, mY, x, y, w, h) THEN
+            SELECT CASE k
+                CASE 12: EdSetMode ED_EDGES
+                CASE 1: EdSetMode ED_POINTS
+                CASE 2: EdSetMode ED_FACES
+                CASE 3: EdOff: Msg "Done editing its faces and points"
+                CASE 4: EdExtrude
+                CASE 5: EdInset
+                CASE 6: EdDivide -1
+                CASE 7: EdDivide 0
+                CASE 8: EdMerge 0
+                CASE 9: EdFlip
+                CASE 10: EdDelete
+                CASE 11: EdSelAll
+                CASE 13: BvStart
+                CASE 14: EdSplit
+                CASE 15: EdConnect
+                CASE 16: LcStart
+            END SELECT
+            EXIT SUB
+        END IF
+    NEXT
+    FOR k = 11 TO 15
+        PanelBtn k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN snapStep = SnapOf(k - 11): Msg "Snap: " + SnapName$(k - 11): EXIT SUB
+    NEXT
+    FOR i = 0 TO NUM_PAL - 1
+        PalRect i, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN curCol = palCol(i): EdColour palCol(i), -1: EXIT SUB
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- drawing
+
+' Over the view: the picked faces lit up, the mesh's edges, its points
+SUB EdOverlay
+    DIM m AS _MEM, i AS LONG, t AS LONG, f AS LONG, c AS _UNSIGNED LONG, d, id AS LONG, g AS LONG, k AS LONG, n AS LONG
+    DIM ax, ay, az, bx, by, bz, x#, y#, z#, sx, sy, q, seen, v AS LONG, nx#, ny#, nz#, fx#, fy#, fz#, front
+    DIM pass, hot, eHot, v2 AS LONG
+    id = pMesh(edPart)
+    EdPkInMake
+    IF edMode = ED_FACES THEN
+        m = _MEMIMAGE(ovImg&)
+        FOR i = 0 TO vW * vH - 1
+            t = rId(i)
+            IF t > 0 AND t <= sceneTN THEN
+                IF tPart(t) = edPart THEN
+                    f = tFace(t)
+                    IF f < edFN THEN
+                        IF edSelF(f) THEN
+                            c = _RGBA32(255, 150, 0, 120): IF tTex(t) THEN c = _RGBA32(255, 150, 0, 40) ' (a picture on it: tinted less, so it shows)
+                            _MEMPUT m, m.OFFSET + i * 4, c
+                        END IF
+                    END IF
+                END IF
+            END IF
+        NEXT
+        _MEMFREE m
+    END IF
+    d = _DEST: _DEST ovImg&
+    ' (the edges of the faces turned to you - all of them, in wireframe - in a colour that
+    ' shows on the face; then what's picked on top: faces orange, edges and points cyan, wide)
+    FOR pass = 1 TO 2
+        FOR f = 0 TO edFN - 1
+            g = mbF0(id) + 1 + f: n = mfCN(g)
+            hot = (edMode = ED_FACES AND edSelF(f) <> 0)
+            front = viewWire
+            IF front = 0 THEN
+                MbNormal id, g, nx#, ny#, nz#
+                MbPt id, mcV(mfC0(g)), ax, ay, az: x# = ax: y# = ay: z# = az: PartFwd edPart, x#, y#, z#
+                fx# = nx# / pSX(edPart): fy# = ny# / pSY(edPart): fz# = nz# / pSZ(edPart)
+                EdRotW fx#, fy#, fz#
+                front = (fx# * (cEX - x#) + fy# * (cEY - y#) + fz# * (cEZ - z#) > 0)
+            END IF
+            c = mfCol(g) ' (dark lines on light faces, light on dark - the faces as solid as TEX shows them: off or faint, the dark backdrop shows through)
+            IF (_RED32(c) * 3 + _GREEN32(c) * 6 + _BLUE32(c)) * IIF(viewWire, 0, texOp / 100) < 1200 OR mfTex(g) > 0 THEN c = _RGB32(215, 215, 240) ELSE c = _RGB32(16, 10, 34)
+            FOR k = 0 TO n - 1
+                IF mcE(mfC0(g) + k) THEN
+                    v = mcV(mfC0(g) + k): v2 = mcV(mfC0(g) + (k + 1) MOD n)
+                    MbPt id, v, ax, ay, az: MbPt id, v2, bx, by, bz
+                    eHot = (edMode = ED_EDGES AND edSelV(v) <> 0 AND edSelV(v2) <> 0)
+                    IF eHot THEN eHot = EdEdgeMeant(v, v2)
+                    IF pass = 1 THEN
+                        IF front AND NOT hot AND NOT eHot THEN EdLine ax, ay, az, bx, by, bz, c
+                    ELSEIF eHot THEN
+                        EdLineW ax, ay, az, bx, by, bz, _RGB32(0, 255, 255), 3
+                    ELSEIF hot AND front THEN
+                        EdLineW ax, ay, az, bx, by, bz, _RGB32(255, 190, 60), 2
+                    ELSEIF hot THEN ' (picked, but facing away: seen through, faint)
+                        EdLine ax, ay, az, bx, by, bz, _RGBA32(255, 190, 60, 110)
+                    END IF
+                END IF
+            NEXT
+        NEXT
+    NEXT
+    IF EdPtMode THEN
+        FOR v = 0 TO edVN - 1
+            EdPtScreen v, sx, sy, q, seen
+            IF sx > -999 THEN
+                IF edSelV(v) THEN
+                    LINE (sx - 4, sy - 4)-(sx + 4, sy + 4), _RGB32(8, 6, 16), BF
+                    LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), _RGB32(0, 255, 255), BF
+                ELSEIF edMode = ED_EDGES THEN
+                    ' (edges: the points only as small dots)
+                ELSEIF seen THEN
+                    LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), _RGB32(8, 6, 16), BF
+                    LINE (sx - 2, sy - 2)-(sx + 2, sy + 2), _RGB32(235, 235, 255), BF
+                ELSE
+                    LINE (sx - 1, sy - 1)-(sx + 1, sy + 1), _RGBA32(150, 150, 190, 120), BF
+                END IF
+            END IF
+        NEXT
+    END IF
+    _DEST d
+END SUB
+
+' A way (a normal, divided by the size already) turned as the part is: length 1
+SUB EdRotW (x#, y#, z#)
+    DIM h AS V3
+    h.x = x#: h.y = y#: h.z = z#
+    RotZXY h, DCos(pRX(edPart)), DSin(pRX(edPart)), DCos(pRY(edPart)), DSin(pRY(edPart)), DCos(pRZ(edPart)), DSin(pRZ(edPart))
+    x# = h.x: y# = h.y: z# = h.z
+END SUB
+
+' A wide line between two of the part's own points, edged dark
+SUB EdLineW (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, w)
+    DIM x1#, y1#, z1#, x2#, y2#, z2#
+    x1# = ax: y1# = ay: z1# = az: PartFwd edPart, x1#, y1#, z1#
+    x2# = bx: y2# = by: z2# = bz: PartFwd edPart, x2#, y2#, z2#
+    Line3DW x1#, y1#, z1#, x2#, y2#, z2#, c, w
+END SUB
+
+' A line between two of the part's own points, on the overlay
+SUB EdLine (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG)
+    DIM x1#, y1#, z1#, x2#, y2#, z2#
+    x1# = ax: y1# = ay: z1# = az: PartFwd edPart, x1#, y1#, z1#
+    x2# = bx: y2# = by: z2# = bz: PartFwd edPart, x2#, y2#, z2#
+    Line3D x1#, y1#, z1#, x2#, y2#, z2#, c
+END SUB

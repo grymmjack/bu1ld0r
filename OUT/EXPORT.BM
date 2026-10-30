@@ -7,9 +7,10 @@ SUB ExportAll
     IF pN = 0 THEN Msg "Nothing to export: put some shapes down first": EXIT SUB
     n$ = ModelMissing$
     IF LEN(n$) THEN Msg "Not exported: prefab " + n$ + " isn't in prefabs/ (the red box)": EXIT SUB
-    g = ghostOn: ghostOn = 0: meshAll = -1: MeshBuild ' (the model alone, not the shape being put down - hidden parts too)
+    g = ghostOn: ghostOn = 0: meshAll = -1: tidyNow = mdlTidy: MeshBuild ' (the model alone, not the shape being put down - hidden parts too - tidied if it's to be)
     n$ = SafeName$(mdlName$): mdlName$ = n$
-    ExColours
+    ExSplitRepeats
+    ExAtlas
     ExFrameWork
 
     ex$ = appDir$ + "export/"
@@ -36,16 +37,380 @@ SUB ExportAll
             made$ = made$ + " (neon_dir has no models/ folder: " + nd$ + ")"
         END IF
     END IF
-    ghostOn = g: meshAll = 0: meshDirty = -1: viewDirty = -1
-    IF sceneTN > NEON_TRI_WARN THEN made$ = made$ + " - " + LTRIM$(STR$(sceneTN)) + " triangles: a lot for a NEON-CASTER prop (fewer slices?)"
+    ghostOn = g: meshAll = 0: tidyNow = 0: meshDirty = -1: viewDirty = -1
+    IF mdlTidy THEN
+        made$ = made$ + " - " + LTRIM$(STR$(tdOut)) + " triangles (tidied from" + STR$(tdIn) + ")"
+        IF mdlBudget > 0 AND tdOut > mdlBudget THEN made$ = made$ + ": still over its budget of" + STR$(mdlBudget) + " - fewer slices?"
+    ELSE
+        made$ = made$ + " - " + LTRIM$(STR$(sceneTN)) + " triangles, as built"
+    END IF
     Msg "Exported " + made$
 END SUB
 
-' The model's colours, each a square of the texture
+' Triangle t's picture as the texture has it (its place in exPic, 1..), 0: its colour
+FUNCTION ExTexOf (t AS LONG)
+    DIM k
+    IF tTex(t) <= 0 THEN EXIT FUNCTION
+    FOR k = 1 TO exPicN
+        IF exPic(k) = tTex(t) THEN ExTexOf = k: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Triangles whose picture repeats (spots past 0..1) cut where it repeats,
+' each piece's spots brought back into 0..1: the game doesn't repeat them
+SUB ExSplitRepeats
+    DIM t AS LONG, t1 AS LONG, n0 AS LONG, g AS LONG, k, i, j, i0, i1, j0, j1, n, u0, u1, v0, v1, eu, ev, cnt AS LONG, w AS LONG, pk, ln
+    DIM ax(63), ay(63), az(63), au(63), av(63), bx(63), by(63), bz(63), bu(63), bv(63)
+    DIM lx(63), ly(63), lz(63), lu(63), lv(63)
+    n0 = sceneTN
+    REDIM gone(n0) AS _BYTE
+    t = 1
+    DO WHILE t <= n0
+        t1 = t
+        IF tTex(t) > 0 THEN
+            ' (the face's triangles, one after another: cut as one, so its pieces are whole cells)
+            DO WHILE t1 < n0 AND t1 - t < 40
+                IF tPart(t1 + 1) <> tPart(t) OR tFace(t1 + 1) <> tFace(t) OR tTex(t1 + 1) <> tTex(t) THEN EXIT DO
+                t1 = t1 + 1
+            LOOP
+            ExLoop t, t1, lx(), ly(), lz(), lu(), lv(), ln
+            IF ln = 0 THEN t1 = t: ExLoop t, t1, lx(), ly(), lz(), lu(), lv(), ln ' (not flat or not one mapping: a triangle at a time)
+            u0 = lu(0): u1 = u0: v0 = lv(0): v1 = v0
+            FOR k = 1 TO ln - 1
+                IF lu(k) < u0 THEN u0 = lu(k)
+                IF lu(k) > u1 THEN u1 = lu(k)
+                IF lv(k) < v0 THEN v0 = lv(k)
+                IF lv(k) > v1 THEN v1 = lv(k)
+            NEXT
+            ' (a cut within 5% of a repeat - or a pixel and a half - of the face's edge would leave a
+            ' sliver: that bit's spots are clamped to the picture's edge instead)
+            pk = tTex(t): eu = .05: ev = .05
+            IF picW(pk) > 0 THEN
+                IF 1.5 / picW(pk) > eu THEN eu = 1.5 / picW(pk)
+                IF 1.5 / picH(pk) > ev THEN ev = 1.5 / picH(pk)
+            END IF
+            i0 = INT(u0 + eu): i1 = INT(u1 - eu): IF i1 < i0 THEN i1 = i0
+            j0 = INT(v0 + ev): j1 = INT(v1 - ev): IF j1 < j0 THEN j1 = j0
+            IF (i0 <> 0 OR i1 <> 0 OR j0 <> 0 OR j1 <> 0 OR u0 < 0 OR u1 > 1 OR v0 < 0 OR v1 > 1) AND (i1 - i0 + 1) * (j1 - j0 + 1) <= 256 THEN
+                FOR g = t TO t1: gone(g) = -1: NEXT
+                FOR i = i0 TO i1
+                    FOR j = j0 TO j1
+                        FOR k = 0 TO ln - 1: ax(k) = lx(k): ay(k) = ly(k): az(k) = lz(k): au(k) = lu(k): av(k) = lv(k): NEXT
+                        n = ln
+                        IF i > i0 THEN ExClip n, ax(), ay(), az(), au(), av(), bx(), by(), bz(), bu(), bv(), 0, i, 1
+                        IF i < i1 THEN ExClip n, ax(), ay(), az(), au(), av(), bx(), by(), bz(), bu(), bv(), 0, i + 1, -1
+                        IF j > j0 THEN ExClip n, ax(), ay(), az(), au(), av(), bx(), by(), bz(), bu(), bv(), 1, j, 1
+                        IF j < j1 THEN ExClip n, ax(), ay(), az(), au(), av(), bx(), by(), bz(), bu(), bv(), 1, j + 1, -1
+                        IF n >= 3 THEN ExEars n, ax(), ay(), az(), au(), av(), t, i, j, cnt
+                    NEXT
+                NEXT
+            END IF
+        END IF
+        t = t1 + 1
+    LOOP
+    ' (the cut ones out, the pieces in their place at the end)
+    w = 0
+    FOR t = 1 TO sceneTN + cnt
+        IF t > n0 THEN
+            w = w + 1: IF w <> t THEN TriCopy t, w
+        ELSEIF gone(t) = 0 THEN
+            w = w + 1: IF w <> t THEN TriCopy t, w
+        END IF
+    NEXT
+    sceneTN = w: tN = w: holeTN = w
+END SUB
+
+' Triangles t to t1 (one face) as one outline, its corners in order (ln of them) - 0: they
+' aren't flat, or the picture isn't spread evenly over them all (DEFORM's), or it's not one outline
+SUB ExLoop (t AS LONG, t1 AS LONG, lx(), ly(), lz(), lu(), lv(), ln)
+    DIM s AS LONG, k, c, ne, i, j, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, nl, dx, dy, dz, d00, d01, d11, d20, d21, den, a, b, uu, vv, sz, used
+    DIM rf AS LONG, ra, rb
+    DIM ex(127), ey(127), ez(127), eu(127), ev(127), fx(127), fy(127), fz(127), bnd(127) AS _BYTE, took(127) AS _BYTE
+    ln = 0
+    IF t = t1 THEN
+        lx(0) = tA(t).x: ly(0) = tA(t).y: lz(0) = tA(t).z
+        lx(1) = tB(t).x: ly(1) = tB(t).y: lz(1) = tB(t).z
+        lx(2) = tC(t).x: ly(2) = tC(t).y: lz(2) = tC(t).z
+        FOR k = 0 TO 2: lu(k) = tU(3 * t + k): lv(k) = tW(3 * t + k): NEXT
+        ln = 3: EXIT SUB
+    END IF
+    rb = -1
+    FOR s = t TO t1
+        e1x = tB(s).x - tA(s).x: e1y = tB(s).y - tA(s).y: e1z = tB(s).z - tA(s).z
+        e2x = tC(s).x - tA(s).x: e2y = tC(s).y - tA(s).y: e2z = tC(s).z - tA(s).z
+        nx = e1y * e2z - e1z * e2y: ny = e1z * e2x - e1x * e2z: nz = e1x * e2y - e1y * e2x
+        ra = nx * nx + ny * ny + nz * nz
+        IF ra > rb THEN rb = ra: rf = s
+    NEXT
+    ' (each corner where the biggest triangle's plane and mapping say it should be - a sliver's are no guide)
+    e1x = tB(rf).x - tA(rf).x: e1y = tB(rf).y - tA(rf).y: e1z = tB(rf).z - tA(rf).z
+    e2x = tC(rf).x - tA(rf).x: e2y = tC(rf).y - tA(rf).y: e2z = tC(rf).z - tA(rf).z
+    nx = e1y * e2z - e1z * e2y: ny = e1z * e2x - e1x * e2z: nz = e1x * e2y - e1y * e2x
+    nl = SQR(nx * nx + ny * ny + nz * nz): IF nl < 1E-12 THEN ln = 0: EXIT SUB
+    d00 = e1x * e1x + e1y * e1y + e1z * e1z: d01 = e1x * e2x + e1y * e2y + e1z * e2z: d11 = e2x * e2x + e2y * e2y + e2z * e2z
+    den = d00 * d11 - d01 * d01: IF ABS(den) < 1E-18 THEN ln = 0: EXIT SUB
+    sz = SQR(d00) + SQR(d11)
+    ne = 0
+    FOR s = t TO t1
+        FOR c = 0 TO 2
+            IF ne > 127 THEN ln = 0: EXIT SUB
+            ExCorner s, c, ex(ne), ey(ne), ez(ne): eu(ne) = tU(3 * s + c): ev(ne) = tW(3 * s + c)
+            ExCorner s, (c + 1) MOD 3, fx(ne), fy(ne), fz(ne)
+            dx = ex(ne) - tA(rf).x: dy = ey(ne) - tA(rf).y: dz = ez(ne) - tA(rf).z
+            IF ABS(dx * nx + dy * ny + dz * nz) / nl > .0001 * sz + 1E-6 THEN ln = 0: EXIT SUB
+            d20 = dx * e1x + dy * e1y + dz * e1z: d21 = dx * e2x + dy * e2y + dz * e2z
+            a = (d11 * d20 - d01 * d21) / den: b = (d00 * d21 - d01 * d20) / den
+            uu = tU(3 * rf) + a * (tU(3 * rf + 1) - tU(3 * rf)) + b * (tU(3 * rf + 2) - tU(3 * rf))
+            vv = tW(3 * rf) + a * (tW(3 * rf + 1) - tW(3 * rf)) + b * (tW(3 * rf + 2) - tW(3 * rf))
+            IF ABS(uu - eu(ne)) > .002 OR ABS(vv - ev(ne)) > .002 THEN ln = 0: EXIT SUB
+            ne = ne + 1
+        NEXT
+    NEXT
+    ' (the outline: edges no other triangle of it has the other way round)
+    FOR i = 0 TO ne - 1
+        bnd(i) = -1
+        FOR j = 0 TO ne - 1
+            IF j <> i THEN
+                IF ExNear(ex(i), ey(i), ez(i), fx(j), fy(j), fz(j)) AND ExNear(fx(i), fy(i), fz(i), ex(j), ey(j), ez(j)) THEN bnd(i) = 0: EXIT FOR
+            END IF
+        NEXT
+        IF bnd(i) THEN used = used + 1
+    NEXT
+    IF used < 3 OR used > 63 THEN ln = 0: EXIT SUB
+    ' (followed round from the first)
+    FOR i = 0 TO ne - 1
+        IF bnd(i) THEN EXIT FOR
+    NEXT
+    k = 0
+    DO
+        lx(k) = ex(i): ly(k) = ey(i): lz(k) = ez(i): lu(k) = eu(i): lv(k) = ev(i): took(i) = -1: k = k + 1
+        c = -1
+        FOR j = 0 TO ne - 1
+            IF bnd(j) AND took(j) = 0 THEN
+                IF ExNear(ex(j), ey(j), ez(j), fx(i), fy(i), fz(i)) THEN c = j: EXIT FOR
+            END IF
+        NEXT
+        IF c < 0 THEN EXIT DO
+        i = c
+    LOOP UNTIL k > 63
+    IF k <> used THEN ln = 0: EXIT SUB ' (holes in it, or pieces: not one outline)
+    ln = k
+END SUB
+
+SUB ExCorner (t AS LONG, c, x, y, z)
+    SELECT CASE c
+        CASE 0: x = tA(t).x: y = tA(t).y: z = tA(t).z
+        CASE 1: x = tB(t).x: y = tB(t).y: z = tB(t).z
+        CASE ELSE: x = tC(t).x: y = tC(t).y: z = tC(t).z
+    END SELECT
+END SUB
+
+FUNCTION ExNear (ax, ay, az, bx, by, bz)
+    ExNear = (ABS(ax - bx) < 1E-5 AND ABS(ay - by) < 1E-5 AND ABS(az - bz) < 1E-5)
+END FUNCTION
+
+' Piece a (n corners, cell i, j) cut into triangles as triangle t's: ears off its outline (in
+' picture terms, where it's flat), spots brought into the cell's 0..1
+SUB ExEars (n, ax(), ay(), az(), au(), av(), t AS LONG, i, j, cnt AS LONG)
+    DIM ix(63), m, k, p, q, r, ar, cr, ok, z, tries, w AS LONG, cu(63), cv(63), nx, ny, nz
+    m = n
+    FOR k = 0 TO m - 1: ix(k) = k: cu(k) = au(k): cv(k) = av(k): NEXT
+    FOR k = 0 TO m - 1 ' (which way round it goes)
+        ar = ar + cu(k) * cv((k + 1) MOD m) - cu((k + 1) MOD m) * cv(k)
+    NEXT
+    IF ABS(ar) < 1E-9 THEN ' (its picture squashed to a line: the ears found on the face itself, seen square on)
+        FOR k = 0 TO m - 1
+            z = (k + 1) MOD m
+            nx = nx + (ay(k) - ay(z)) * (az(k) + az(z)): ny = ny + (az(k) - az(z)) * (ax(k) + ax(z)): nz = nz + (ax(k) - ax(z)) * (ay(k) + ay(z))
+        NEXT
+        FOR k = 0 TO m - 1
+            IF ABS(nx) >= ABS(ny) AND ABS(nx) >= ABS(nz) THEN
+                cu(k) = ay(k): cv(k) = az(k)
+            ELSEIF ABS(ny) >= ABS(nz) THEN
+                cu(k) = az(k): cv(k) = ax(k)
+            ELSE
+                cu(k) = ax(k): cv(k) = ay(k)
+            END IF
+        NEXT
+        ar = 0
+        FOR k = 0 TO m - 1
+            ar = ar + cu(k) * cv((k + 1) MOD m) - cu((k + 1) MOD m) * cv(k)
+        NEXT
+        IF ABS(ar) < 1E-14 THEN EXIT SUB ' (no area at all)
+    END IF
+    ar = SGN(ar)
+    k = 0
+    DO WHILE m >= 3
+        p = ix((k + m - 1) MOD m): q = ix(k MOD m): r = ix((k + 1) MOD m)
+        ok = -1
+        IF m > 3 THEN
+            cr = ((cu(q) - cu(p)) * (cv(r) - cv(q)) - (cv(q) - cv(p)) * (cu(r) - cu(q))) * ar
+            IF cr <= 1E-12 THEN ok = 0
+            IF ok THEN
+                FOR z = 0 TO m - 1
+                    IF ix(z) <> p AND ix(z) <> q AND ix(z) <> r THEN
+                        IF ExInTri(cu(ix(z)), cv(ix(z)), cu(p), cv(p), cu(q), cv(q), cu(r), cv(r), ar) THEN ok = 0: EXIT FOR
+                    END IF
+                NEXT
+            END IF
+            IF ok = 0 THEN
+                tries = tries + 1
+                IF tries > m THEN ok = -1 ' (none clean: this one anyway, so it ends)
+            END IF
+        END IF
+        IF ok THEN
+            IF sceneTN + cnt + 1 >= MAX_TRI THEN EXIT SUB
+            cnt = cnt + 1: w = sceneTN + cnt
+            TriCopy t, w
+            tA(w).x = ax(p): tA(w).y = ay(p): tA(w).z = az(p): tU(3 * w) = ExIn(au(p) - i): tW(3 * w) = ExIn(av(p) - j)
+            tB(w).x = ax(q): tB(w).y = ay(q): tB(w).z = az(q): tU(3 * w + 1) = ExIn(au(q) - i): tW(3 * w + 1) = ExIn(av(q) - j)
+            tC(w).x = ax(r): tC(w).y = ay(r): tC(w).z = az(r): tU(3 * w + 2) = ExIn(au(r) - i): tW(3 * w + 2) = ExIn(av(r) - j)
+            IF m = 3 THEN EXIT DO
+            FOR z = k MOD m TO m - 2: ix(z) = ix(z + 1): NEXT
+            m = m - 1: tries = 0
+            k = k MOD m
+        ELSE
+            k = (k + 1) MOD m
+        END IF
+    LOOP
+END SUB
+
+FUNCTION ExIn (v)
+    IF v < 0 THEN ExIn = 0 ELSE IF v > 1 THEN ExIn = 1 ELSE ExIn = v
+END FUNCTION
+
+' Point (x, y) inside triangle a b c (wound the way ar says), its edges not counted
+FUNCTION ExInTri (x, y, ax, ay, bx, by, cx, cy, ar)
+    DIM d1, d2, d3
+    d1 = ((bx - ax) * (y - ay) - (by - ay) * (x - ax)) * ar
+    d2 = ((cx - bx) * (y - by) - (cy - by) * (x - bx)) * ar
+    d3 = ((ax - cx) * (y - cy) - (ay - cy) * (x - cx)) * ar
+    ExInTri = (d1 > 1E-12 AND d2 > 1E-12 AND d3 > 1E-12)
+END FUNCTION
+
+' Polygon a (n corners: place, spot) cut by spot line (axis 0: u, 1: v) = c, keeping the side s (1: over it, -1: under)
+SUB ExClip (n, ax(), ay(), az(), au(), av(), bx(), by(), bz(), bu(), bv(), axis, c, s)
+    DIM k, j, m, da, db, f
+    m = 0
+    FOR k = 0 TO n - 1
+        j = (k + 1) MOD n
+        IF axis = 0 THEN da = (au(k) - c) * s: db = (au(j) - c) * s ELSE da = (av(k) - c) * s: db = (av(j) - c) * s
+        IF da >= 0 THEN bx(m) = ax(k): by(m) = ay(k): bz(m) = az(k): bu(m) = au(k): bv(m) = av(k): m = m + 1
+        IF (da >= 0) <> (db >= 0) AND m < 63 THEN
+            f = da / (da - db)
+            bx(m) = ax(k) + (ax(j) - ax(k)) * f: by(m) = ay(k) + (ay(j) - ay(k)) * f: bz(m) = az(k) + (az(j) - az(k)) * f
+            bu(m) = au(k) + (au(j) - au(k)) * f: bv(m) = av(k) + (av(j) - av(k)) * f: m = m + 1
+        END IF
+        IF m >= 63 THEN EXIT FOR
+    NEXT
+    FOR k = 0 TO m - 1: ax(k) = bx(k): ay(k) = by(k): az(k) = bz(k): au(k) = bu(k): av(k) = bv(k): NEXT
+    n = m
+END SUB
+
+' What the texture holds, and where
+SUB ExAtlas
+    DIM t AS LONG, k, b, x, y, n, free, pass, dx, dy, ok
+    DIM used(EX_BLK * EX_BLK - 1) AS _BYTE
+    exPicN = 0
+    FOR t = 1 TO sceneTN
+        k = tTex(t)
+        IF k > 0 AND exPicN < EX_PICS THEN
+            IF picW(k) > 0 AND ExTexOf(t) = 0 THEN exPicN = exPicN + 1: exPic(exPicN) = k
+        END IF
+    NEXT
+    ExColours
+    exMode = 0: IF exPicN = 0 THEN EXIT SUB
+    IF exPicN = 1 THEN ' (the colours in squares no face's picture reaches)
+        FOR t = 1 TO sceneTN
+            IF ExTexOf(t) THEN ExMarkUsed t, used()
+        NEXT
+        n = 0
+        FOR pass = 0 TO 1 ' (squares with nothing used round them first)
+            FOR b = 0 TO EX_BLK * EX_BLK - 1
+                IF n >= exColN THEN EXIT FOR
+                IF used(b) = 0 THEN
+                    ok = -1
+                    IF pass = 0 THEN
+                        x = b MOD EX_BLK: y = b \ EX_BLK
+                        FOR dy = -1 TO 1
+                            FOR dx = -1 TO 1
+                                IF x + dx >= 0 AND x + dx < EX_BLK AND y + dy >= 0 AND y + dy < EX_BLK THEN
+                                    IF used((y + dy) * EX_BLK + x + dx) THEN ok = 0
+                                END IF
+                            NEXT
+                        NEXT
+                    END IF
+                    IF ok THEN exBlk(n) = b: used(b) = 2: n = n + 1
+                END IF
+            NEXT
+        NEXT
+        IF n >= exColN THEN exMode = 1: EXIT SUB
+    END IF
+    exMode = 2: n = exPicN: IF exColN > 0 THEN n = n + 1
+    exGrid = 2: IF n > 4 THEN exGrid = 4
+END SUB
+
+' The squares (EX_BLK across) triangle t's picture spots reach
+SUB ExMarkUsed (t AS LONG, used() AS _BYTE)
+    DIM k, x0, x1, y0, y1, x, y, i, j, px, py, d, a, b, xs(2), ys(2), hit
+    FOR k = 0 TO 2
+        xs(k) = tU(3 * t + k) * EX_BLK: ys(k) = tW(3 * t + k) * EX_BLK
+    NEXT
+    x0 = INT(xs(0)): x1 = x0: y0 = INT(ys(0)): y1 = y0
+    FOR k = 1 TO 2
+        IF INT(xs(k)) < x0 THEN x0 = INT(xs(k))
+        IF INT(xs(k)) > x1 THEN x1 = INT(xs(k))
+        IF INT(ys(k)) < y0 THEN y0 = INT(ys(k))
+        IF INT(ys(k)) > y1 THEN y1 = INT(ys(k))
+    NEXT
+    IF x0 < 0 OR y0 < 0 OR x1 >= EX_BLK OR y1 >= EX_BLK THEN ' (it repeats past the picture: all of it's used)
+        FOR i = 0 TO EX_BLK * EX_BLK - 1: used(i) = 1: NEXT
+        EXIT SUB
+    END IF
+    d = (ys(1) - ys(2)) * (xs(0) - xs(2)) + (xs(2) - xs(1)) * (ys(0) - ys(2))
+    FOR y = y0 TO y1
+        FOR x = x0 TO x1
+            IF used(y * EX_BLK + x) = 0 THEN
+                hit = 0
+                FOR k = 0 TO 2
+                    IF xs(k) >= x AND xs(k) <= x + 1 AND ys(k) >= y AND ys(k) <= y + 1 THEN hit = -1
+                NEXT
+                IF hit = 0 AND ABS(d) > 1E-12 THEN
+                    FOR i = 0 TO 6
+                        FOR j = 0 TO 6
+                            px = x + i / 6: py = y + j / 6
+                            a = ((ys(1) - ys(2)) * (px - xs(2)) + (xs(2) - xs(1)) * (py - ys(2))) / d
+                            b = ((ys(2) - ys(0)) * (px - xs(2)) + (xs(0) - xs(2)) * (py - ys(2))) / d
+                            IF a >= -.000001 AND b >= -.000001 AND 1 - a - b >= -.000001 THEN hit = -1: EXIT FOR
+                        NEXT
+                        IF hit THEN EXIT FOR
+                    NEXT
+                END IF
+                IF hit THEN used(y * EX_BLK + x) = 1
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+' Where colour square k's middle is on the texture (0..1, from the top)
+SUB ExColSpot (k0, u, v)
+    DIM c, k
+    k = k0: IF k >= exColN THEN k = 0
+    SELECT CASE exMode
+        CASE 0: u = ((k MOD 8) + .5) / 8: v = ((k \ 8) + .5) / 8
+        CASE 1: u = ((exBlk(k) MOD EX_BLK) + .5) / EX_BLK: v = ((exBlk(k) \ EX_BLK) + .5) / EX_BLK
+        CASE ELSE
+            c = exPicN ' (the square after the pictures')
+            u = ((c MOD exGrid) + ((k MOD 8) + .5) / 8) / exGrid: v = ((c \ exGrid) + ((k \ 8) + .5) / 8) / exGrid
+    END SELECT
+END SUB
+
+' The model's colours (of faces with no picture), each a square of the texture
 SUB ExColours
     DIM t AS LONG, k, found
     exColN = 0
     FOR t = 1 TO sceneTN
+        IF ExTexOf(t) THEN _CONTINUE
         found = -1
         FOR k = 0 TO exColN - 1
             IF exCol(k) = tCol(t) THEN found = k: EXIT FOR
@@ -85,7 +450,7 @@ SUB ExFrameWork
 END SUB
 
 SUB WriteObj (f$, n$, tex$, neon)
-    DIM fh, t AS LONG, k, a AS LONG, ti
+    DIM fh, t AS LONG, k, a AS LONG, ti, u, v, vtN AS LONG, pk, l$
     fh = FREEFILE: OPEN f$ FOR OUTPUT AS #fh
     IF neon THEN
         PRINT #fh, "# NEON-CASTER prop: " + n$ + " - made by bu1ld0r (edit models/" + n$ + ".bld there, not this)"
@@ -97,17 +462,44 @@ SUB WriteObj (f$, n$, tex$, neon)
     PRINT #fh, "# (how many cells across its 8 pictures are)"
     PRINT #fh, "mtllib " + n$ + ".mtl"
     PRINT #fh, "usemtl " + n$
+    ' (each corner once: the triangles name them)
+    EmClear: EmWeldStart sceneTN * 3
+    REDIM woV(3 * sceneTN + 3) AS LONG
     FOR t = 1 TO sceneTN
-        PRINT #fh, "v " + Fmt$(tA(t).x) + " " + Fmt$(tA(t).y) + " " + Fmt$(tA(t).z)
-        PRINT #fh, "v " + Fmt$(tB(t).x) + " " + Fmt$(tB(t).y) + " " + Fmt$(tB(t).z)
-        PRINT #fh, "v " + Fmt$(tC(t).x) + " " + Fmt$(tC(t).y) + " " + Fmt$(tC(t).z)
+        woV(3 * t) = EmWeld&(tA(t).x, tA(t).y, tA(t).z)
+        woV(3 * t + 1) = EmWeld&(tB(t).x, tB(t).y, tB(t).z)
+        woV(3 * t + 2) = EmWeld&(tC(t).x, tC(t).y, tC(t).z)
+    NEXT
+    FOR a = 1 TO swN
+        PRINT #fh, "v " + Fmt$(swX(a)) + " " + Fmt$(swY(a)) + " " + Fmt$(swZ(a))
     NEXT
     FOR k = 0 TO EX_COLS - 1 ' (each colour's square's middle; OBJ's v runs up from the bottom)
-        PRINT #fh, "vt " + Fmt$(((k MOD 8) + .5) / 8) + " " + Fmt$(1 - ((k \ 8) + .5) / 8)
+        ExColSpot k, u, v
+        PRINT #fh, "vt " + Fmt$(u) + " " + Fmt$(1 - v)
     NEXT
+    vtN = EX_COLS
     FOR t = 1 TO sceneTN
-        a = (t - 1) * 3 + 1: ti = ExColIdx(tCol(t)) + 1
-        PRINT #fh, "f" + STR$(a) + "/" + LTRIM$(STR$(ti)) + STR$(a + 1) + "/" + LTRIM$(STR$(ti)) + STR$(a + 2) + "/" + LTRIM$(STR$(ti))
+        pk = ExTexOf(t)
+        IF pk THEN ' (a picture: each corner its own spot)
+            l$ = "f"
+            FOR k = 0 TO 2
+                u = tU(3 * t + k): v = tW(3 * t + k)
+                IF exMode = 2 THEN
+                    IF u < 0 THEN u = 0
+                    IF u > 1 THEN u = 1
+                    IF v < 0 THEN v = 0
+                    IF v > 1 THEN v = 1
+                    u = (((pk - 1) MOD exGrid) + u) / exGrid: v = (((pk - 1) \ exGrid) + v) / exGrid
+                END IF
+                PRINT #fh, "vt " + Fmt$(u) + " " + Fmt$(1 - v)
+                vtN = vtN + 1
+                l$ = l$ + STR$(woV(3 * t + k)) + "/" + LTRIM$(STR$(vtN))
+            NEXT
+            PRINT #fh, l$
+        ELSE
+            ti = ExColIdx(tCol(t)) + 1
+            PRINT #fh, "f" + STR$(woV(3 * t)) + "/" + LTRIM$(STR$(ti)) + STR$(woV(3 * t + 1)) + "/" + LTRIM$(STR$(ti)) + STR$(woV(3 * t + 2)) + "/" + LTRIM$(STR$(ti))
+        END IF
     NEXT
     CLOSE #fh
     fh = FREEFILE: OPEN LEFT$(f$, LEN(f$) - 4) + ".mtl" FOR OUTPUT AS #fh
@@ -118,19 +510,65 @@ SUB WriteObj (f$, n$, tex$, neon)
     CLOSE #fh
 END SUB
 
-' The texture: each colour an eighth across, the squares past the last the first's
+' The texture: each colour an eighth across, the squares past the last the
+' first's - or the pictures, and the colours where ExAtlas put them
 SUB WriteTex (f$, size)
-    DIM img&, k, c AS _UNSIGNED LONG, d, b
+    DIM img&, k, c AS _UNSIGNED LONG, d, b, cs, x0, y0
     img& = _NEWIMAGE(size, size, 32)
     d = _DEST: _DEST img&
-    b = size \ 8
-    FOR k = 0 TO EX_COLS - 1
-        c = exCol(0): IF k < exColN THEN c = exCol(k)
-        LINE ((k MOD 8) * b, (k \ 8) * b)-((k MOD 8) * b + b - 1, (k \ 8) * b + b - 1), c, BF
-    NEXT
+    SELECT CASE exMode
+        CASE 0
+            b = size \ 8
+            FOR k = 0 TO EX_COLS - 1
+                c = exCol(0): IF k < exColN THEN c = exCol(k)
+                LINE ((k MOD 8) * b, (k \ 8) * b)-((k MOD 8) * b + b - 1, (k \ 8) * b + b - 1), c, BF
+            NEXT
+        CASE 1
+            ExBlit exPic(1), img&, 0, 0, size, size
+            b = size \ EX_BLK
+            FOR k = 0 TO exColN - 1
+                x0 = (exBlk(k) MOD EX_BLK) * b: y0 = (exBlk(k) \ EX_BLK) * b
+                LINE (x0, y0)-(x0 + b - 1, y0 + b - 1), exCol(k), BF
+            NEXT
+        CASE ELSE
+            cs = size \ exGrid
+            FOR k = 1 TO exPicN
+                ExBlit exPic(k), img&, ((k - 1) MOD exGrid) * cs, ((k - 1) \ exGrid) * cs, cs, cs
+            NEXT
+            IF exColN > 0 THEN
+                x0 = (exPicN MOD exGrid) * cs: y0 = (exPicN \ exGrid) * cs: b = cs \ 8
+                FOR k = 0 TO EX_COLS - 1
+                    c = exCol(0): IF k < exColN THEN c = exCol(k)
+                    LINE (x0 + (k MOD 8) * b, y0 + (k \ 8) * b)-(x0 + (k MOD 8) * b + b - 1, y0 + (k \ 8) * b + b - 1), c, BF
+                NEXT
+            END IF
+    END SELECT
     _DEST d
     _SAVEIMAGE f$, img&
     _FREEIMAGE img&
+END SUB
+
+' Picture k put in img& at x0, y0, w x h (each pixel the average of the picture's under it)
+SUB ExBlit (k, img&, x0, y0, w, h)
+    DIM m AS _MEM, x, y, sx0 AS LONG, sx1 AS LONG, sy0 AS LONG, sy1 AS LONG, i AS LONG, j AS LONG, n AS LONG
+    DIM r AS LONG, g AS LONG, b AS LONG, a AS LONG, c AS _UNSIGNED LONG, pw AS LONG, ph AS LONG
+    pw = picW(k): ph = picH(k): IF pw = 0 OR w <= 0 OR h <= 0 THEN EXIT SUB
+    m = _MEMIMAGE(img&)
+    FOR y = 0 TO h - 1
+        sy0 = (y * ph) \ h: sy1 = ((y + 1) * ph) \ h - 1: IF sy1 < sy0 THEN sy1 = sy0
+        FOR x = 0 TO w - 1
+            sx0 = (x * pw) \ w: sx1 = ((x + 1) * pw) \ w - 1: IF sx1 < sx0 THEN sx1 = sx0
+            r = 0: g = 0: b = 0: a = 0: n = 0
+            FOR j = sy0 TO sy1
+                FOR i = sx0 TO sx1
+                    c = picPix(picOff(k) + j * pw + i)
+                    r = r + _RED32(c): g = g + _GREEN32(c): b = b + _BLUE32(c): a = a + _ALPHA32(c): n = n + 1
+                NEXT
+            NEXT
+            _MEMPUT m, m.OFFSET + ((y0 + y) * _WIDTH(img&) + x0 + x) * 4, _RGBA32(r \ n, g \ n, b \ n, a \ n) AS _UNSIGNED LONG
+        NEXT
+    NEXT
+    _MEMFREE m
 END SUB
 
 ' Picture f of the 8 (f x 45 degrees round, 0: its front), as models.py

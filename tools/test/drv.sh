@@ -2,7 +2,10 @@
 #   win; clk X Y [BUTTON]; mv X Y; key KEYS; typ TEXT; shot NAME; drag X0 Y0 X1 Y1 X2 Y2
 BT=${BT:-/tmp/claude-1000/bu1ld0r-test}
 export DISPLAY=:99; unset WAYLAND_DISPLAY
-win() { PID=$(pgrep -x bu1ld0r.run | head -1); W=$(xdotool search --pid $PID 2>/dev/null | tail -1); }
+# (only the test copy - never Rick's own bu1ld0r, which may be running)
+testpid() { pgrep -f '^/tmp/claude-1000/bu1ld0r-test/app/bu1ld0r.run' | head -1; }
+testkill() { pkill -f '^/tmp/claude-1000/bu1ld0r-test/app/bu1ld0r.run'; }
+win() { PID=$(testpid); W=; [ -n "$PID" ] && W=$(xdotool search --pid $PID 2>/dev/null | tail -1); }
 clk() { xdotool mousemove --window $W $1 $2; sleep .25; xdotool click --window $W ${3:-1}; sleep .35; }
 mv() { xdotool mousemove --window $W $1 $2; sleep .3; }
 key() { xdotool key --window $W "$@"; sleep .3; }

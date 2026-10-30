@@ -1,0 +1,6 @@
+bu1ld0r 1
+name lamp
+budget 200
+part cylinder  0 0 0  0 0 0  0.1 0.02 0.1  2A2A36  16  0  name=base
+part sphere  0 0.02 0  0 0 0  0.08 0.06 0.08  FFB030  16  0.5  name=dome
+part tube  0 0.02 0  0 0 0  0.084 0.012 0.084  2A2A36  16  0.9  name=rim

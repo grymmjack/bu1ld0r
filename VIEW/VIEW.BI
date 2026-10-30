@@ -22,10 +22,15 @@ DIM SHARED rOrtho, rSpan ' (rOrtho: a model's picture - flat, rSpan cells across
 DIM SHARED rLX, rLY, rLZ ' (the light: which way it comes from)
 DIM SHARED rShadeLo, rShadeK ' (shade = lo + k x lit)
 DIM SHARED rCull ' (faces turned away left out)
+DIM SHARED rTexSh ' (the shade on the triangle a picture's being drawn on)
 DIM SHARED rGhost ' (drawing the ghost: see-through, and not in rId)
 DIM SHARED rNoInk ' (only rZ and rId filled, no colour: the wireframe's picking)
 DIM SHARED rHole ' (drawing a hole: see-through grey over what's behind, but in rId - a click picks it)
+DIM SHARED wireOn, texOp, wireOp ' (WIRE: the edges drawn over the faces; how solid the faces are, how strong the edges: 0 to 100)
 DIM SHARED viewWire ' (W: the model as lines in its parts' colours - the grid seen through it)
+DIM SHARED gridWalls ' (GRID: the ground's grid also up the two walls away from you - a faint room to see where things are)
+DIM SHARED gridBright ' (0-100: the grid's lines from the backdrop's colour to bright; grid_bright= in bu1ld0r.cfg)
+DIM SHARED gridWX, gridWZ, gridH ' (the walls drawn: x = gridWX, z = gridWZ, as tall as gridH)
 
 DIM SHARED viewImg&, ovImg&, viewDirty, ovDirty
 DIM SHARED hoverPart, hoverTri AS LONG

@@ -1,0 +1,357 @@
+''
+' bu1ld0r - MODEL/BAKE.BM
+' =============================================================================
+' Changes to the model made for good: a hole applied (cut into the parts it
+' reaches, for good: they become mesh parts), a prefab's use unlinked (its
+' parts become the model's), groups; and a prefab renamed or moved (its
+' file, and every use of it in prefabs/ and models/).
+'
+
+' APPLY: each selected hole (or KEEP) made for good - every solid part
+' before it that it reaches (its group's, if it's in one) becomes a mesh
+' part of what's left; then the hole goes
+SUB HoleApply
+    DIM h, q, cnt, gone, i, j, hasOne, t0 AS LONG, t1 AS LONG, t2 AS LONG, m1 AS LONG, m2 AS LONG, la AS LONG, lb AS LONG, id AS LONG
+    DIM lo AS V3, hi AS V3, hlo AS V3, hhi AS V3
+    FOR h = 1 TO pN
+        IF pSel(h) AND pHole(h) THEN hasOne = -1
+    NEXT
+    IF hasOne = 0 THEN Msg "Select a hole (C makes one), then APPLY cuts it for good": EXIT SUB
+    UndoPush
+    REDIM del(MAX_PARTS) AS _BYTE
+    h = 1
+    DO WHILE h <= pN
+        IF pSel(h) AND pHole(h) THEN
+            t0 = tN: usN = 0: MeshItem h, h: t1 = tN: TriBounds t0 + 1, t1, hlo, hhi
+            FOR q = 1 TO h - 1
+                IF pHole(q) = 0 AND del(q) = 0 AND (pGrp(h) = 0 OR pGrp(h) = pGrp(q)) THEN
+                    tN = t1: usN = 0: MeshItem q, q: t2 = tN
+                    TriBounds t1 + 1, t2, lo, hi
+                    IF pKeep(h) OR BoxesMeet(lo, hi, hlo, hhi) THEN
+                        CsgMark m1, m2
+                        la = CsgFromTris&(t1 + 1, t2, 0)
+                        lb = CsgFromTris&(t0 + 1, t1, -1)
+                        la = CsgBool&(la, lb, pKeep(h))
+                        CsgEmit la
+                        CsgRelease m1, m2
+                        IF tN > t2 THEN
+                            id = EmFromTris&(t2 + 1, tN, q, 0)
+                            MakeMeshPart q, id
+                        ELSE
+                            del(q) = -1: gone = gone + 1 ' (nothing left of it)
+                        END IF
+                        cnt = cnt + 1
+                    END IF
+                END IF
+            NEXT
+            tN = t0
+            del(h) = -1
+        END IF
+        h = h + 1
+    LOOP
+    j = 0
+    FOR i = 1 TO pN
+        IF del(i) = 0 THEN j = j + 1: PartCopy i, j: pSel(j) = 0
+    NEXT
+    pN = j
+    ModelChanged
+    IF cnt = 0 THEN
+        Msg "Applied: it reached no solid part before it in the list, so it just went (Ctrl+Z: back)"
+    ELSE
+        Msg "Cut for good: " + LTRIM$(STR$(cnt)) + " part" + IIFS$(cnt = 1, "", "s") + " made mesh parts" + IIFS$(gone > 0, " (" + LTRIM$(STR$(gone)) + " with nothing left: gone)", "") + ". E edits their faces. Ctrl+Z: as it was"
+    END IF
+END SUB
+
+' UNLINK: each selected prefab use replaced by its prefab's parts, as
+' parts of the model's own (a group of them: a click picks them all). A
+' part its use's sizes would lean (a size along a turned part's slant)
+' becomes a mesh part.
+SUB UseUnlink
+    DIM u, pf, n, j AS LONG, i, k, g, cnt, room, t0 AS LONG, id AS LONG, ex, ey, ez, ok
+    DIM a(8), b(8), m(8), s(2), r(8), px#, py#, pz#, k2
+    FOR u = 1 TO pN
+        IF pSel(u) AND pKind(u) = K_USE THEN cnt = cnt + 1
+    NEXT
+    IF cnt = 0 THEN Msg "Select a prefab put in the model first, then UNLINK makes its parts the model's own": EXIT SUB
+    UndoPush
+    cnt = 0
+    u = 1
+    DO WHILE u <= pN
+        pf = 0: IF pSel(u) AND pKind(u) = K_USE THEN pf = PfFind(pRef$(u))
+        IF pf > 0 THEN
+            n = pfCnt(pf)
+            IF pN - 1 + n > MAX_PARTS THEN Msg "No room in the model for its parts (" + LTRIM$(STR$(MAX_PARTS)) + " at most)": EXIT DO
+            g = GroupNew
+            PartCopy u, P_SWAP ' (the use, kept while its room is made)
+            FOR i = pN TO u + 1 STEP -1: PartCopy i, i + n - 1: pSel(i + n - 1) = pSel(i): NEXT
+            pN = pN + n - 1
+            RotMat pRX(P_SWAP), pRY(P_SWAP), pRZ(P_SWAP), a()
+            FOR k = 0 TO 2 ' (the use's turns, then its scale: A = R S)
+                a(k * 3) = a(k * 3) * pSX(P_SWAP): a(k * 3 + 1) = a(k * 3 + 1) * pSY(P_SWAP): a(k * 3 + 2) = a(k * 3 + 2) * pSZ(P_SWAP)
+            NEXT
+            FOR k = 0 TO n - 1
+                j = pfFirst(pf) + 1 + k: i = u + k
+                PartCopy j, i: pSel(i) = -1: pGrp(i) = g: pHide(i) = 0
+                px# = a(0) * pX(j) + a(1) * pY(j) + a(2) * pZ(j)
+                py# = a(3) * pX(j) + a(4) * pY(j) + a(5) * pZ(j)
+                pz# = a(6) * pX(j) + a(7) * pY(j) + a(8) * pZ(j)
+                pX(i) = VAL(Fmt$(pX(P_SWAP) + px#)): pY(i) = VAL(Fmt$(pY(P_SWAP) + py#)): pZ(i) = VAL(Fmt$(pZ(P_SWAP) + pz#))
+                RotMat pRX(j), pRY(j), pRZ(j), b()
+                MatMul a(), b(), m()
+                ' (each column: one of the part's own axes, as the world has it - square to the others, or it leans)
+                ok = -1
+                FOR k2 = 0 TO 2
+                    s(k2) = SQR(m(k2) ^ 2 + m(3 + k2) ^ 2 + m(6 + k2) ^ 2): IF s(k2) < 1E-9 THEN ok = 0
+                NEXT
+                IF ok THEN
+                    IF ABS(m(0) * m(1) + m(3) * m(4) + m(6) * m(7)) > .0001 * s(0) * s(1) THEN ok = 0
+                    IF ABS(m(0) * m(2) + m(3) * m(5) + m(6) * m(8)) > .0001 * s(0) * s(2) THEN ok = 0
+                    IF ABS(m(1) * m(2) + m(4) * m(5) + m(7) * m(8)) > .0001 * s(1) * s(2) THEN ok = 0
+                END IF
+                IF ok THEN
+                    FOR k2 = 0 TO 2: r(k2) = m(k2) / s(k2): r(3 + k2) = m(3 + k2) / s(k2): r(6 + k2) = m(6 + k2) / s(k2): NEXT
+                    MatTurns r(), ex, ey, ez
+                    pRX(i) = VAL(Fmt$(ex)): pRY(i) = VAL(Fmt$(ey)): pRZ(i) = VAL(Fmt$(ez))
+                    pSX(i) = PosSize(VAL(Fmt$(s(0) * pSX(j)))): pSY(i) = PosSize(VAL(Fmt$(s(1) * pSY(j)))): pSZ(i) = PosSize(VAL(Fmt$(s(2) * pSZ(j))))
+                ELSE ' (it leans: its triangles as they are in the world, a mesh part where it stood)
+                    t0 = tN
+                    UseOne P_SWAP, j
+                    pRX(i) = 0: pRY(i) = 0: pRZ(i) = 0: pSX(i) = 1: pSY(i) = 1: pSZ(i) = 1
+                    id = EmFromTris&(t0 + 1, tN, i, 0): tN = t0
+                    MakeMeshPart i, id
+                END IF
+                IF _ALPHA32(pTint(P_SWAP)) THEN TintPart i, pTint(P_SWAP)
+            NEXT
+            u = u + n: cnt = cnt + 1
+        ELSE
+            u = u + 1
+        END IF
+    LOOP
+    ModelChanged
+    IF cnt THEN Msg "Unlinked: its parts are the model's own now, grouped (a click picks them all; G ungroups). Ctrl+Z: linked again" ELSE Msg "Its prefab isn't in prefabs/: nothing to unlink"
+END SUB
+
+' Prefab part j made as it is in use u (u's place, turns and scale round it): its triangles, at tN on
+SUB UseOne (u, j AS LONG)
+    usN = 1
+    usSX(1) = pSX(u): usSY(1) = pSY(u): usSZ(1) = pSZ(u)
+    usCX(1) = DCos(pRX(u)): usSXr(1) = DSin(pRX(u))
+    usCY(1) = DCos(pRY(u)): usSYr(1) = DSin(pRY(u))
+    usCZ(1) = DCos(pRZ(u)): usSZr(1) = DSin(pRZ(u))
+    usPX(1) = pX(u): usPY(1) = pY(u): usPZ(1) = pZ(u): usTint(1) = 0
+    MeshItem j, j
+    usN = 0
+END SUB
+
+' A use's tint put on part i for good (its colour, its mesh's, or its own use's tint)
+SUB TintPart (i, t AS _UNSIGNED LONG)
+    DIM f AS LONG
+    usN = 1: usTint(1) = t
+    SELECT CASE pKind(i)
+        CASE K_USE
+            IF _ALPHA32(pTint(i)) = 0 THEN pTint(i) = t
+        CASE K_MESH
+            EmLoad pMesh(i)
+            FOR f = 1 TO sfN: sfCol(f) = TintCol~&(sfCol(f)): NEXT
+            pMesh(i) = EmWrite&: pCol(i) = TintCol~&(pCol(i))
+        CASE ELSE
+            pCol(i) = TintCol~&(pCol(i))
+    END SELECT
+    usN = 0
+END SUB
+
+' A colour put on part i: a shape's, every face of a mesh part's, a prefab's use's tint
+SUB PartColour (i, c AS _UNSIGNED LONG)
+    DIM a, f AS LONG
+    SELECT CASE pKind(i)
+        CASE K_USE
+            a = _ALPHA32(pTint(i)): IF a = 0 THEN a = 128
+            pTint(i) = _RGBA32(_RED32(c), _GREEN32(c), _BLUE32(c), a)
+        CASE K_MESH
+            EmLoad pMesh(i)
+            FOR f = 1 TO sfN: sfCol(f) = c: NEXT
+            pMesh(i) = EmWrite&: pCol(i) = c
+        CASE ELSE
+            pCol(i) = c
+    END SELECT
+END SUB
+
+' ---------------------------------------------------------------- groups
+
+FUNCTION GroupNew
+    DIM i, g
+    FOR i = 1 TO pN
+        IF pGrp(i) > g THEN g = pGrp(i)
+    NEXT
+    GroupNew = g + 1
+END FUNCTION
+
+' G: the selected parts made a group (a click on one picks them all; a hole
+' in it cuts only them) - or, if they're one group already, ungrouped
+SUB GroupToggle
+    DIM i, g, same, n
+    IF SelCount = 0 THEN Msg "Select some parts first (Shift adds), then G groups them": EXIT SUB
+    same = -1: g = -1
+    FOR i = 1 TO pN
+        IF pSel(i) THEN
+            IF g = -1 THEN g = pGrp(i)
+            IF pGrp(i) <> g OR pGrp(i) = 0 THEN same = 0
+        END IF
+    NEXT
+    UndoPush
+    IF same THEN
+        FOR i = 1 TO pN
+            IF pSel(i) THEN pGrp(i) = 0
+        NEXT
+        Msg "Ungrouped: each part on its own again (a hole among them cuts everything before it)"
+    ELSE
+        g = GroupNew
+        FOR i = 1 TO pN
+            IF pSel(i) THEN pGrp(i) = g: n = n + 1
+        NEXT
+        GroupGather g
+        Msg LTRIM$(STR$(n)) + " parts grouped (group" + STR$(g) + "): a click picks them all, a hole among them cuts only them. G again: ungroup"
+    END IF
+    ModelChanged
+END SUB
+
+' Group g's parts brought together in the list, where its first one is
+' (one folder in the parts list), each keeping its order
+SUB GroupGather (g)
+    DIM i, j, k, m
+    FOR i = 1 TO pN
+        IF pGrp(i) = g THEN EXIT FOR
+    NEXT
+    k = i
+    FOR j = i + 1 TO pN
+        IF pGrp(j) = g THEN
+            k = k + 1
+            FOR m = j TO k + 1 STEP -1: PartSwap m, m - 1: NEXT
+        END IF
+    NEXT
+END SUB
+
+' Part p's group picked with it (or let go with it)
+SUB GroupSelect (p)
+    DIM i
+    IF p < 1 OR p > pN THEN EXIT SUB
+    IF pGrp(p) = 0 THEN EXIT SUB
+    FOR i = 1 TO pN
+        IF pGrp(i) = pGrp(p) THEN pSel(i) = pSel(p)
+    NEXT
+END SUB
+
+' K: the selection a KEEP hole (only where it overlaps the parts before it is kept), or a part again
+SUB KeepToggle
+    DIM i, mk
+    IF TplOn THEN
+        IF pHole(P_TPL) AND pKeep(P_TPL) THEN pHole(P_TPL) = 0: pKeep(P_TPL) = 0 ELSE pHole(P_TPL) = -1: pKeep(P_TPL) = -1
+        GhostRemake
+        Msg IIFS$(pKeep(P_TPL), "It goes down as a KEEP: only where it overlaps the parts before it stays (K: solid)", "It goes down solid (K: a KEEP)")
+        EXIT SUB
+    END IF
+    IF SelCount = 0 THEN Msg "Select a part first (K makes it a KEEP: only where it overlaps stays)": EXIT SUB
+    FOR i = 1 TO pN
+        IF pSel(i) AND (pHole(i) = 0 OR pKeep(i) = 0) THEN mk = -1
+    NEXT
+    UndoPush
+    FOR i = 1 TO pN
+        IF pSel(i) THEN pHole(i) = mk: pKeep(i) = mk
+    NEXT
+    ModelChanged
+    Msg IIFS$(mk, "A KEEP: of the solid parts before it, only where they overlap it stays (K: a part again, APPLY: for good)", "A part again")
+END SUB
+
+' ---------------------------------------------------------------- a prefab renamed or moved
+
+' "Panels/Big Toggle" -> "panels/big-toggle": each folder and the name made safe
+FUNCTION PfSafeRef$ (r$)
+    DIM o$, s$, i, ch$
+    FOR i = 1 TO LEN(r$) + 1
+        ch$ = MID$(r$, i, 1)
+        IF ch$ = "/" OR ch$ = "\" OR ch$ = "" THEN
+            IF LEN(LTRIM$(s$)) THEN
+                IF LEN(o$) THEN o$ = o$ + "/"
+                o$ = o$ + SafeName$(s$)
+            END IF
+            s$ = ""
+        ELSE
+            s$ = s$ + ch$
+        END IF
+    NEXT
+    PfSafeRef$ = o$
+END FUNCTION
+
+' Prefab o$ renamed n$ (a folder in it moves it: "panels/toggle"): its file, and every use of it
+SUB PfRename (o$, n$)
+    DIM r$, d$, i, cnt, f$, fh
+    r$ = PfSafeRef$(n$)
+    IF r$ = "" OR r$ = o$ THEN EXIT SUB
+    IF NOT _FILEEXISTS(PfDir$ + o$ + ".bld") THEN Msg "No such prefab: " + o$: EXIT SUB
+    IF _FILEEXISTS(PfDir$ + r$ + ".bld") THEN Msg "There's a prefab called " + r$ + " already: not renamed": EXIT SUB
+    ' (its folders made, as needed)
+    d$ = ""
+    FOR i = 1 TO LEN(r$)
+        IF MID$(r$, i, 1) = "/" THEN
+            d$ = LEFT$(r$, i - 1)
+            IF NOT _DIREXISTS(PfDir$ + d$) THEN MKDIR PfDir$ + d$
+        END IF
+    NEXT
+    NAME PfDir$ + o$ + ".bld" AS PfDir$ + r$ + ".bld"
+    ' Every use of it: in each prefab (read in: pfName$) and each model
+    FOR i = 1 TO pfN
+        f$ = pfName$(i): IF f$ = o$ THEN f$ = r$
+        cnt = cnt + UseRename(PfDir$ + f$ + ".bld", o$, r$)
+    NEXT
+    f$ = _FILES$(appDir$ + "models/")
+    DO WHILE LEN(f$)
+        IF LCASE$(RIGHT$(f$, 4)) = ".bld" THEN cnt = cnt + UseRename(appDir$ + "models/" + f$, o$, r$)
+        f$ = _FILES$
+    LOOP
+    ' The model open, its undo steps, what's being put down
+    FOR i = 1 TO pN
+        IF pKind(i) = K_USE AND pRef$(i) = o$ THEN pRef$(i) = r$
+    NEXT
+    FOR i = 1 TO undoN: undoS$(i) = UseLinesRenamed$(undoS$(i), o$, r$): NEXT
+    FOR i = 1 TO redoN: redoS$(i) = UseLinesRenamed$(redoS$(i), o$, r$): NEXT
+    IF pKind(P_TPL) = K_USE AND pRef$(P_TPL) = o$ THEN pRef$(P_TPL) = r$
+    IF placeRef$ = o$ THEN placeRef$ = r$
+    IF mdlPf$ = o$ THEN mdlPf$ = r$: mdlName$ = PfBase$(r$)
+    binDir$ = PfFolder$(r$)
+    PfLoadAll: BinList
+    meshKey$ = "": meshDirty = -1
+    Msg "Prefab " + o$ + " is " + r$ + " now" + IIFS$(cnt > 0, " - " + LTRIM$(STR$(cnt)) + " file" + IIFS$(cnt = 1, "", "s") + " that use it changed to match", "")
+END SUB
+
+' A .bld's use lines of o$ made r$: -1 if it changed (written back)
+FUNCTION UseRename (f$, o$, r$)
+    DIM fh, t$, u$
+    IF NOT _FILEEXISTS(f$) THEN EXIT FUNCTION
+    fh = FREEFILE: OPEN f$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    u$ = UseLinesRenamed$(t$, o$, r$)
+    IF u$ = t$ THEN EXIT FUNCTION
+    fh = FREEFILE: OPEN f$ FOR OUTPUT AS #fh: PRINT #fh, u$;: CLOSE #fh
+    UseRename = 1
+END FUNCTION
+
+' Text with each "use o$ ..." line's name made r$ (only those lines touched)
+FUNCTION UseLinesRenamed$ (t$, o$, r$)
+    DIM p AS LONG, j AS LONG, l$, o2$, a$, k, last AS LONG, s AS LONG
+    IF INSTR(t$, o$) = 0 THEN UseLinesRenamed$ = t$: EXIT FUNCTION
+    p = 1: last = 1
+    DO WHILE p <= LEN(t$)
+        j = INSTR(p, t$, CHR$(10)): IF j = 0 THEN j = LEN(t$) + 1
+        s = p
+        DO WHILE MID$(t$, s, 1) = " " OR MID$(t$, s, 1) = CHR$(9): s = s + 1: LOOP
+        IF LCASE$(MID$(t$, s, 4)) = "use " THEN
+            l$ = MID$(t$, p, j - p): a$ = LTRIM$(MID$(LTRIM$(l$), 5))
+            k = INSTR(a$, " "): IF k = 0 THEN k = LEN(a$) + 1
+            IF LEFT$(a$, k - 1) = o$ THEN
+                o2$ = o2$ + MID$(t$, last, p - last) + "use " + r$ + MID$(a$, k)
+                last = j
+            END IF
+        END IF
+        p = j + 1
+    LOOP
+    UseLinesRenamed$ = o2$ + MID$(t$, last)
+END FUNCTION

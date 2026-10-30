@@ -14,6 +14,7 @@ REDIM SHARED cgNx(0) AS DOUBLE, cgNy(0) AS DOUBLE, cgNz(0) AS DOUBLE, cgW(0) AS 
 REDIM SHARED cgV0(0) AS LONG, cgVn(0) AS INTEGER, cgNext(0) AS LONG
 REDIM SHARED cgPart(0) AS INTEGER, cgFace(0) AS INTEGER, cgCol(0) AS _UNSIGNED LONG, cgCut(0) AS INTEGER
 REDIM SHARED cgPar(0) AS LONG, cgOn(0) AS INTEGER ' (a piece: the face it was split from; lying on the other's surface)
+REDIM SHARED cgTex(0) AS INTEGER, cgMap(7) AS DOUBLE ' (its picture, 0 none, and where it lies: u = a x + b y + c z + d, then v, from 8p)
 DIM SHARED cgTop AS LONG, cgCap AS LONG
 
 ' Corners: where, and whether the edge from it to the next is one of the shape's own

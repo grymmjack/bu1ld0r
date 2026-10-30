@@ -45,6 +45,7 @@ SUB PfLoadAll
         LOOP
     LOOP
     FOR i = 1 TO nN: PfLoad nm$(i): NEXT
+    MeshGc
     meshDirty = -1
 END SUB
 
@@ -131,7 +132,7 @@ SUB PrefabWrite (r$)
     DIM fh
     askRef$ = ""
     IF ModelUses(r$) THEN Msg "This model uses " + r$ + ": it can't be saved as that prefab (a prefab in itself)": EXIT SUB
-    fh = FREEFILE: OPEN PfDir$ + r$ + ".bld" FOR OUTPUT AS #fh: PRINT #fh, ModelText$;: CLOSE #fh
+    ModelWrite PfDir$ + r$ + ".bld"
     mdlPf$ = r$: mdlDirty = 0
     PfLoadAll: BinList
     Msg "Saved as prefab prefabs/" + r$ + ".bld - it's in the bin. Ctrl+S saves it there; every use of it changes"

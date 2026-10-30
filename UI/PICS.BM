@@ -1,0 +1,975 @@
+''
+' bu1ld0r - UI/PICS.BM
+' =============================================================================
+
+' ---------------------------------------------------------------- the bin's pictures
+
+' What's in the open pictures folder: .., its folders, its PNGs - by name (a folder
+' outside pictures/: the same, with PICTURES first to go back; its refs are paths from /)
+SUB PicBinList
+    DIM f$, a, d$, ext
+    biN = 0
+    IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
+    IF NOT _DIREXISTS(PicDir$ + binPicDir$) THEN binPicDir$ = ""
+    IF LEN(binPicExt$) THEN
+        IF NOT _DIREXISTS(binPicExt$) THEN binPicExt$ = ""
+    END IF
+    ext = (LEN(binPicExt$) > 0)
+    IF ext THEN
+        d$ = binPicExt$
+        biN = 1: biKind(1) = BI_UP: biName$(1) = "PICTURES": biRef$(1) = binPicDir$
+        IF d$ <> "/" THEN biN = 2: biKind(2) = BI_UP: biName$(2) = "..": biRef$(2) = LEFT$(d$, _INSTRREV(LEFT$(d$, LEN(d$) - 1), "/"))
+    ELSE
+        d$ = PicDir$ + binPicDir$
+        IF LEN(binPicDir$) THEN
+            biN = 1: biKind(1) = BI_UP: biName$(1) = ".."
+            biRef$(1) = LEFT$(binPicDir$, _INSTRREV(LEFT$(binPicDir$, LEN(binPicDir$) - 1), "/"))
+        END IF
+    END IF
+    a = biN + 1
+    f$ = _FILES$(d$)
+    DO WHILE LEN(f$)
+        IF RIGHT$(f$, 1) = "/" AND LEFT$(f$, 1) <> "." AND biN < MAX_BI THEN
+            IF ext OR INSTR(f$, " ") = 0 THEN
+                biN = biN + 1: biKind(biN) = BI_DIR: biName$(biN) = LEFT$(f$, LEN(f$) - 1)
+                IF ext THEN biRef$(biN) = d$ + f$ ELSE biRef$(biN) = binPicDir$ + f$
+            END IF
+        END IF
+        f$ = _FILES$
+    LOOP
+    BinSort a, biN
+    a = biN + 1
+    f$ = _FILES$(d$)
+    DO WHILE LEN(f$)
+        IF LCASE$(RIGHT$(f$, 4)) = ".png" AND biN < MAX_BI THEN
+            biN = biN + 1: biKind(biN) = BI_PIC: biName$(biN) = LEFT$(f$, LEN(f$) - 4)
+            IF ext THEN biRef$(biN) = d$ + f$ ELSE biRef$(biN) = binPicDir$ + biName$(biN)
+        END IF
+        f$ = _FILES$
+    LOOP
+    BinSort a, biN
+    binTop = Clamp(binTop, 0, BinMaxTop)
+END SUB
+
+' A bin folder tile's ref$ opened: a path from / is outside pictures/, else one in it
+SUB PicFolderOpen (ref$)
+    IF LEFT$(ref$, 1) = "/" THEN binPicExt$ = ref$ ELSE binPicExt$ = "": binPicDir$ = ref$
+    binTop = 0: BinList
+    CfgSet "pic_dir", binPicDir$: CfgSet "pic_outside", binPicExt$
+    IF LEN(binPicExt$) THEN
+        Msg Tilde$(binPicExt$) + " - a picture from here is copied into pictures/" + binPicDir$ + " when you put it on a face"
+    ELSE
+        Msg "pictures/" + binPicDir$
+    END IF
+END SUB
+
+' The path box's folder typed / pasted (~, a .png in it, file://, or a folder in pictures/)
+SUB PicGoTo (p$)
+    DIM t$, h$, i, r$
+    t$ = LTRIM$(RTRIM$(p$))
+    IF LEN(t$) >= 2 AND (LEFT$(t$, 1) = "'" OR LEFT$(t$, 1) = CHR$(34)) AND RIGHT$(t$, 1) = LEFT$(t$, 1) THEN t$ = MID$(t$, 2, LEN(t$) - 2)
+    IF LCASE$(LEFT$(t$, 7)) = "file://" THEN t$ = MID$(t$, 8)
+    i = INSTR(t$, "%") ' (a URL's %20s and the like)
+    DO WHILE i > 0 AND i <= LEN(t$) - 2
+        r$ = MID$(t$, i + 1, 2)
+        IF LEN(r$) = 2 AND INSTR("0123456789ABCDEFabcdef", LEFT$(r$, 1)) > 0 AND INSTR("0123456789ABCDEFabcdef", RIGHT$(r$, 1)) > 0 THEN
+            t$ = LEFT$(t$, i - 1) + CHR$(VAL("&H" + r$)) + MID$(t$, i + 3)
+        END IF
+        i = INSTR(i + 1, t$, "%")
+    LOOP
+    IF LEN(t$) = 0 THEN EXIT SUB
+    h$ = ENVIRON$("HOME")
+    IF t$ = "~" THEN t$ = h$ + "/"
+    IF LEFT$(t$, 2) = "~/" THEN t$ = h$ + MID$(t$, 2)
+    IF LCASE$(t$) = "pictures" OR LCASE$(t$) = "pictures/" THEN t$ = ""
+    IF LCASE$(LEFT$(t$, 9)) = "pictures/" THEN t$ = MID$(t$, 10)
+    IF LEFT$(t$, 1) <> "/" THEN t$ = AbsPath$(PicDir$ + t$) ' (anything else: a folder in pictures/)
+    IF LCASE$(RIGHT$(t$, 4)) = ".png" AND _FILEEXISTS(t$) THEN t$ = LEFT$(t$, _INSTRREV(t$, "/"))
+    t$ = PathClean$(t$)
+    IF NOT _DIREXISTS(t$) THEN Msg "No folder there: " + Tilde$(t$): EXIT SUB
+    r$ = PathClean$(AbsPath$(PicDir$))
+    IF LEFT$(t$, LEN(r$)) = r$ THEN PicFolderOpen MID$(t$, LEN(r$) + 1) ELSE PicFolderOpen t$
+END SUB
+
+' Path p$ from /, ending in / (. and .. and // taken out)
+FUNCTION PathClean$ (p$)
+    DIM t$, i, s$, r$
+    t$ = p$ + "/"
+    DO WHILE LEN(t$)
+        i = INSTR(t$, "/"): s$ = LEFT$(t$, i - 1): t$ = MID$(t$, i + 1)
+        IF s$ = ".." THEN
+            IF LEN(r$) THEN r$ = LEFT$(r$, _INSTRREV(r$, "/") - 1)
+        ELSEIF LEN(s$) > 0 AND s$ <> "." THEN
+            r$ = r$ + "/" + s$
+        END IF
+    LOOP
+    PathClean$ = r$ + "/"
+END FUNCTION
+
+' p$ with the home folder shown as ~
+FUNCTION Tilde$ (p$)
+    DIM h$
+    h$ = ENVIRON$("HOME")
+    IF LEN(h$) > 1 AND LEFT$(p$, LEN(h$) + 1) = h$ + "/" THEN Tilde$ = "~" + MID$(p$, LEN(h$) + 1) ELSE Tilde$ = p$
+END FUNCTION
+
+' The folder the bin shows, as the path box shows it
+FUNCTION PicFolderShown$
+    IF LEN(binPicExt$) THEN PicFolderShown$ = Tilde$(binPicExt$) ELSE PicFolderShown$ = Tilde$(PathClean$(AbsPath$(PicDir$ + binPicDir$)))
+END FUNCTION
+
+' A picture ref$'s file (a path from /: an outside one's already)
+FUNCTION PicPath$ (ref$)
+    IF LEFT$(ref$, 1) = "/" THEN PicPath$ = ref$ ELSE PicPath$ = PicDir$ + ref$ + ".png"
+END FUNCTION
+
+' An outside picture copied into pictures/ (the folder last open there): its ref
+' ("": it couldn't be). The same picture there already: that one, not another copy
+FUNCTION PicBring$ (f$)
+    DIM n$, i, ref$, k
+    IF LEFT$(f$, 1) <> "/" THEN PicBring$ = f$: EXIT FUNCTION
+    IF NOT _FILEEXISTS(f$) THEN Msg "Not there any more: " + Tilde$(f$): EXIT FUNCTION
+    i = _INSTRREV(f$, "/"): n$ = SafeName$(LEFT$(MID$(f$, i + 1), LEN(MID$(f$, i + 1)) - 4))
+    IF LEN(n$) = 0 THEN n$ = "picture"
+    IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
+    IF NOT _DIREXISTS(PicDir$ + binPicDir$) THEN binPicDir$ = ""
+    ref$ = binPicDir$ + n$: k = 1
+    DO WHILE _FILEEXISTS(PicDir$ + ref$ + ".png")
+        IF FileSame(f$, PicDir$ + ref$ + ".png") THEN EXIT DO
+        k = k + 1: ref$ = binPicDir$ + n$ + "-" + LTRIM$(STR$(k))
+    LOOP
+    IF NOT _FILEEXISTS(PicDir$ + ref$ + ".png") THEN FileCopy f$, PicDir$ + ref$ + ".png"
+    IF NOT _FILEEXISTS(PicDir$ + ref$ + ".png") THEN Msg "Couldn't copy it into pictures/": EXIT FUNCTION
+    PicBring$ = ref$
+END FUNCTION
+
+' Picture ref$'s tile (made the first time)
+FUNCTION PicThumb& (ref$)
+    DIM k, s
+    IF LEFT$(ref$, 1) = "/" THEN PicThumb& = PicThumbOut&(ref$): EXIT FUNCTION
+    k = PicFind(ref$)
+    IF k <= 0 THEN EXIT FUNCTION
+    IF picW(k) = 0 THEN EXIT FUNCTION
+    s = BinTS
+    IF pcThumb&(k) < -1 THEN
+        IF _WIDTH(pcThumb&(k)) <> s THEN _FREEIMAGE pcThumb&(k): pcThumb&(k) = 0 ' (the tiles were sized)
+    END IF
+    IF pcThumb&(k) = 0 THEN
+        IF xtLoads >= 8 THEN EXIT FUNCTION ' (a few a frame: sizing them all at once would stall)
+        xtLoads = xtLoads + 1
+        pcThumb&(k) = _NEWIMAGE(s, s, 32)
+        ExBlit k, pcThumb&(k), 0, 0, s, s
+    END IF
+    PicThumb& = pcThumb&(k)
+END FUNCTION
+
+' An outside picture's tile: loaded (two a frame at most: a folder of big ones
+' doesn't stall), shrunk to fit the tile, kept in a ring
+FUNCTION PicThumbOut& (f$)
+    DIM i, img&, t&, w, h, iw, ih, d, s
+    s = BinTS
+    FOR i = 1 TO XT_MAX
+        IF xtRef$(i) = f$ THEN
+            IF xtImg&(i) >= -1 THEN PicThumbOut& = xtImg&(i): EXIT FUNCTION
+            IF _WIDTH(xtImg&(i)) = s THEN PicThumbOut& = xtImg&(i): EXIT FUNCTION
+            _FREEIMAGE xtImg&(i): xtImg&(i) = 0: xtRef$(i) = "" ' (the tiles were sized: made again)
+        END IF
+    NEXT
+    IF xtLoads >= 2 THEN EXIT FUNCTION
+    xtLoads = xtLoads + 1
+    xtNext = xtNext + 1: IF xtNext > XT_MAX THEN xtNext = 1
+    IF xtImg&(xtNext) < -1 THEN _FREEIMAGE xtImg&(xtNext)
+    xtRef$(xtNext) = f$: xtImg&(xtNext) = -1 ' (-1: it can't be read)
+    img& = _LOADIMAGE(f$, 32)
+    IF img& < -1 THEN
+        iw = _WIDTH(img&): ih = _HEIGHT(img&)
+        IF iw >= ih THEN w = s: h = INT(s * ih / iw + .5) ELSE h = s: w = INT(s * iw / ih + .5)
+        IF w < 1 THEN w = 1
+        IF h < 1 THEN h = 1
+        t& = _NEWIMAGE(s, s, 32): d = _DEST: _DEST t&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
+        _PUTIMAGE ((s - w) \ 2, (s - h) \ 2)-((s - w) \ 2 + w - 1, (s - h) \ 2 + h - 1), img&, t&
+        _FREEIMAGE img&
+        xtImg&(xtNext) = t&
+    END IF
+    PicThumbOut& = xtImg&(xtNext)
+END FUNCTION
+
+' An outside picture's tile made again (it's changed)
+SUB PicThumbOutDrop (f$)
+    DIM i
+    FOR i = 1 TO XT_MAX
+        IF xtRef$(i) = f$ THEN
+            IF xtImg&(i) < -1 THEN _FREEIMAGE xtImg&(i)
+            xtImg&(i) = 0: xtRef$(i) = ""
+        END IF
+    NEXT
+END SUB
+
+' A picture clicked in the bin: the next face clicked (or the one it's dragged to) gets it
+SUB PicPick (src$)
+    DIM ref$
+    IF LEN(pmRef$) > 0 AND (pmRef$ = src$ OR pmSrc$ = src$) THEN pmRef$ = "": Msg "": EXIT SUB
+    ref$ = PicBring$(src$): IF LEN(ref$) = 0 THEN EXIT SUB
+    pmSrc$ = src$
+    IF edPart THEN
+        IF edMode = ED_FACES AND EdAny THEN PicOnPicked ref$: EXIT SUB ' (faces picked in E: straight on to them)
+    END IF
+    PlaceStop
+    pmRef$ = ref$: pmDrag = -1
+    Msg "Click a face to put " + ref$ + " on it (or drag it there). Shift: every face of that part. Faces picked (E): all of them. Esc: stop"
+END SUB
+
+' ---------------------------------------------------------------- putting one on
+
+' Picture ref$ on the faces picked in E, each fitted
+SUB PicOnPicked (ref$)
+    DIM k, f AS LONG, n AS LONG
+    k = PicFind(ref$)
+    IF k <= 0 THEN Msg "No such picture: " + ref$: EXIT SUB
+    IF picW(k) = 0 THEN Msg "pictures/" + ref$ + ".png can't be read": EXIT SUB
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN sfTex(f) = k: PicFit f: n = n + 1
+    NEXT
+    EdCommit
+    Msg ref$ + " on the " + LTRIM$(STR$(n)) + " picked face" + IIFS$(n = 1, "", "s") + " (FIT, ACROSS ALL, TURN... below; Ctrl+Z: as it was)"
+END SUB
+
+' Picture ref$ put on the face under view pixel (lx, ly) - all: every face of its part
+SUB PicPutAt (lx, ly, ref$, all)
+    DIM k, t AS LONG, p, hit AS V3, ok, id AS LONG, g AS LONG, f AS LONG, n AS LONG, nid AS LONG, picked, made
+    k = PicFind(ref$)
+    IF k <= 0 THEN Msg "No such picture: " + ref$: EXIT SUB
+    IF picW(k) = 0 THEN Msg "pictures/" + ref$ + ".png can't be read": EXIT SUB
+    t = PickTri(lx, ly)
+    IF t <= 0 OR t > sceneTN THEN Msg "Put it on a part's face (point at one)": EXIT SUB
+    p = tPart(t)
+    IF p < 1 OR p > pN THEN Msg "Put it on a part's face (point at one)": EXIT SUB
+    IF pKind(p) = K_USE THEN Msg "That's a prefab put down: put the picture on in the prefab (right-click it in the bin: EDIT IT), or UNLINK it (U) first": EXIT SUB
+    RayPlane lx, ly, tA(t), tNrm(t), hit, ok
+    IF ok = 0 THEN hit.x = (tA(t).x + tB(t).x + tC(t).x) / 3: hit.y = (tA(t).y + tB(t).y + tC(t).y) / 3: hit.z = (tA(t).z + tB(t).z + tC(t).z) / 3
+    UndoPush
+    IF pKind(p) <> K_MESH THEN ' (a shape carries a picture as a mesh part)
+        id = PartMeshOf&(p)
+        IF mbFN(id) = 0 THEN undoN = undoN - 1: EXIT SUB
+        MakeMeshPart p, id: made = -1
+    END IF
+    id = pMesh(p)
+    g = PicFaceAt&(p, hit, tNrm(t)) ' (its polygon, from 0)
+    EmLoad id
+    picked = 0
+    IF edPart = p AND g >= 0 THEN
+        IF g <= edFN THEN IF edSelF(g) THEN picked = -1
+    END IF
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            ok = all
+            IF f = g + 1 THEN ok = -1
+            IF picked AND f - 1 <= edFN THEN IF edSelF(f - 1) THEN ok = -1
+            IF ok THEN sfTex(f) = k: PicFit f: n = n + 1
+        END IF
+    NEXT
+    nid = EmWrite&: pMesh(p) = nid
+    IF edPart = p THEN edId = nid: edGen = edGen + 1: ovDirty = -1
+    IF edPart = 0 THEN SelNone: pSel(p) = -1: ovDirty = -1 ' (selected: E edits it next)
+    ModelChanged: MeshGcDue
+    IF n = 0 THEN Msg "No face found there": EXIT SUB
+    Msg ref$ + " on " + LTRIM$(STR$(n)) + " face" + IIFS$(n = 1, "", "s") + IIFS$(made, " (part" + STR$(p) + " is a mesh part now)", "") + ". E, pick the faces: the panel fits, turns, repeats, slides it. Ctrl+Z: as it was"
+END SUB
+
+' Which of mesh part p's polygons (from 0) has world point h on it, facing nw (-1: none)
+FUNCTION PicFaceAt& (p, h AS V3, nw AS V3)
+    DIM id AS LONG, f AS LONG, g AS LONG, n AS LONG, k AS LONG, x, y, z, x#, y#, z#, best#, d#, nx#, ny#, nz#, l#
+    DIM px#(63), py#(63), pz#(63), m AS LONG, inside, ax, i AS LONG, j AS LONG, ui#, vi#, uj#, vj#, hu#, hv#
+    id = pMesh(p): best# = 1E+30: PicFaceAt& = -1
+    FOR f = 0 TO mbFN(id) - 1
+        g = mbF0(id) + 1 + f: n = mfCN(g): IF n > 64 THEN n = 64
+        nx# = 0: ny# = 0: nz# = 0
+        FOR k = 0 TO n - 1
+            MbPt id, mcV(mfC0(g) + k), x, y, z: x# = x: y# = y: z# = z: PartFwd p, x#, y#, z#
+            px#(k) = x#: py#(k) = y#: pz#(k) = z#
+        NEXT
+        FOR k = 0 TO n - 1
+            m = (k + 1) MOD n
+            nx# = nx# + (py#(k) - py#(m)) * (pz#(k) + pz#(m))
+            ny# = ny# + (pz#(k) - pz#(m)) * (px#(k) + px#(m))
+            nz# = nz# + (px#(k) - px#(m)) * (py#(k) + py#(m))
+        NEXT
+        l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+        IF l# > 1E-14 THEN
+            nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+            IF nx# * nw.x + ny# * nw.y + nz# * nw.z > .95 THEN
+                d# = ABS((h.x - px#(0)) * nx# + (h.y - py#(0)) * ny# + (h.z - pz#(0)) * nz#)
+                IF d# < best# THEN
+                    ' (inside it, seen along its most-facing axis)
+                    ax = 1: IF ABS(ny#) > ABS(nx#) THEN ax = 2
+                    IF ABS(nz#) > ABS(nx#) AND ABS(nz#) > ABS(ny#) THEN ax = 3
+                    inside = 0: j = n - 1
+                    FOR i = 0 TO n - 1
+                        SELECT CASE ax
+                            CASE 1: ui# = py#(i): vi# = pz#(i): uj# = py#(j): vj# = pz#(j): hu# = h.y: hv# = h.z
+                            CASE 2: ui# = px#(i): vi# = pz#(i): uj# = px#(j): vj# = pz#(j): hu# = h.x: hv# = h.z
+                            CASE ELSE: ui# = px#(i): vi# = py#(i): uj# = px#(j): vj# = py#(j): hu# = h.x: hv# = h.y
+                        END SELECT
+                        IF (vi# > hv#) <> (vj# > hv#) THEN
+                            IF hu# < (uj# - ui#) * (hv# - vi#) / (vj# - vi#) + ui# THEN inside = NOT inside
+                        END IF
+                        j = i
+                    NEXT
+                    IF inside THEN best# = d#: PicFaceAt& = f
+                END IF
+            END IF
+        END IF
+    NEXT
+END FUNCTION
+
+' The way across (r) and up (u) a picture runs on a face facing n (the part's own terms):
+' up as near the part's up as it can be; a face lying flat: up towards its back (+z)
+SUB PicAxes (nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#)
+    DIM d#, l#
+    d# = ny#: ux# = -d# * nx#: uy# = 1 - d# * ny#: uz# = -d# * nz#
+    l# = SQR(ux# * ux# + uy# * uy# + uz# * uz#)
+    IF l# < .3 THEN d# = nz#: ux# = -d# * nx#: uy# = -d# * ny#: uz# = 1 - d# * nz#: l# = SQR(ux# * ux# + uy# * uy# + uz# * uz#)
+    ux# = ux# / l#: uy# = uy# / l#: uz# = uz# / l#
+    rx# = uy# * nz# - uz# * ny#: ry# = uz# * nx# - ux# * nz#: rz# = ux# * ny# - uy# * nx#
+END SUB
+
+' Work face f's spots: its picture stretched to fill it
+SUB PicFit (f AS LONG)
+    PicFitFrom f, f, 0
+END SUB
+
+' Work face f's spots from face f0's way of facing - and, across: the box of
+' every picked face (the picture spread over them all), else f's own
+SUB PicFitFrom (f AS LONG, f0 AS LONG, across)
+    DIM rx#, ry#, rz#, ux#, uy#, uz#, k AS LONG, g AS LONG, w AS LONG, a#, b#, a0#, a1#, b0#, b1#, ok
+    PicAxes CDBL(sfNx(f0)), CDBL(sfNy(f0)), CDBL(sfNz(f0)), rx#, ry#, rz#, ux#, uy#, uz#
+    a0# = 1E+30: a1# = -1E+30: b0# = 1E+30: b1# = -1E+30
+    FOR g = 1 TO sfN
+        ok = (g = f)
+        IF across <> 0 AND g <= UBOUND(wsF) THEN IF wsF(g) THEN ok = -1
+        IF sfLive(g) AND ok THEN
+            FOR k = 0 TO sfCN(g) - 1
+                w = scV(sfC0(g) + k)
+                a# = swX(w) * rx# + swY(w) * ry# + swZ(w) * rz#: b# = swX(w) * ux# + swY(w) * uy# + swZ(w) * uz#
+                IF a# < a0# THEN a0# = a#
+                IF a# > a1# THEN a1# = a#
+                IF b# < b0# THEN b0# = b#
+                IF b# > b1# THEN b1# = b#
+            NEXT
+        END IF
+    NEXT
+    IF a1# - a0# < 1E-12 THEN a1# = a0# + 1
+    IF b1# - b0# < 1E-12 THEN b1# = b0# + 1
+    FOR k = 0 TO sfCN(f) - 1
+        w = scV(sfC0(f) + k)
+        a# = swX(w) * rx# + swY(w) * ry# + swZ(w) * rz#: b# = swX(w) * ux# + swY(w) * uy# + swZ(w) * uz#
+        scTU(sfC0(f) + k) = (a# - a0#) / (a1# - a0#)
+        scTV(sfC0(f) + k) = (b1# - b#) / (b1# - b0#) ' (from the top)
+    NEXT
+END SUB
+
+' Work faces with a picture squashed to a line (an extruded side gets its rim edge's spots
+' at both ends): spread out from that edge, as many pixels to a step as along it, the
+' picture running on past the face's (or, no edge to go by, fitted)
+SUB PicUnsquash
+    DIM f AS LONG, n AS LONG, k AS LONG, c0 AS LONG, w AS LONG, j AS LONG, best AS LONG
+    DIM nx#, ny#, nz#, nl#, ar#, l#, bl#, ex#, ey#, ez#, el#, px#, py#, pz#, du#, dv#, ul#, kk#, s#, h#, sg#
+    DIM rx#, ry#, rz#, ux#, uy#, uz#, a3#, au#, ax#, ay#, az#, u0#, v0#
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND sfTex(f) > 0 THEN
+            n = sfCN(f): c0 = sfC0(f): ar# = 0: nx# = 0: ny# = 0: nz# = 0
+            FOR k = 0 TO n - 1
+                j = (k + 1) MOD n
+                ar# = ar# + scTU(c0 + k) * scTV(c0 + j) - scTU(c0 + j) * scTV(c0 + k)
+                w = scV(c0 + k): j = scV(c0 + j)
+                nx# = nx# + (swY(w) - swY(j)) * (swZ(w) + swZ(j)): ny# = ny# + (swZ(w) - swZ(j)) * (swX(w) + swX(j)): nz# = nz# + (swX(w) - swX(j)) * (swY(w) + swY(j))
+            NEXT
+            nl# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+            IF ABS(ar#) < 1E-9 AND nl# > 1E-9 THEN
+                nx# = nx# / nl#: ny# = ny# / nl#: nz# = nz# / nl#
+                bl# = 0: best = -1 ' (the edge whose spots are furthest apart)
+                FOR k = 0 TO n - 1
+                    j = (k + 1) MOD n
+                    l# = (scTU(c0 + j) - scTU(c0 + k)) ^ 2 + (scTV(c0 + j) - scTV(c0 + k)) ^ 2
+                    IF l# > bl# THEN bl# = l#: best = k
+                NEXT
+                IF best < 0 OR bl# < 1E-12 THEN
+                    PicFit f
+                ELSE
+                    k = best: j = (k + 1) MOD n
+                    w = scV(c0 + k): ax# = swX(w): ay# = swY(w): az# = swZ(w)
+                    ex# = swX(scV(c0 + j)) - ax#: ey# = swY(scV(c0 + j)) - ay#: ez# = swZ(scV(c0 + j)) - az#
+                    el# = SQR(ex# * ex# + ey# * ey# + ez# * ez#)
+                    IF el# < 1E-12 THEN
+                        PicFit f
+                    ELSE
+                        ex# = ex# / el#: ey# = ey# / el#: ez# = ez# / el#
+                        px# = ny# * ez# - nz# * ey#: py# = nz# * ex# - nx# * ez#: pz# = nx# * ey# - ny# * ex# ' (across the face, square to the edge)
+                        u0# = scTU(c0 + k): v0# = scTV(c0 + k)
+                        du# = scTU(c0 + j) - u0#: dv# = scTV(c0 + j) - v0#: ul# = SQR(du# * du# + dv# * dv#)
+                        kk# = ul# / el#: du# = du# / ul#: dv# = dv# / ul#
+                        ' (the picture's way round as FIT would put it: its area the other sign to the face's, seen PicAxes' way)
+                        PicAxes nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+                        a3# = 0: au# = 0
+                        FOR k = 0 TO n - 1
+                            w = scV(c0 + k): j = scV(c0 + (k + 1) MOD n)
+                            a3# = a3# + (swX(w) * rx# + swY(w) * ry# + swZ(w) * rz#) * (swX(j) * ux# + swY(j) * uy# + swZ(j) * uz#) - (swX(j) * rx# + swY(j) * ry# + swZ(j) * rz#) * (swX(w) * ux# + swY(w) * uy# + swZ(w) * uz#)
+                        NEXT
+                        FOR sg# = 1 TO -1 STEP -2
+                            au# = 0
+                            FOR k = 0 TO n - 1
+                                w = scV(c0 + k)
+                                s# = (swX(w) - ax#) * ex# + (swY(w) - ay#) * ey# + (swZ(w) - az#) * ez#
+                                h# = (swX(w) - ax#) * px# + (swY(w) - ay#) * py# + (swZ(w) - az#) * pz#
+                                scTU(c0 + k) = u0# + kk# * (s# * du# - sg# * h# * dv#)
+                                scTV(c0 + k) = v0# + kk# * (s# * dv# + sg# * h# * du#)
+                            NEXT
+                            FOR k = 0 TO n - 1
+                                j = (k + 1) MOD n
+                                au# = au# + scTU(c0 + k) * scTV(c0 + j) - scTU(c0 + j) * scTV(c0 + k)
+                            NEXT
+                            IF SGN(au#) <> SGN(a3#) THEN EXIT FOR
+                        NEXT
+                    END IF
+                END IF
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' Work face f's spots bent to its shape: the picture's four corners pinned to
+' the face's four corners nearest its box's (as the picture runs on it), the
+' corners between them spread along the picture's edges by how far round they are
+SUB PicDeform (f AS LONG)
+    DIM rx#, ry#, rz#, ux#, uy#, uz#, n AS LONG, k AS LONG, w AS LONG, a0#, a1#, b0#, b1#, d#, bd#, j AS LONG, m AS LONG
+    DIM q AS LONG, i AS LONG, tot#, walked#, t#, cu#(3), cv#(3)
+    n = sfCN(f)
+    IF n < 4 OR n > 64 THEN PicFit f: EXIT SUB
+    DIM pa#(63), pb#(63), an(3) AS LONG, at(63) AS LONG
+    PicAxes CDBL(sfNx(f)), CDBL(sfNy(f)), CDBL(sfNz(f)), rx#, ry#, rz#, ux#, uy#, uz#
+    a0# = 1E+30: a1# = -1E+30: b0# = 1E+30: b1# = -1E+30
+    FOR k = 0 TO n - 1
+        w = scV(sfC0(f) + k)
+        pa#(k) = swX(w) * rx# + swY(w) * ry# + swZ(w) * rz#: pb#(k) = swX(w) * ux# + swY(w) * uy# + swZ(w) * uz#
+        IF pa#(k) < a0# THEN a0# = pa#(k)
+        IF pa#(k) > a1# THEN a1# = pa#(k)
+        IF pb#(k) < b0# THEN b0# = pb#(k)
+        IF pb#(k) > b1# THEN b1# = pb#(k)
+    NEXT
+    IF a1# - a0# < 1E-12 OR b1# - b0# < 1E-12 THEN PicFit f: EXIT SUB
+    FOR k = 0 TO n - 1: pa#(k) = (pa#(k) - a0#) / (a1# - a0#): pb#(k) = (pb#(k) - b0#) / (b1# - b0#): at(k) = -1: NEXT
+    ' (the box's corners going round as the face's do - anticlockwise seen from the front: top left, bottom left, bottom right, top right)
+    cu#(0) = 0: cv#(0) = 0: cu#(1) = 0: cv#(1) = 1: cu#(2) = 1: cv#(2) = 1: cu#(3) = 1: cv#(3) = 0
+    FOR j = 0 TO 3
+        bd# = 1E+30: an(j) = -1
+        FOR k = 0 TO n - 1
+            d# = (pa#(k) - cu#(j)) ^ 2 + (pb#(k) - (1 - cv#(j))) ^ 2
+            IF d# < bd# AND at(k) < 0 THEN bd# = d#: an(j) = k
+        NEXT
+        at(an(j)) = j
+    NEXT
+    ' (they must come round in that order, else it's no shape to bend to: fitted)
+    m = 0
+    FOR j = 1 TO 3
+        IF (an(j) - an(0) + n) MOD n < (an(m) - an(0) + n) MOD n THEN PicFit f: EXIT SUB
+        m = j
+    NEXT
+    FOR j = 0 TO 3
+        i = an(j): q = an((j + 1) MOD 4)
+        tot# = 0: k = i
+        DO WHILE k <> q
+            m = (k + 1) MOD n: tot# = tot# + SQR((pa#(m) - pa#(k)) ^ 2 + (pb#(m) - pb#(k)) ^ 2): k = m
+        LOOP
+        walked# = 0: k = i
+        DO
+            IF tot# > 1E-12 THEN t# = walked# / tot# ELSE t# = 0
+            scTU(sfC0(f) + k) = cu#(j) + (cu#((j + 1) MOD 4) - cu#(j)) * t#
+            scTV(sfC0(f) + k) = cv#(j) + (cv#((j + 1) MOD 4) - cv#(j)) * t#
+            m = (k + 1) MOD n: IF m = q THEN EXIT DO
+            walked# = walked# + SQR((pa#(m) - pa#(k)) ^ 2 + (pb#(m) - pb#(k)) ^ 2): k = m
+        LOOP
+    NEXT
+END SUB
+
+' The spot on work face f's picture at the point (x#, y#, z#) of its plane (the part's own terms): 0 if f has no plane
+FUNCTION PicUVAt (f AS LONG, x#, y#, z#, pu#, pv#)
+    DIM n AS LONG, i AS LONG, j AS LONG, c0 AS LONG, a0 AS LONG, bi AS LONG, bj AS LONG, best#, l#
+    DIM e1x#, e1y#, e1z#, e2x#, e2y#, e2z#, cx#, cy#, cz#, g11#, g12#, g22#, det#, px#, py#, pz#, d1#, d2#, s#, t#
+    n = sfCN(f): c0 = sfC0(f): a0 = scV(c0)
+    FOR i = 1 TO n - 2
+        FOR j = i + 1 TO n - 1
+            e1x# = swX(scV(c0 + i)) - swX(a0): e1y# = swY(scV(c0 + i)) - swY(a0): e1z# = swZ(scV(c0 + i)) - swZ(a0)
+            e2x# = swX(scV(c0 + j)) - swX(a0): e2y# = swY(scV(c0 + j)) - swY(a0): e2z# = swZ(scV(c0 + j)) - swZ(a0)
+            cx# = e1y# * e2z# - e1z# * e2y#: cy# = e1z# * e2x# - e1x# * e2z#: cz# = e1x# * e2y# - e1y# * e2x#
+            l# = cx# * cx# + cy# * cy# + cz# * cz#
+            IF l# > best# THEN best# = l#: bi = i: bj = j
+        NEXT
+    NEXT
+    IF best# < 1E-16 THEN EXIT FUNCTION
+    e1x# = swX(scV(c0 + bi)) - swX(a0): e1y# = swY(scV(c0 + bi)) - swY(a0): e1z# = swZ(scV(c0 + bi)) - swZ(a0)
+    e2x# = swX(scV(c0 + bj)) - swX(a0): e2y# = swY(scV(c0 + bj)) - swY(a0): e2z# = swZ(scV(c0 + bj)) - swZ(a0)
+    g11# = e1x# * e1x# + e1y# * e1y# + e1z# * e1z#: g12# = e1x# * e2x# + e1y# * e2y# + e1z# * e2z#: g22# = e2x# * e2x# + e2y# * e2y# + e2z# * e2z#
+    det# = g11# * g22# - g12# * g12#: IF ABS(det#) < 1E-20 THEN EXIT FUNCTION
+    px# = x# - swX(a0): py# = y# - swY(a0): pz# = z# - swZ(a0)
+    d1# = px# * e1x# + py# * e1y# + pz# * e1z#: d2# = px# * e2x# + py# * e2y# + pz# * e2z#
+    s# = (d1# * g22# - d2# * g12#) / det#: t# = (d2# * g11# - d1# * g12#) / det#
+    pu# = scTU(c0) + s# * (scTU(c0 + bi) - scTU(c0)) + t# * (scTU(c0 + bj) - scTU(c0))
+    pv# = scTV(c0) + s# * (scTV(c0 + bi) - scTV(c0)) + t# * (scTV(c0 + bj) - scTV(c0))
+    PicUVAt = -1
+END FUNCTION
+
+' ---------------------------------------------------------------- editing it in DRAW
+
+' EDIT IN DRAW (E, faces picked): the picked face's picture opened in DRAW -
+' none on them: a new one made, the face's shape and colour, put on them all
+' first. It's watched: each time DRAW saves it, the model shows it.
+SUB PicEditInDraw
+    DIM id AS LONG, f AS LONG, g AS LONG, ref$, k, w AS LONG, x#, y#, z#, nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+    DIM a#, b#, a0#, a1#, b0#, b1#, iw, ih, img&, d, n$, c AS _UNSIGNED LONG, f0 AS LONG, cnt AS LONG, e$
+    IF edPart = 0 OR edMode <> ED_FACES THEN Msg "In E, pick faces (2: FACES), then EDIT IN DRAW": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    e$ = DrawExe$
+    IF LEN(e$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
+    id = pMesh(edPart)
+    FOR f = 0 TO edFN - 1 ' (one of them has a picture: that one)
+        IF edSelF(f) THEN
+            g = mbF0(id) + 1 + f
+            IF mfTex(g) > 0 THEN ref$ = picRef$(mfTex(g)): EXIT FOR
+        END IF
+    NEXT
+    IF LEN(ref$) = 0 THEN ' (none: a new picture, as wide and tall as the first face is, in its colour)
+        EdBegin -1
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND wsF(f) THEN f0 = f: EXIT FOR
+        NEXT
+        IF f0 = 0 THEN EdCommit: EXIT SUB
+        EdNormW f0, nx#, ny#, nz#
+        PicAxes nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+        a0# = 1E+30: a1# = -1E+30: b0# = 1E+30: b1# = -1E+30
+        FOR k = 0 TO sfCN(f0) - 1
+            EdW scV(sfC0(f0) + k), x#, y#, z#
+            a# = x# * rx# + y# * ry# + z# * rz#: b# = x# * ux# + y# * uy# + z# * uz#
+            IF a# < a0# THEN a0# = a#
+            IF a# > a1# THEN a1# = a#
+            IF b# < b0# THEN b0# = b#
+            IF b# > b1# THEN b1# = b#
+        NEXT
+        a# = a1# - a0#: b# = b1# - b0#: IF a# < 1E-9 THEN a# = 1E-9
+        IF b# < 1E-9 THEN b# = 1E-9
+        IF a# >= b# THEN iw = 64: ih = INT(64 * b# / a# + .5) ELSE ih = 64: iw = INT(64 * a# / b# + .5)
+        IF iw < 8 THEN iw = 8
+        IF ih < 8 THEN ih = 8
+        IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
+        IF NOT _DIREXISTS(PicDir$ + binPicDir$) THEN binPicDir$ = ""
+        n$ = SafeName$(mdlName$): IF LEN(n$) = 0 THEN n$ = "model"
+        k = 1: ref$ = binPicDir$ + n$ + "-face"
+        DO WHILE _FILEEXISTS(PicDir$ + ref$ + ".png")
+            k = k + 1: ref$ = binPicDir$ + n$ + "-face" + LTRIM$(STR$(k))
+        LOOP
+        c = sfCol(f0) OR &HFF000000
+        img& = _NEWIMAGE(iw, ih, 32): d = _DEST: _DEST img&: CLS , c: _DEST d
+        _SAVEIMAGE PicDir$ + ref$ + ".png", img&: _FREEIMAGE img&
+        k = PicFind(ref$)
+        IF k <= 0 OR picW(k) = 0 THEN EdCommit: Msg "Couldn't make pictures/" + ref$ + ".png": EXIT SUB
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND wsF(f) THEN sfTex(f) = k: PicFit f: cnt = cnt + 1
+        NEXT
+        EdCommit
+        IF binTab = 1 THEN BinList
+    END IF
+    DrawOpen ref$
+    Msg "pictures/" + ref$ + ".png opened in DRAW" + IIFS$(cnt > 0, " (new: on the " + LTRIM$(STR$(cnt)) + " picked face" + IIFS$(cnt = 1, ")", "s)"), "") + " - save it there (Ctrl+S) and it shows here"
+END SUB
+
+' Picture ref$ opened in DRAW (watched: each save shows here)
+SUB DrawOpen (ref$)
+    DIM e$
+    e$ = DrawExe$
+    IF LEN(e$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
+    PicWatch ref$
+    ' (in the background of a shell that ends at once: nothing left over to be waited for)
+    SHELL "cd " + ShQ$(LEFT$(e$, _INSTRREV(e$, "/"))) + " && setsid " + ShQ$(e$) + " " + ShQ$(AbsPath$(PicPath$(ref$))) + " >/dev/null 2>&1 </dev/null &"
+END SUB
+
+' A bin picture right-clicked: EDIT IN DRAW
+SUB PicDrawFromBin (ref$)
+    IF LEN(DrawExe$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
+    DrawOpen ref$
+    Msg IIFS$(LEFT$(ref$, 1) = "/", Tilde$(ref$), "pictures/" + ref$ + ".png") + " opened in DRAW - save it there (Ctrl+S) and it shows here"
+END SUB
+
+' kaleidotron's program: kaleidotron= in bu1ld0r.cfg, else ~/.local/bin's, else on the PATH
+FUNCTION KaleidoExe$
+    DIM h$
+    IF LEN(cfgKaleido$) THEN
+        IF _FILEEXISTS(cfgKaleido$) THEN KaleidoExe$ = cfgKaleido$: EXIT FUNCTION
+    END IF
+    h$ = ENVIRON$("HOME")
+    IF _FILEEXISTS(h$ + "/.local/bin/kaleidotron") THEN KaleidoExe$ = h$ + "/.local/bin/kaleidotron": EXIT FUNCTION
+    IF _FILEEXISTS(h$ + "/git/kaleidotron/target/release/kaleidotron") THEN KaleidoExe$ = h$ + "/git/kaleidotron/target/release/kaleidotron": EXIT FUNCTION
+    KaleidoExe$ = "kaleidotron"
+END FUNCTION
+
+' A picture (its folder open, it picked) or a folder ("/" at the end) shown in kaleidotron
+SUB KaleidoOpen (path$)
+    DIM a$
+    a$ = AbsPath$(path$)
+    IF RIGHT$(a$, 1) = "/" THEN a$ = "-f " + ShQ$(a$) ELSE a$ = "--open " + ShQ$(a$)
+    SHELL "setsid nohup " + ShQ$(KaleidoExe$) + " " + a$ + " >/dev/null 2>&1 </dev/null &"
+    Msg Tilde$(AbsPath$(path$)) + " opened in kaleidotron"
+END SUB
+
+' DRAW's program: draw= in bu1ld0r.cfg, else ~/git/DRAW/DRAW.run ("": not there)
+FUNCTION DrawExe$
+    DIM h$
+    IF LEN(cfgDraw$) THEN
+        IF _FILEEXISTS(cfgDraw$) THEN DrawExe$ = cfgDraw$: EXIT FUNCTION
+    END IF
+    h$ = ENVIRON$("HOME")
+    IF LEN(h$) THEN IF _FILEEXISTS(h$ + "/git/DRAW/DRAW.run") THEN DrawExe$ = h$ + "/git/DRAW/DRAW.run"
+END FUNCTION
+
+' A path from / (the folder we started in put in front of a relative one)
+FUNCTION AbsPath$ (p$)
+    IF LEFT$(p$, 1) = "/" THEN AbsPath$ = p$ ELSE AbsPath$ = _CWD$ + "/" + p$
+END FUNCTION
+
+' Quoted for the shell
+FUNCTION ShQ$ (t$)
+    DIM i, r$
+    r$ = "'"
+    FOR i = 1 TO LEN(t$)
+        IF MID$(t$, i, 1) = "'" THEN r$ = r$ + "'\''" ELSE r$ = r$ + MID$(t$, i, 1)
+    NEXT
+    ShQ$ = r$ + "'"
+END FUNCTION
+
+' Picture ref$ watched (as it is now: a change is a save)
+SUB PicWatch (ref$)
+    DIM i
+    FOR i = 1 TO pwN
+        IF pwRef$(i) = ref$ THEN pwSig$(i) = PicFileSig$(ref$): EXIT SUB
+    NEXT
+    IF pwN >= PW_MAX THEN
+        FOR i = 1 TO pwN - 1: pwRef$(i) = pwRef$(i + 1): pwSig$(i) = pwSig$(i + 1): NEXT
+        pwN = pwN - 1
+    END IF
+    pwN = pwN + 1: pwRef$(pwN) = ref$: pwSig$(pwN) = PicFileSig$(ref$)
+END SUB
+
+FUNCTION PicFileSig$ (ref$)
+    DIM fh, s$
+    IF NOT _FILEEXISTS(PicPath$(ref$)) THEN EXIT FUNCTION
+    fh = FREEFILE: OPEN PicPath$(ref$) FOR BINARY AS #fh
+    s$ = SPACE$(LOF(fh)): GET #fh, , s$: CLOSE #fh
+    PicFileSig$ = s$
+END FUNCTION
+
+' Each frame: twice a second, a watched picture that's changed loaded again
+SUB PicWatchFrame
+    DIM i, s$, k
+    IF pwN = 0 THEN EXIT SUB
+    IF TIMER(0.001) < pwNext# AND pwNext# - TIMER(0.001) < 2 THEN EXIT SUB
+    pwNext# = TIMER(0.001) + .5
+    FOR i = 1 TO pwN
+        s$ = PicFileSig$(pwRef$(i))
+        IF LEN(s$) > 0 AND s$ <> pwSig$(i) THEN
+            pwSig$(i) = s$
+            IF LEFT$(pwRef$(i), 1) = "/" THEN PicThumbOutDrop pwRef$(i): Msg Tilde$(pwRef$(i)) + " saved in DRAW"
+            FOR k = 1 TO picN
+                IF picRef$(k) = pwRef$(i) THEN
+                    picW(k) = 0: k = PicFind(pwRef$(i))
+                    IF k > 0 AND k <= MAX_PIC THEN
+                        IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
+                        pcThumb&(k) = 0
+                    END IF
+                    viewDirty = -1: meshKey$ = ""
+                    Msg "pictures/" + pwRef$(i) + ".png saved in DRAW: shown"
+                    EXIT FOR
+                END IF
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- the picture moved by hand
+
+SUB PvToggle
+    IF edPart = 0 OR edMode <> ED_FACES THEN Msg "In E, pick faces (2: FACES) with a picture, then P moves the picture": pvOn = 0: EXIT SUB
+    pvOn = NOT pvOn
+    Msg IIFS$(pvOn, "Moving the picture: drag a picked face to slide it, wheel: bigger / smaller, Shift+wheel: turn. P: done", "Done moving the picture (drags move faces again)")
+END SUB
+
+' Is the wheel the picture's now (moving it, over the view)?
+FUNCTION PvWheelOn
+    IF edPart = 0 OR NOT pvOn OR edMode <> ED_FACES THEN EXIT FUNCTION
+    PvWheelOn = EdAny
+END FUNCTION
+
+' The drag begun: the face under the press and its picture's way of running across it kept
+SUB PvStart (lx, ly)
+    DIM t AS LONG, ok, hit AS V3, f AS LONG, k AS LONG, x#, y#, z#, u0#, v0#, u1#, v1#, id AS LONG
+    pvArm = 0
+    id = pMesh(edPart)
+    IF pvF < 0 OR pvF >= edFN THEN EXIT SUB
+    IF mfTex(mbF0(id) + 1 + pvF) = 0 THEN Msg "That face has no picture: put one on (the bin's PICTURES), then move it": EXIT SUB
+    t = PickTri(dragPX - vX0, dragPY - vY0): IF t <= 0 OR t > sceneTN THEN EXIT SUB
+    RayPlane dragPX - vX0, dragPY - vY0, tA(t), tNrm(t), hit, ok: IF ok = 0 THEN EXIT SUB
+    pvH = hit: pvN = tNrm(t)
+    EdBegin -1
+    f = pvF + 1
+    REDIM pvU0(scTop) AS SINGLE, pvV0(scTop) AS SINGLE
+    FOR k = 1 TO scTop: pvU0(k) = scTU(k): pvV0(k) = scTV(k): NEXT
+    x# = hit.x: y# = hit.y: z# = hit.z: PartInv edPart, x#, y#, z#
+    pvP0x# = x#: pvP0y# = y#: pvP0z# = z#
+    PicAxes CDBL(sfNx(f)), CDBL(sfNy(f)), CDBL(sfNz(f)), pvRx#, pvRy#, pvRz#, pvUx#, pvUy#, pvUz#
+    ok = PicUVAt(f, x#, y#, z#, u0#, v0#): IF ok = 0 THEN EdCommit: EXIT SUB
+    ok = PicUVAt(f, x# + pvRx#, y# + pvRy#, z# + pvRz#, u1#, v1#): pvDuA# = u1# - u0#: pvDvA# = v1# - v0#
+    ok = PicUVAt(f, x# + pvUx#, y# + pvUy#, z# + pvUz#, u1#, v1#): pvDuB# = u1# - u0#: pvDvB# = v1# - v0#
+    pvF = f: pvDrag = -1
+END SUB
+
+' The drag goes on: every picked face's picture slid so the spot grabbed stays under the pointer
+SUB PvUpdate (lx, ly)
+    DIM hit AS V3, ok, x#, y#, z#, da#, db#, du#, dv#, f AS LONG, k AS LONG, tx
+    RayPlane lx, ly, pvH, pvN, hit, ok: IF ok = 0 THEN EXIT SUB
+    x# = hit.x: y# = hit.y: z# = hit.z: PartInv edPart, x#, y#, z#
+    x# = x# - pvP0x#: y# = y# - pvP0y#: z# = z# - pvP0z#
+    da# = x# * pvRx# + y# * pvRy# + z# * pvRz#: db# = x# * pvUx# + y# * pvUy# + z# * pvUz#
+    du# = da# * pvDuA# + db# * pvDuB#: dv# = da# * pvDvA# + db# * pvDvB#
+    tx = sfTex(pvF)
+    IF NOT kAlt AND tx > 0 THEN ' (to the picture's own pixels)
+        IF picW(tx) > 0 THEN du# = INT(du# * picW(tx) + .5) / picW(tx): dv# = INT(dv# * picH(tx) + .5) / picH(tx)
+    END IF
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
+            FOR k = sfC0(f) TO sfC0(f) + sfCN(f) - 1: scTU(k) = pvU0(k) - du#: scTV(k) = pvV0(k) - dv#: NEXT
+        END IF
+    NEXT
+    EdCommit
+END SUB
+
+' The wheel while moving it: the picked faces' picture bigger / smaller (Shift: turned 15) round the middle of what shows
+SUB PvWheel (dir)
+    DIM push, f AS LONG, k AS LONG, n AS LONG, cu#, cv#, du#, dv#, s#, c#, sn#, a#
+    push = (TIMER(0.001) - pvWheelT# > 1 OR TIMER(0.001) < pvWheelT#)
+    pvWheelT# = TIMER(0.001)
+    EdBegin push
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
+            FOR k = sfC0(f) TO sfC0(f) + sfCN(f) - 1: cu# = cu# + scTU(k): cv# = cv# + scTV(k): n = n + 1: NEXT
+        END IF
+    NEXT
+    IF n = 0 THEN EdCommit: Msg "None of the picked faces has a picture": EXIT SUB
+    cu# = cu# / n: cv# = cv# / n
+    s# = 1.1 ^ dir: a# = dir * 15 * 3.14159265358979 / 180: c# = COS(a#): sn# = SIN(a#)
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
+            FOR k = sfC0(f) TO sfC0(f) + sfCN(f) - 1
+                du# = scTU(k) - cu#: dv# = scTV(k) - cv#
+                IF kShift THEN
+                    scTU(k) = cu# + du# * c# - dv# * sn#: scTV(k) = cv# + du# * sn# + dv# * c#
+                ELSE
+                    scTU(k) = cu# + du# * s#: scTV(k) = cv# + dv# * s#
+                END IF
+            NEXT
+        END IF
+    NEXT
+    EdCommit
+    Msg IIFS$(kShift, "Picture turned (Shift+wheel)", "Picture sized (wheel)") + " - Ctrl+Z: back"
+END SUB
+
+' ---------------------------------------------------------------- the panel's picture tools (E, faces picked)
+
+SUB EdPicTool (op)
+    DIM f AS LONG, k AS LONG, n AS LONG, f0 AS LONG, tx, cu#, cv#, u#, v#, du#, dv#, cnt AS LONG, haveTex
+    IF edMode <> ED_FACES THEN Msg "Pick faces (2: FACES) first": EXIT SUB
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN
+            IF f0 = 0 THEN f0 = f
+            IF sfTex(f) THEN haveTex = -1: IF tx = 0 THEN tx = sfTex(f)
+        END IF
+    NEXT
+    IF haveTex = 0 AND op <> PT_NONE THEN EdCommit: Msg "None of the picked faces has a picture: drag one onto them from the bin's PICTURES": EXIT SUB
+    ' (the middle of their spots: turns, flips and repeats go round it)
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
+            FOR k = 0 TO sfCN(f) - 1: cu# = cu# + scTU(sfC0(f) + k): cv# = cv# + scTV(sfC0(f) + k): n = n + 1: NEXT
+        END IF
+    NEXT
+    IF n THEN cu# = cu# / n: cv# = cv# / n
+    IF op = PT_MORE OR op = PT_FEWER THEN ' (repeats grow from the top left corner: whole pictures)
+        cu# = 1E+30: cv# = 1E+30
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
+                FOR k = 0 TO sfCN(f) - 1
+                    IF scTU(sfC0(f) + k) < cu# THEN cu# = scTU(sfC0(f) + k)
+                    IF scTV(sfC0(f) + k) < cv# THEN cv# = scTV(sfC0(f) + k)
+                NEXT
+            END IF
+        NEXT
+    END IF
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN
+            IF op = PT_NONE THEN
+                IF sfTex(f) THEN sfTex(f) = 0: cnt = cnt + 1
+            ELSEIF op = PT_ACROSS THEN
+                sfTex(f) = tx: PicFitFrom f, f0, -1: cnt = cnt + 1
+            ELSEIF sfTex(f) THEN
+                cnt = cnt + 1
+                IF op = PT_FIT THEN
+                    PicFit f
+                ELSEIF op = PT_DEFORM THEN
+                    PicDeform f
+                ELSE
+                    FOR k = 0 TO sfCN(f) - 1
+                        u# = scTU(sfC0(f) + k): v# = scTV(sfC0(f) + k): du# = u# - cu#: dv# = v# - cv#
+                        SELECT CASE op
+                            CASE PT_TURN: u# = cu# - dv#: v# = cv# + du#
+                            CASE PT_FLIP: u# = cu# - du#
+                            CASE PT_MORE: u# = cu# + du# * 2: v# = cv# + dv# * 2
+                            CASE PT_FEWER: u# = cu# + du# / 2: v# = cv# + dv# / 2
+                            CASE PT_LEFT: u# = u# + .125
+                            CASE PT_RIGHT: u# = u# - .125
+                            CASE PT_UP: v# = v# + .125
+                            CASE PT_DOWN: v# = v# - .125
+                        END SELECT
+                        scTU(sfC0(f) + k) = u#: scTV(sfC0(f) + k) = v#
+                    NEXT
+                END IF
+            END IF
+        END IF
+    NEXT
+    EdCommit
+    SELECT CASE op
+        CASE PT_FIT: Msg "The picture fills each picked face"
+        CASE PT_DEFORM: Msg "The picture's corners pinned to each face's corners: it bends to the shape"
+        CASE PT_ACROSS: Msg "One picture spread across all " + LTRIM$(STR$(cnt)) + " picked faces"
+        CASE PT_TURN: Msg "Turned a quarter"
+        CASE PT_FLIP: Msg "Flipped"
+        CASE PT_MORE: Msg "Repeated twice as many times (the game gets it cut where it repeats)"
+        CASE PT_FEWER: Msg "Half as many repeats (bigger)"
+        CASE PT_NONE: Msg "Picture taken off " + LTRIM$(STR$(cnt)) + " face" + IIFS$(cnt = 1, "", "s") + ": their colour shows"
+        CASE ELSE: Msg "Slid an eighth"
+    END SELECT
+END SUB
+
+SUB EdPicBtn (k, x, y, w, h)
+    DIM r, c
+    h = 22: w = 112
+    SELECT CASE k
+        CASE PT_FIT: r = 0: c = 0
+        CASE PT_DEFORM: r = 0: c = 1
+        CASE PT_ACROSS: r = 1: c = 0
+        CASE PT_MOVE: r = 1: c = 1
+        CASE PT_TURN: r = 2: c = 0
+        CASE PT_FLIP: r = 2: c = 1
+        CASE PT_MORE: r = 3: c = 0
+        CASE PT_FEWER: r = 3: c = 1
+    END SELECT
+    y = 700 + r * 26: x = PX0 + c * 118
+    IF k >= PT_LEFT AND k <= PT_DOWN THEN y = 700 + 4 * 26: x = PX0 + (k - PT_LEFT) * 59: w = 54
+    IF k = PT_NONE THEN y = 700 + 5 * 26: x = PX0
+    IF k = PT_DRAW THEN y = 700 + 5 * 26: x = PX0 + 118
+END SUB
+
+FUNCTION EdPicBtnName$ (k)
+    SELECT CASE k
+        CASE PT_FIT: EdPicBtnName$ = "FIT"
+        CASE PT_ACROSS: EdPicBtnName$ = "ACROSS ALL"
+        CASE PT_TURN: EdPicBtnName$ = "TURN"
+        CASE PT_FLIP: EdPicBtnName$ = "FLIP"
+        CASE PT_MORE: EdPicBtnName$ = "REPEAT MORE"
+        CASE PT_FEWER: EdPicBtnName$ = "REPEAT LESS"
+        CASE PT_LEFT: EdPicBtnName$ = CHR$(17)
+        CASE PT_RIGHT: EdPicBtnName$ = CHR$(16)
+        CASE PT_UP: EdPicBtnName$ = CHR$(30)
+        CASE PT_DOWN: EdPicBtnName$ = CHR$(31)
+        CASE PT_NONE: EdPicBtnName$ = "NO PICTURE"
+        CASE PT_DEFORM: EdPicBtnName$ = "DEFORM"
+        CASE PT_MOVE: EdPicBtnName$ = "MOVE IT  P"
+        CASE PT_DRAW: EdPicBtnName$ = "EDIT IN DRAW"
+    END SELECT
+END FUNCTION
+
+FUNCTION EdPicShown
+    EdPicShown = (edMode = ED_FACES AND 700 + 6 * 26 < scrH - BAR_H)
+END FUNCTION
+
+SUB EdPicDraw
+    DIM k, x, y, w, h
+    IF NOT EdPicShown THEN EXIT SUB
+    Txt PX0, 682, "PICTURE (on the picked faces)", cDim
+    FOR k = 1 TO PT_DRAW
+        EdPicBtn k, x, y, w, h: Btn x, y, w, h, EdPicBtnName$(k), (k = PT_MOVE AND pvOn)
+    NEXT
+    IF pvOn AND 700 + 6 * 26 + 50 < scrH - BAR_H THEN
+        Txt PX0, 862, "Drag a picked face: slide", cHi
+        Txt PX0, 878, "Wheel: size  Shift: turn", cHi
+        Txt PX0, 894, "Alt: off its pixels", cDim
+    END IF
+END SUB
+
+FUNCTION EdPicClick
+    DIM k, x, y, w, h
+    IF NOT EdPicShown THEN EXIT FUNCTION
+    FOR k = 1 TO PT_DRAW
+        EdPicBtn k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN
+            IF k = PT_MOVE THEN
+                PvToggle
+            ELSEIF k = PT_DRAW THEN
+                PicEditInDraw
+            ELSE
+                EdPicTool k
+            END IF
+            EdPicClick = -1: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
+
+' ---------------------------------------------------------------- files dropped on the window
+
+' Each frame: a file dropped is taken once the pointer's where it landed
+SUB DropFrame
+    DIM i
+    IF _TOTALDROPPEDFILES THEN
+        dropFile$ = _DROPPEDFILE$(1): dropWait = 3
+        _FINISHDROP
+    END IF
+    IF dropWait > 0 THEN
+        dropWait = dropWait - 1
+        IF dropWait = 0 THEN DropTake dropFile$
+    END IF
+END SUB
+
+SUB DropTake (f$)
+    DIM e$, ref$, lx, ly
+    IF _DIREXISTS(f$) THEN binTab = 1: PicGoTo f$: EXIT SUB ' (a folder: its pictures in the bin)
+    e$ = LCASE$(RIGHT$(f$, 4))
+    SELECT CASE e$
+        CASE ".bld", ".obj"
+            ModelLoad f$
+        CASE ".png"
+            ref$ = PicBring$(f$): IF LEN(ref$) = 0 THEN EXIT SUB
+            binTab = 1: binPicExt$ = "": binTop = 0: BinList
+            lx = mX - vX0: ly = mY - vY0
+            IF InRect(mX, mY, vX0, vY0, vW, vH) AND PickTri(lx, ly) > 0 THEN
+                PicPutAt lx, ly, ref$, kShift
+            ELSE
+                Msg "pictures/" + ref$ + ".png - in the bin's PICTURES: drag it onto a face (or drop the file straight on one)"
+            END IF
+        CASE ELSE
+            Msg "bu1ld0r takes PNG pictures (onto a face), .bld / .obj models, and folders (their pictures, in the bin)"
+    END SELECT
+END SUB
+
+FUNCTION FileSame (a$, b$)
+    DIM fh, s$, t$
+    fh = FREEFILE: OPEN a$ FOR BINARY AS #fh: s$ = SPACE$(LOF(fh)): GET #fh, , s$: CLOSE #fh
+    fh = FREEFILE: OPEN b$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    FileSame = (s$ = t$)
+END FUNCTION

@@ -1,0 +1,664 @@
+''
+' bu1ld0r - MODEL/EMESH.BM
+' =============================================================================
+' Mesh parts: the pool, a mesh made from triangles (welded, flat
+' neighbours joined), a mesh's polygons cut into triangles for the view,
+' in and out of the .bld, and the pool tidied.
+'
+$CHECKING:OFF
+
+' ---------------------------------------------------------------- the pool
+
+SUB MbRoom (nv AS LONG, nf AS LONG, nc AS LONG)
+    IF mvTop + nv > mvCap THEN mvCap = (mvTop + nv) * 2 + 1024: REDIM _PRESERVE mvX(mvCap) AS SINGLE, mvY(mvCap) AS SINGLE, mvZ(mvCap) AS SINGLE
+    IF mfTop + nf > mfCap THEN mfCap = (mfTop + nf) * 2 + 1024: REDIM _PRESERVE mfC0(mfCap) AS LONG, mfCN(mfCap) AS LONG, mfCol(mfCap) AS _UNSIGNED LONG, mfTex(mfCap) AS INTEGER
+    IF mcTop + nc > mcCap THEN mcCap = (mcTop + nc) * 2 + 4096: REDIM _PRESERVE mcV(mcCap) AS LONG, mcE(mcCap) AS _BYTE, mcTU(mcCap) AS SINGLE, mcTV(mcCap) AS SINGLE
+END SUB
+
+' A new mesh, empty, at the top of the pool (what's added next goes in it)
+FUNCTION MbBegin&
+    IF mbN + 1 > mbCap THEN mbCap = mbN * 2 + 256: REDIM _PRESERVE mbV0(mbCap) AS LONG, mbVN(mbCap) AS LONG, mbF0(mbCap) AS LONG, mbFN(mbCap) AS LONG
+    mbN = mbN + 1
+    mbV0(mbN) = mvTop: mbVN(mbN) = 0: mbF0(mbN) = mfTop: mbFN(mbN) = 0
+    MbBegin& = mbN
+END FUNCTION
+
+' A point added to mesh id (the top one): its number in it
+FUNCTION MbAddV& (id AS LONG, x, y, z)
+    MbRoom 1, 0, 0
+    mvTop = mvTop + 1: mvX(mvTop) = x: mvY(mvTop) = y: mvZ(mvTop) = z
+    MbAddV& = mbVN(id): mbVN(id) = mbVN(id) + 1
+END FUNCTION
+
+SUB MbAddF (id AS LONG, c AS _UNSIGNED LONG)
+    MbRoom 0, 1, 0
+    mfTop = mfTop + 1: mfC0(mfTop) = mcTop + 1: mfCN(mfTop) = 0: mfCol(mfTop) = c: mfTex(mfTop) = 0
+    mbFN(id) = mbFN(id) + 1
+END SUB
+
+' A corner on the last polygon added: point v (the mesh's own number), e: the edge on is the shape's own
+SUB MbAddC (v AS LONG, e)
+    MbRoom 0, 0, 1
+    mcTop = mcTop + 1: mcV(mcTop) = v: mcE(mcTop) = e: mcTU(mcTop) = 0: mcTV(mcTop) = 0
+    mfCN(mfTop) = mfCN(mfTop) + 1
+END SUB
+
+FUNCTION MbOk (id AS LONG)
+    MbOk = (id >= 1 AND id <= mbN)
+END FUNCTION
+
+' Point v of mesh id (its own number, from 0): where, in its own space
+SUB MbPt (id AS LONG, v AS LONG, x, y, z)
+    DIM g AS LONG
+    g = mbV0(id) + 1 + v: x = mvX(g): y = mvY(g): z = mvZ(g)
+END SUB
+
+' Polygon g's (the pool's number) way out, by its corners (Newell's): not of length 1
+SUB MbNormal (id AS LONG, g AS LONG, nx#, ny#, nz#)
+    DIM k AS LONG, n AS LONG, a AS LONG, b AS LONG, v0 AS LONG
+    nx# = 0: ny# = 0: nz# = 0: n = mfCN(g): v0 = mbV0(id) + 1
+    FOR k = 0 TO n - 1
+        a = v0 + mcV(mfC0(g) + k): b = v0 + mcV(mfC0(g) + (k + 1) MOD n)
+        nx# = nx# + (CDBL(mvY(a)) - mvY(b)) * (CDBL(mvZ(a)) + mvZ(b))
+        ny# = ny# + (CDBL(mvZ(a)) - mvZ(b)) * (CDBL(mvX(a)) + mvX(b))
+        nz# = nz# + (CDBL(mvX(a)) - mvX(b)) * (CDBL(mvY(a)) + mvY(b))
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- a part's own space
+
+' A point of part i's own space to the world (its size, turns, place)
+SUB PartFwd (i, x#, y#, z#)
+    DIM p AS V3
+    p.x = x# * pSX(i): p.y = y# * pSY(i): p.z = z# * pSZ(i)
+    RotZXY p, DCos(pRX(i)), DSin(pRX(i)), DCos(pRY(i)), DSin(pRY(i)), DCos(pRZ(i)), DSin(pRZ(i))
+    x# = p.x + pX(i): y# = p.y + pY(i): z# = p.z + pZ(i)
+END SUB
+
+' A point of the world into part i's own space
+SUB PartInv (i, x#, y#, z#)
+    DIM cx#, sx#, cy#, sy#, cz#, sz#, a#, b#
+    cx# = DCos(pRX(i)): sx# = DSin(pRX(i)): cy# = DCos(pRY(i)): sy# = DSin(pRY(i)): cz# = DCos(pRZ(i)): sz# = DSin(pRZ(i))
+    x# = x# - pX(i): y# = y# - pY(i): z# = z# - pZ(i)
+    a# = x# * cy# - z# * sy#: b# = x# * sy# + z# * cy#: x# = a#: z# = b# ' (Y back)
+    a# = y# * cx# + z# * sx#: b# = -y# * sx# + z# * cx#: y# = a#: z# = b# ' (X back)
+    a# = x# * cz# + y# * sz#: b# = -x# * sz# + y# * cz#: x# = a#: y# = b# ' (Z back)
+    x# = x# / pSX(i): y# = y# / pSY(i): z# = z# / pSZ(i)
+END SUB
+
+' ---------------------------------------------------------------- triangles for the view
+
+' Mesh part i's polygons as triangles (MeshShape's mk... set for it)
+SUB MkMesh (i)
+    DIM id AS LONG, f AS LONG, g AS LONG
+    id = pMesh(i)
+    FOR f = 0 TO mbFN(id) - 1
+        g = mbF0(id) + 1 + f
+        mkFace = f: mkCol = mfCol(g): mkTex = mfTex(g)
+        MkPolyTris id, g
+    NEXT
+    mkTriE = 7: mkTex = 0
+END SUB
+
+' Polygon g of mesh id as triangles: a fan when it bulges out all round,
+' else ears cut off one by one (a corner whose triangle has no other inside it)
+SUB MkPolyTris (id AS LONG, g AS LONG)
+    DIM n AS LONG, k AS LONG, v0 AS LONG, c0 AS LONG, nx#, ny#, nz#, ax, conv, m AS LONG, guard AS LONG
+    DIM i0 AS LONG, i1 AS LONG, i2 AS LONG, a AS LONG, b AS LONG, c AS LONG, cr#, sg#, j AS LONG, ear, q AS LONG
+    n = mfCN(g): IF n < 3 THEN EXIT SUB
+    IF n > EM_MAXC THEN n = EM_MAXC
+    v0 = mbV0(id) + 1: c0 = mfC0(g)
+    MbNormal id, g, nx#, ny#, nz#
+    IF n = 3 THEN
+        mkTriE = -(mcE(c0) <> 0) OR -2 * (mcE(c0 + 1) <> 0) OR -4 * (mcE(c0 + 2) <> 0)
+        MkTriC c0, c0 + 1, c0 + 2, v0, nx#, ny#, nz#
+        EXIT SUB
+    END IF
+    ' Flat: the two axes the polygon shows most on
+    ax = 1: IF ABS(ny#) > ABS(nx#) THEN ax = 2
+    IF ABS(nz#) > ABS(nx#) AND ABS(nz#) > ABS(ny#) THEN ax = 3
+    FOR k = 0 TO n - 1
+        a = v0 + mcV(c0 + k)
+        SELECT CASE ax
+            CASE 1: emX(k) = mvY(a): emY(k) = mvZ(a): sg# = nx#
+            CASE 2: emX(k) = mvZ(a): emY(k) = mvX(a): sg# = ny#
+            CASE ELSE: emX(k) = mvX(a): emY(k) = mvY(a): sg# = nz#
+        END SELECT
+        emR(k) = k: emE(k) = mcE(c0 + k)
+    NEXT
+    sg# = SGN(sg#): IF sg# = 0 THEN sg# = 1
+    conv = -1
+    FOR k = 0 TO n - 1
+        i0 = (k + n - 1) MOD n: i2 = (k + 1) MOD n
+        cr# = (emX(k) - emX(i0)) * (emY(i2) - emY(k)) - (emY(k) - emY(i0)) * (emX(i2) - emX(k))
+        IF cr# * sg# < -1E-12 THEN conv = 0: EXIT FOR
+    NEXT
+    IF conv THEN
+        FOR k = 1 TO n - 2
+            mkTriE = 0
+            IF k = 1 AND mcE(c0) THEN mkTriE = 1
+            IF mcE(c0 + k) THEN mkTriE = mkTriE OR 2
+            IF k + 1 = n - 1 AND mcE(c0 + n - 1) THEN mkTriE = mkTriE OR 4
+            MkTriC c0, c0 + k, c0 + k + 1, v0, nx#, ny#, nz#
+        NEXT
+        EXIT SUB
+    END IF
+    m = n: j = 0: guard = 0
+    DO WHILE m > 3
+        i0 = emR((j + m - 1) MOD m): i1 = emR(j): i2 = emR((j + 1) MOD m)
+        cr# = (emX(i1) - emX(i0)) * (emY(i2) - emY(i1)) - (emY(i1) - emY(i0)) * (emX(i2) - emX(i1))
+        ear = (cr# * sg# > 1E-12)
+        IF ear THEN
+            FOR q = 0 TO m - 1
+                c = emR(q)
+                IF c <> i0 AND c <> i1 AND c <> i2 THEN
+                    IF InTri2(emX(c), emY(c), emX(i0), emY(i0), emX(i1), emY(i1), emX(i2), emY(i2), sg#) THEN ear = 0: EXIT FOR
+                END IF
+            NEXT
+        END IF
+        IF ear OR guard >= m THEN ' (an ear - or none left that is: a crossed polygon, cut anyway)
+            mkTriE = -(emE(i0) <> 0) OR -2 * (emE(i1) <> 0)
+            MkTriC c0 + i0, c0 + i1, c0 + i2, v0, nx#, ny#, nz#
+            emE(i0) = 0 ' (its edge on is the cut now, not the shape's)
+            FOR q = j TO m - 2: emR(q) = emR(q + 1): NEXT
+            m = m - 1: guard = 0
+            IF j >= m THEN j = 0
+        ELSE
+            j = (j + 1) MOD m: guard = guard + 1
+        END IF
+    LOOP
+    i0 = emR(0): i1 = emR(1): i2 = emR(2)
+    mkTriE = -(emE(i0) <> 0) OR -2 * (emE(i1) <> 0) OR -4 * (emE(i2) <> 0)
+    MkTriC c0 + i0, c0 + i1, c0 + i2, v0, nx#, ny#, nz#
+END SUB
+
+' Is (x, y) inside (or on) the triangle, as it turns (sgn)?
+FUNCTION InTri2 (x#, y#, ax#, ay#, bx#, by#, cx#, cy#, sg#)
+    DIM d1#, d2#, d3#
+    d1# = ((bx# - ax#) * (y# - ay#) - (by# - ay#) * (x# - ax#)) * sg#
+    d2# = ((cx# - bx#) * (y# - by#) - (cy# - by#) * (x# - bx#)) * sg#
+    d3# = ((ax# - cx#) * (y# - cy#) - (ay# - cy#) * (x# - cx#)) * sg#
+    InTri2 = (d1# >= -1E-12 AND d2# >= -1E-12 AND d3# >= -1E-12)
+END FUNCTION
+
+' A triangle of the pool's corners ca, cb, cc (points v0 + theirs; spots on the polygon's picture, mkTex)
+SUB MkTriC (ca AS LONG, cb AS LONG, cc AS LONG, v0 AS LONG, nx#, ny#, nz#)
+    IF mkTex THEN mkU(0) = mcTU(ca): mkW(0) = mcTV(ca): mkU(1) = mcTU(cb): mkW(1) = mcTV(cb): mkU(2) = mcTU(cc): mkW(2) = mcTV(cc)
+    MkTriV v0 + mcV(ca), v0 + mcV(cb), v0 + mcV(cc), nx#, ny#, nz#
+END SUB
+
+' A triangle of the pool's points a, b, c (the polygon's way out: n)
+SUB MkTriV (a AS LONG, b AS LONG, c AS LONG, nx#, ny#, nz#)
+    MkTri mvX(a), mvY(a), mvZ(a), mvX(b), mvY(b), mvZ(b), mvX(c), mvY(c), mvZ(c), nx#, ny#, nz#
+END SUB
+
+' ---------------------------------------------------------------- work: a mesh being made or changed
+
+SUB EmClear
+    swN = 0: sfN = 0: scTop = 0
+END SUB
+
+SUB EmRoom (nv AS LONG, nf AS LONG, nc AS LONG)
+    IF swN + nv > swCap THEN
+        swCap = (swN + nv) * 2 + 1024
+        REDIM _PRESERVE swX(swCap) AS DOUBLE, swY(swCap) AS DOUBLE, swZ(swCap) AS DOUBLE, swKX(swCap) AS LONG, swKY(swCap) AS LONG, swKZ(swCap) AS LONG
+    END IF
+    IF sfN + nf > sfCap THEN
+        sfCap = (sfN + nf) * 2 + 1024
+        REDIM _PRESERVE sfC0(sfCap) AS LONG, sfCN(sfCap) AS LONG, sfCol(sfCap) AS _UNSIGNED LONG, sfLive(sfCap) AS _BYTE, sfBusy(sfCap) AS _BYTE
+        REDIM _PRESERVE sfNx(sfCap) AS DOUBLE, sfNy(sfCap) AS DOUBLE, sfNz(sfCap) AS DOUBLE
+        REDIM _PRESERVE sfTag(sfCap) AS LONG, sfTex(sfCap) AS INTEGER
+    END IF
+    IF scTop + nc > scCap THEN scCap = (scTop + nc) * 2 + 4096: REDIM _PRESERVE scV(scCap) AS LONG, scE(scCap) AS _BYTE, scTU(scCap) AS SINGLE, scTV(scCap) AS SINGLE
+END SUB
+
+FUNCTION EmAddV& (x#, y#, z#)
+    EmRoom 1, 0, 0
+    swN = swN + 1: swX(swN) = x#: swY(swN) = y#: swZ(swN) = z#
+    EmAddV& = swN
+END FUNCTION
+
+' A polygon of the work from emL / emE (n corners): its number
+FUNCTION EmAddF& (n AS LONG, c AS _UNSIGNED LONG)
+    DIM k AS LONG
+    EmRoom 0, 1, n
+    sfN = sfN + 1: sfC0(sfN) = scTop + 1: sfCN(sfN) = n: sfCol(sfN) = c: sfLive(sfN) = -1: sfBusy(sfN) = 0: sfTag(sfN) = emTag: sfTex(sfN) = emTex
+    FOR k = 0 TO n - 1
+        scTop = scTop + 1: scV(scTop) = emL(k): scE(scTop) = emE(k)
+        IF emTex THEN scTU(scTop) = emU(k): scTV(scTop) = emW(k) ELSE scTU(scTop) = 0: scTV(scTop) = 0
+    NEXT
+    emTex = 0
+    EmNormal sfN
+    EmAddF& = sfN
+END FUNCTION
+
+' Work polygon f's way out (of length 1; 0 if it has no area)
+SUB EmNormal (f AS LONG)
+    DIM k AS LONG, n AS LONG, a AS LONG, b AS LONG, x#, y#, z#, l#
+    n = sfCN(f)
+    FOR k = 0 TO n - 1
+        a = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD n)
+        x# = x# + (swY(a) - swY(b)) * (swZ(a) + swZ(b))
+        y# = y# + (swZ(a) - swZ(b)) * (swX(a) + swX(b))
+        z# = z# + (swX(a) - swX(b)) * (swY(a) + swY(b))
+    NEXT
+    l# = SQR(x# * x# + y# * y# + z# * z#): IF l# > 1E-30 THEN x# = x# / l#: y# = y# / l#: z# = z# / l#
+    sfNx(f) = x#: sfNy(f) = y#: sfNz(f) = z#
+END SUB
+
+' Mesh id into the work (points numbered from 1: the mesh's own + 1)
+SUB EmLoad (id AS LONG)
+    DIM v AS LONG, f AS LONG, g AS LONG, k AS LONG, r AS LONG
+    EmClear
+    IF NOT MbOk(id) THEN EXIT SUB
+    FOR v = 0 TO mbVN(id) - 1
+        g = mbV0(id) + 1 + v: r = EmAddV&(mvX(g), mvY(g), mvZ(g))
+    NEXT
+    FOR f = 0 TO mbFN(id) - 1
+        g = mbF0(id) + 1 + f
+        FOR k = 0 TO mfCN(g) - 1: emL(k) = mcV(mfC0(g) + k) + 1: emE(k) = mcE(mfC0(g) + k): emU(k) = mcTU(mfC0(g) + k): emW(k) = mcTV(mfC0(g) + k): NEXT
+        emTex = mfTex(g)
+        r = EmAddF&(mfCN(g), mfCol(g))
+    NEXT
+END SUB
+
+' The work made a mesh in the pool (its live polygons, the points they use): its number.
+' swMap / sfMap say where each point and polygon went (-1: gone).
+FUNCTION EmWrite&
+    DIM id AS LONG, v AS LONG, f AS LONG, k AS LONG, n AS LONG, r AS LONG
+    REDIM swMap(swN) AS LONG, sfMap(sfN) AS LONG
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            FOR k = 0 TO sfCN(f) - 1: swMap(scV(sfC0(f) + k)) = -1: NEXT
+        END IF
+    NEXT
+    id = MbBegin&
+    MbRoom swN, sfN, scTop
+    FOR v = 1 TO swN
+        IF swMap(v) THEN swMap(v) = MbAddV&(id, swX(v), swY(v), swZ(v)) ELSE swMap(v) = -1
+    NEXT
+    n = 0
+    FOR f = 1 TO sfN
+        sfMap(f) = -1
+        IF sfLive(f) AND sfCN(f) >= 3 THEN
+            sfMap(f) = n: n = n + 1
+            MbAddF id, sfCol(f): mfTex(mfTop) = sfTex(f)
+            FOR k = 0 TO sfCN(f) - 1
+                MbAddC swMap(scV(sfC0(f) + k)), scE(sfC0(f) + k)
+                IF sfTex(f) THEN mcTU(mcTop) = scTU(sfC0(f) + k): mcTV(mcTop) = scTV(sfC0(f) + k)
+            NEXT
+        END IF
+    NEXT
+    meshGen = meshGen + 1
+    EmWrite& = id
+END FUNCTION
+
+' ---------------------------------------------------------------- a mesh from triangles
+
+' Triangles t0 to t1 (the world's) as a mesh in part i's own space:
+' corners welded, flat neighbours of one colour joined across the edges
+' that aren't the shape's own (allEdges: across any)
+FUNCTION EmFromTris& (t0 AS LONG, t1 AS LONG, i, allEdges)
+    DIM t AS LONG, v AS LONG, r AS LONG, x#, y#, z#
+    EmClear
+    EmWeldStart (t1 - t0 + 1) * 3
+    FOR t = t0 TO t1
+        emL(0) = EmWeld&(tA(t).x, tA(t).y, tA(t).z)
+        emL(1) = EmWeld&(tB(t).x, tB(t).y, tB(t).z)
+        emL(2) = EmWeld&(tC(t).x, tC(t).y, tC(t).z)
+        emE(0) = -((tEdge(t) AND 1) <> 0): emE(1) = -((tEdge(t) AND 2) <> 0): emE(2) = -((tEdge(t) AND 4) <> 0)
+        IF emL(0) <> emL(1) AND emL(1) <> emL(2) AND emL(2) <> emL(0) THEN
+            emTex = tTex(t): emU(0) = tU(3 * t): emW(0) = tW(3 * t): emU(1) = tU(3 * t + 1): emW(1) = tW(3 * t + 1): emU(2) = tU(3 * t + 2): emW(2) = tW(3 * t + 2)
+            r = EmAddF&(3, tCol(t))
+            IF sfNx(r) = 0 AND sfNy(r) = 0 AND sfNz(r) = 0 THEN sfLive(r) = 0 ' (no area)
+        END IF
+    NEXT
+    EmMerge allEdges
+    IF i > 0 THEN
+        FOR v = 1 TO swN
+            x# = swX(v): y# = swY(v): z# = swZ(v): PartInv i, x#, y#, z#: swX(v) = x#: swY(v) = y#: swZ(v) = z#
+        NEXT
+    END IF
+    EmFromTris& = EmWrite&
+END FUNCTION
+
+' Welding: a hash of each point's little cube (q across: within half of it is the same point)
+SUB EmWeldStart (n AS LONG)
+    DIM h AS LONG
+    h = 1024
+    DO WHILE h < n * 2: h = h * 2: LOOP
+    REDIM swHash(h - 1) AS LONG
+END SUB
+
+FUNCTION EmWeld& (x#, y#, z#)
+    DIM q#, kx AS LONG, ky AS LONG, kz AS LONG, dx, dy, dz, s AS LONG, v AS LONG, mask AS LONG, tol#
+    q# = .00004: tol# = .00002 * .00002
+    mask = UBOUND(swHash)
+    kx = INT(x# / q#): ky = INT(y# / q#): kz = INT(z# / q#)
+    FOR dx = -1 TO 1
+        FOR dy = -1 TO 1
+            FOR dz = -1 TO 1
+                s = EmCellHash&(kx + dx, ky + dy, kz + dz, mask)
+                DO WHILE swHash(s)
+                    v = swHash(s)
+                    IF swKX(v) = kx + dx AND swKY(v) = ky + dy AND swKZ(v) = kz + dz THEN
+                        IF (swX(v) - x#) ^ 2 + (swY(v) - y#) ^ 2 + (swZ(v) - z#) ^ 2 <= tol# THEN EmWeld& = v: EXIT FUNCTION
+                    END IF
+                    s = (s + 1) AND mask
+                LOOP
+            NEXT
+        NEXT
+    NEXT
+    v = EmAddV&(x#, y#, z#): swKX(v) = kx: swKY(v) = ky: swKZ(v) = kz
+    s = EmCellHash&(kx, ky, kz, mask)
+    DO WHILE swHash(s): s = (s + 1) AND mask: LOOP
+    swHash(s) = v
+    EmWeld& = v
+END FUNCTION
+
+FUNCTION EmCellHash& (kx AS LONG, ky AS LONG, kz AS LONG, mask AS LONG)
+    DIM h AS _INTEGER64
+    h = (kx * 73856093&& XOR ky * 19349663&& XOR kz * 83492791&&)
+    EmCellHash& = h AND mask
+END FUNCTION
+
+' Neighbours joined, pass after pass, until none will: flat, one colour,
+' across an edge that isn't the shape's own (both sides), making one
+' polygon that doesn't go round a hole
+SUB EmMerge (allEdges)
+    DIM pass, did, f AS LONG, k AS LONG, n AS LONG, u AS LONG, v AS LONG, q AS LONG, j AS LONG, m AS LONG, r AS LONG, ok
+    DO
+        did = 0: pass = pass + 1
+        EmEdgeMap
+        FOR f = 1 TO sfN: sfBusy(f) = 0: NEXT
+        FOR f = 1 TO sfN
+            IF sfLive(f) AND sfBusy(f) = 0 THEN
+                n = sfCN(f)
+                FOR k = 0 TO n - 1
+                    IF scE(sfC0(f) + k) = 0 OR allEdges THEN
+                        u = scV(sfC0(f) + k): v = scV(sfC0(f) + (k + 1) MOD n)
+                        q = EmEdgeFind&(v, u)
+                        IF q > 0 AND q <> f THEN
+                            ok = 0
+                            IF sfLive(q) AND sfBusy(q) = 0 THEN
+                                IF sfTex(q) = 0 AND sfTex(f) = 0 THEN
+                                    ok = (sfCol(q) = sfCol(f))
+                                ELSEIF sfTex(q) = sfTex(f) THEN
+                                    ok = EmTexFits(f, q) ' (one picture running on across both)
+                                END IF
+                            END IF
+                            IF ok THEN
+                                IF sfNx(f) * sfNx(q) + sfNy(f) * sfNy(q) + sfNz(f) * sfNz(q) > .9995 THEN
+                                    j = EmCornerOf&(q, v, u)
+                                    IF j >= 0 THEN
+                                        IF scE(sfC0(q) + j) = 0 OR allEdges THEN
+                                            m = EmJoin&(f, k, q, j, ok)
+                                            IF ok THEN
+                                                IF sfTex(f) THEN EmJoinSpots f, q, m
+                                                emTag = sfTag(f): r = EmAddF&(m, sfCol(f)): sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
+                                                sfLive(f) = 0: sfLive(q) = 0: sfBusy(r) = -1: sfBusy(q) = -1: did = -1
+                                                EXIT FOR
+                                            END IF
+                                        END IF
+                                    END IF
+                                END IF
+                            END IF
+                        END IF
+                    END IF
+                NEXT
+            END IF
+        NEXT
+    LOOP WHILE did AND pass < 64
+END SUB
+
+' Does polygon q's picture carry on f's - each of q's corners where f's
+' spots, carried on flat across f's plane, would put it?
+FUNCTION EmTexFits (f AS LONG, q AS LONG)
+    DIM i AS LONG, j AS LONG, pu#, pv#
+    FOR i = 0 TO sfCN(q) - 1
+        j = sfC0(q) + i
+        IF NOT EmTexAt(f, scV(j), pu#, pv#) THEN EXIT FUNCTION
+        IF ABS(pu# - scTU(j)) > .001 OR ABS(pv# - scTV(j)) > .001 THEN EXIT FUNCTION
+    NEXT
+    EmTexFits = -1
+END FUNCTION
+
+' Where work point w would be on polygon f's picture, f's spots carried on
+' flat across its plane (0: f has no area)
+FUNCTION EmTexAt (f AS LONG, w AS LONG, pu#, pv#)
+    DIM n AS LONG, i AS LONG, j AS LONG, c0 AS LONG, a0 AS LONG, bi AS LONG, bj AS LONG, best#, l#
+    DIM e1x#, e1y#, e1z#, e2x#, e2y#, e2z#, cx#, cy#, cz#, g11#, g12#, g22#, det#, px#, py#, pz#, d1#, d2#, s#, t#
+    n = sfCN(f): c0 = sfC0(f): a0 = scV(c0)
+    FOR i = 1 TO n - 2 ' (f's widest corner pair from its first: the plane's two ways)
+        FOR j = i + 1 TO n - 1
+            e1x# = swX(scV(c0 + i)) - swX(a0): e1y# = swY(scV(c0 + i)) - swY(a0): e1z# = swZ(scV(c0 + i)) - swZ(a0)
+            e2x# = swX(scV(c0 + j)) - swX(a0): e2y# = swY(scV(c0 + j)) - swY(a0): e2z# = swZ(scV(c0 + j)) - swZ(a0)
+            cx# = e1y# * e2z# - e1z# * e2y#: cy# = e1z# * e2x# - e1x# * e2z#: cz# = e1x# * e2y# - e1y# * e2x#
+            l# = cx# * cx# + cy# * cy# + cz# * cz#
+            IF l# > best# THEN best# = l#: bi = i: bj = j
+        NEXT
+    NEXT
+    IF best# < 1E-16 THEN EXIT FUNCTION
+    e1x# = swX(scV(c0 + bi)) - swX(a0): e1y# = swY(scV(c0 + bi)) - swY(a0): e1z# = swZ(scV(c0 + bi)) - swZ(a0)
+    e2x# = swX(scV(c0 + bj)) - swX(a0): e2y# = swY(scV(c0 + bj)) - swY(a0): e2z# = swZ(scV(c0 + bj)) - swZ(a0)
+    g11# = e1x# * e1x# + e1y# * e1y# + e1z# * e1z#: g12# = e1x# * e2x# + e1y# * e2y# + e1z# * e2z#: g22# = e2x# * e2x# + e2y# * e2y# + e2z# * e2z#
+    det# = g11# * g22# - g12# * g12#: IF ABS(det#) < 1E-20 THEN EXIT FUNCTION
+    px# = swX(w) - swX(a0): py# = swY(w) - swY(a0): pz# = swZ(w) - swZ(a0)
+    d1# = px# * e1x# + py# * e1y# + pz# * e1z#: d2# = px# * e2x# + py# * e2y# + pz# * e2z#
+    s# = (d1# * g22# - d2# * g12#) / det#: t# = (d2# * g11# - d1# * g12#) / det#
+    pu# = scTU(c0) + s# * (scTU(c0 + bi) - scTU(c0)) + t# * (scTU(c0 + bj) - scTU(c0))
+    pv# = scTV(c0) + s# * (scTV(c0 + bi) - scTV(c0)) + t# * (scTV(c0 + bj) - scTV(c0))
+    EmTexAt = -1
+END FUNCTION
+
+' Work polygon f's area
+FUNCTION EmArea# (f AS LONG)
+    DIM k AS LONG, n AS LONG, a AS LONG, b AS LONG, x#, y#, z#
+    n = sfCN(f)
+    FOR k = 0 TO n - 1
+        a = scV(sfC0(f) + k): b = scV(sfC0(f) + (k + 1) MOD n)
+        x# = x# + (swY(a) - swY(b)) * (swZ(a) + swZ(b))
+        y# = y# + (swZ(a) - swZ(b)) * (swX(a) + swX(b))
+        z# = z# + (swX(a) - swX(b)) * (swY(a) + swY(b))
+    NEXT
+    EmArea# = SQR(x# * x# + y# * y# + z# * z#) / 2
+END FUNCTION
+
+' The joined polygon's spots (emL's m corners): each point's, from f or q
+SUB EmJoinSpots (f AS LONG, q AS LONG, m AS LONG)
+    DIM i AS LONG, k AS LONG, c AS LONG
+    emTex = sfTex(f)
+    FOR i = 0 TO m - 1
+        c = 0
+        FOR k = 0 TO sfCN(f) - 1
+            IF scV(sfC0(f) + k) = emL(i) THEN c = sfC0(f) + k: EXIT FOR
+        NEXT
+        IF c = 0 THEN
+            FOR k = 0 TO sfCN(q) - 1
+                IF scV(sfC0(q) + k) = emL(i) THEN c = sfC0(q) + k: EXIT FOR
+            NEXT
+        END IF
+        IF c THEN emU(i) = scTU(c): emW(i) = scTV(c)
+    NEXT
+END SUB
+
+' Polygons f and q (f's corner k is u, its next v; q's corner j is v, its next u) as one, in emL / emE:
+' how many corners (ok 0: it would go round a hole, or be too big)
+FUNCTION EmJoin& (f AS LONG, k AS LONG, q AS LONG, j AS LONG, ok)
+    DIM n AS LONG, nq AS LONG, m AS LONG, i AS LONG, a AS LONG, again, b AS LONG, w AS LONG
+    ok = 0
+    n = sfCN(f): nq = sfCN(q)
+    IF n + nq - 2 > EM_MAXC THEN EXIT FUNCTION
+    m = 0
+    FOR i = 1 TO n ' (f from v round to u)
+        a = sfC0(f) + (k + i) MOD n
+        emL(m) = scV(a): emE(m) = scE(a): m = m + 1
+    NEXT
+    emE(m - 1) = scE(sfC0(q) + (j + 1) MOD nq) ' (u on into q)
+    FOR i = 2 TO nq - 1 ' (then q's corners past u, back to v)
+        a = sfC0(q) + (j + i) MOD nq
+        emL(m) = scV(a): emE(m) = scE(a): m = m + 1
+    NEXT
+    ' Spikes (a, b, a: a lid's last spoke from both sides) taken out
+    DO
+        again = 0
+        IF m < 3 THEN EXIT FUNCTION
+        FOR i = 0 TO m - 1
+            a = (i + m - 1) MOD m: b = (i + 1) MOD m
+            IF emL(a) = emL(b) THEN
+                emE(a) = emE(b)
+                IF b > i THEN
+                    FOR w = i TO m - 3: emL(w) = emL(w + 2): emE(w) = emE(w + 2): NEXT
+                ELSE ' (b is 0: i the last)
+                    FOR w = 0 TO m - 3: emL(w) = emL(w + 1): emE(w) = emE(w + 1): NEXT
+                END IF
+                m = m - 2: again = -1: EXIT FOR
+            END IF
+        NEXT
+    LOOP WHILE again
+    IF m < 3 THEN EXIT FUNCTION
+    FOR i = 0 TO m - 1 ' (a point twice: it goes round a hole)
+        FOR w = i + 1 TO m - 1
+            IF emL(i) = emL(w) THEN EXIT FUNCTION
+        NEXT
+    NEXT
+    ok = -1: EmJoin& = m
+END FUNCTION
+
+' The edges of the live polygons: u to v -> the polygon
+SUB EmEdgeMap
+    DIM h AS LONG, f AS LONG, k AS LONG, n AS LONG, s AS LONG, ky AS _INTEGER64, mask AS LONG
+    h = 1024
+    DO WHILE h < scTop * 2: h = h * 2: LOOP
+    REDIM seKey(h - 1) AS _INTEGER64, seVal(h - 1) AS LONG
+    mask = h - 1
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            n = sfCN(f)
+            FOR k = 0 TO n - 1
+                ky = scV(sfC0(f) + k) * 2147483648&& + scV(sfC0(f) + (k + 1) MOD n)
+                s = EmKeyHash&(ky, mask)
+                DO WHILE seVal(s): s = (s + 1) AND mask: LOOP
+                seKey(s) = ky: seVal(s) = f
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+FUNCTION EmKeyHash& (ky AS _INTEGER64, mask AS LONG)
+    DIM h AS _INTEGER64
+    h = ky * 2654435761&&
+    h = h XOR (h \ 65536)
+    EmKeyHash& = h AND mask
+END FUNCTION
+
+' The live polygon with an edge u to v (0: none) - the first found
+FUNCTION EmEdgeFind& (u AS LONG, v AS LONG)
+    DIM ky AS _INTEGER64, s AS LONG, mask AS LONG
+    mask = UBOUND(seKey)
+    ky = u * 2147483648&& + v
+    s = EmKeyHash&(ky, mask)
+    DO WHILE seVal(s)
+        IF seKey(s) = ky AND sfLive(seVal(s)) THEN EmEdgeFind& = seVal(s): EXIT FUNCTION
+        s = (s + 1) AND mask
+    LOOP
+END FUNCTION
+
+' Which corner of polygon q is u with v next (-1: none)
+FUNCTION EmCornerOf& (q AS LONG, u AS LONG, v AS LONG)
+    DIM k AS LONG, n AS LONG
+    n = sfCN(q)
+    FOR k = 0 TO n - 1
+        IF scV(sfC0(q) + k) = u AND scV(sfC0(q) + (k + 1) MOD n) = v THEN EmCornerOf& = k: EXIT FUNCTION
+    NEXT
+    EmCornerOf& = -1
+END FUNCTION
+
+$CHECKING:ON
+
+' ---------------------------------------------------------------- in and out of the .bld
+
+' A number for a point: 6 places (a mesh's points are its own 1 x 1 x 1)
+FUNCTION Fmt6$ (v#)
+    DIM s$, n AS _INTEGER64, w$, f$
+    n = _ROUND(v# * 1000000)
+    IF n < 0 THEN s$ = "-": n = -n
+    w$ = LTRIM$(STR$(n \ 1000000)): f$ = RIGHT$("00000" + LTRIM$(STR$(n MOD 1000000)), 6)
+    DO WHILE RIGHT$(f$, 1) = "0" AND LEN(f$): f$ = LEFT$(f$, LEN(f$) - 1): LOOP
+    IF LEN(f$) THEN f$ = s$ + w$ + "." + f$ ELSE f$ = s$ + w$
+    IF f$ = "-0" THEN f$ = "0"
+    Fmt6$ = f$
+END FUNCTION
+
+' Mesh id's lines after its part line: "v x y z", then "f RRGGBB 1 2 -3 ..." (points from 1; less than 0: that edge on isn't the shape's own)
+SUB MeshLines (fh, id AS LONG)
+    DIM v AS LONG, f AS LONG, g AS LONG, k AS LONG, l$, c AS LONG
+    IF NOT MbOk(id) THEN EXIT SUB
+    FOR v = 0 TO mbVN(id) - 1
+        g = mbV0(id) + 1 + v
+        PRINT #fh, "v " + Fmt6$(mvX(g)) + " " + Fmt6$(mvY(g)) + " " + Fmt6$(mvZ(g))
+    NEXT
+    FOR f = 0 TO mbFN(id) - 1
+        g = mbF0(id) + 1 + f
+        l$ = "f " + HexCol$(mfCol(g))
+        IF mfTex(g) THEN l$ = l$ + " @" + picRef$(mfTex(g)) ' (its picture, then each corner's spot on it: point:u:v)
+        FOR k = 0 TO mfCN(g) - 1
+            c = mfC0(g) + k
+            l$ = l$ + " " + IIFS$(mcE(c), "", "-") + LTRIM$(STR$(mcV(c) + 1))
+            IF mfTex(g) THEN l$ = l$ + ":" + Fmt6$(mcTU(c)) + ":" + Fmt6$(mcTV(c))
+        NEXT
+        PRINT #fh, l$
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- tidying the pool
+
+' The meshes nothing names any more let go: the model's parts, the
+' prefabs', the shape being put down, and every undo and redo step
+SUB MeshGc
+    DIM i AS LONG, id AS LONG, nv AS LONG, nf AS LONG, nc AS LONG, v AS LONG, f AS LONG, k AS LONG, g AS LONG, c0 AS LONG
+    IF mbN = 0 THEN EXIT SUB
+    REDIM mk(mbN) AS _BYTE
+    FOR i = 0 TO pN: GcMark pMesh(i), mk(): NEXT
+    FOR i = PF_BASE + 1 TO PF_BASE + pfTop: GcMark pMesh(i), mk(): NEXT
+    GcMark pMesh(P_TPL), mk(): GcMark pMesh(P_SWAP), mk()
+    FOR i = 1 TO undoN: GcMarkText undoS$(i), mk(): NEXT
+    FOR i = 1 TO redoN: GcMarkText redoS$(i), mk(): NEXT
+    ' (each kept one moved down over the gaps: in the order they were made, so nothing's overwritten before it's moved)
+    FOR id = 1 TO mbN
+        IF mk(id) THEN
+            FOR v = 1 TO mbVN(id)
+                mvX(nv + v) = mvX(mbV0(id) + v): mvY(nv + v) = mvY(mbV0(id) + v): mvZ(nv + v) = mvZ(mbV0(id) + v)
+            NEXT
+            mbV0(id) = nv: nv = nv + mbVN(id)
+            FOR f = 1 TO mbFN(id)
+                g = mbF0(id) + f: c0 = mfC0(g)
+                FOR k = 0 TO mfCN(g) - 1: mcV(nc + 1 + k) = mcV(c0 + k): mcE(nc + 1 + k) = mcE(c0 + k): mcTU(nc + 1 + k) = mcTU(c0 + k): mcTV(nc + 1 + k) = mcTV(c0 + k): NEXT
+                mfC0(nf + f) = nc + 1: mfCN(nf + f) = mfCN(g): mfCol(nf + f) = mfCol(g): mfTex(nf + f) = mfTex(g)
+                nc = nc + mfCN(g)
+            NEXT
+            mbF0(id) = nf: nf = nf + mbFN(id)
+        ELSE
+            mbVN(id) = 0: mbFN(id) = 0: mbV0(id) = nv: mbF0(id) = nf
+        END IF
+    NEXT
+    mvTop = nv: mfTop = nf: mcTop = nc: mbLive = nv
+END SUB
+
+SUB GcMark (id AS LONG, mk() AS _BYTE)
+    IF id >= 1 AND id <= mbN THEN mk(id) = -1
+END SUB
+
+SUB GcMarkText (t$, mk() AS _BYTE)
+    DIM p AS LONG
+    p = INSTR(t$, "mesh=")
+    DO WHILE p
+        GcMark VAL(MID$(t$, p + 5, 12)), mk()
+        p = INSTR(p + 5, t$, "mesh=")
+    LOOP
+END SUB
+
+' Tidied when it's grown well past what was kept last time
+SUB MeshGcDue
+    IF mvTop > mbLive * 3 + 200000 THEN MeshGc
+END SUB

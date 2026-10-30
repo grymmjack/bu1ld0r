@@ -1,0 +1,205 @@
+''
+' bu1ld0r - MODEL/IMPORT.BM
+' =============================================================================
+
+FUNCTION NeonInDir$
+    DIM d$
+    d$ = neonIn$
+    IF d$ = "" THEN d$ = neonDir$
+    IF d$ = "" THEN d$ = ENVIRON$("HOME") + "/git/neon-caster/neon-caster/"
+    IF RIGHT$(d$, 1) <> "/" THEN d$ = d$ + "/"
+    IF NOT _DIREXISTS(d$ + "models") THEN d$ = ""
+    NeonInDir$ = d$
+END FUNCTION
+
+' The prop's texture: the HD one if the game has it, else the mtl's, else NAME_tex.png beside it
+FUNCTION ObjTexPath$ (p$, n$)
+    DIM d$, i, fh, l$, m$, t$
+    i = _INSTRREV(p$, "/"): d$ = LEFT$(p$, i)
+    IF _FILEEXISTS(d$ + "../hd/models/" + n$ + "_tex.png") THEN ObjTexPath$ = d$ + "../hd/models/" + n$ + "_tex.png": EXIT FUNCTION
+    m$ = d$ + n$ + ".mtl"
+    IF _FILEEXISTS(m$) THEN
+        fh = FREEFILE: OPEN m$ FOR INPUT AS #fh
+        DO WHILE NOT EOF(fh)
+            LINE INPUT #fh, l$: l$ = LTRIM$(l$)
+            IF LCASE$(LEFT$(l$, 7)) = "map_kd " THEN t$ = _TRIM$(MID$(l$, 8))
+        LOOP
+        CLOSE #fh
+        IF LEN(t$) THEN
+            IF LEFT$(t$, 1) <> "/" THEN t$ = d$ + t$
+            IF _FILEEXISTS(t$) THEN ObjTexPath$ = t$: EXIT FUNCTION
+        END IF
+    END IF
+    IF _FILEEXISTS(d$ + n$ + "_tex.png") THEN ObjTexPath$ = d$ + n$ + "_tex.png"
+END FUNCTION
+
+SUB FileCopy (a$, b$)
+    DIM fh, t$
+    fh = FREEFILE: OPEN a$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    IF _FILEEXISTS(b$) THEN KILL b$
+    fh = FREEFILE: OPEN b$ FOR BINARY AS #fh: PUT #fh, , t$: CLOSE #fh
+END SUB
+
+FUNCTION ImIdx& (w$, n AS LONG)
+    DIM v AS LONG
+    v = VAL(w$)
+    IF v < 0 THEN v = n + 1 + v
+    IF v < 1 OR v > n THEN v = 0
+    ImIdx& = v
+END FUNCTION
+
+FUNCTION ImRoot& (v AS LONG)
+    DIM r AS LONG, n AS LONG
+    r = v
+    DO WHILE imUp(r) <> r: r = imUp(r): LOOP
+    DO WHILE imUp(v) <> r: n = imUp(v): imUp(v) = r: v = n: LOOP
+    ImRoot& = r
+END FUNCTION
+
+' p$: an .obj file - opened as a new model named for it
+SUB ObjImport (p$)
+    DIM fh, t$, l$, a AS LONG, b AS LONG, i AS LONG, k AS LONG, j AS LONG, n$, tp$, tx, nv AS LONG, nt AS LONG, ntri AS LONG
+    DIM fv(63) AS LONG, ft(63) AS LONG, nfc, s1, s2, w$, c AS LONG, pc AS LONG, npc AS LONG, cnt AS LONG, q, g
+    DIM lo AS V3, hi AS V3, t AS LONG, id AS LONG, u, v, r, gg, bb, col AS _UNSIGNED LONG, made, x#, y#, z#
+    IF NOT _FILEEXISTS(p$) THEN Msg "No such file: " + p$: EXIT SUB
+    i = _INSTRREV(p$, "/"): n$ = MID$(p$, i + 1): n$ = SafeName$(LEFT$(n$, LEN(n$) - 4))
+    fh = FREEFILE: OPEN p$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    REDIM imX(1024) AS SINGLE, imY(1024) AS SINGLE, imZ(1024) AS SINGLE, imU(1024) AS SINGLE, imV(1024) AS SINGLE
+    REDIM imCV(3072) AS LONG, imCT(3072) AS LONG
+    a = 1
+    DO WHILE a <= LEN(t$)
+        b = INSTR(a, t$, CHR$(10)): IF b = 0 THEN b = LEN(t$) + 1
+        l$ = MID$(t$, a, b - a): a = b + 1
+        IF RIGHT$(l$, 1) = CHR$(13) THEN l$ = LEFT$(l$, LEN(l$) - 1)
+        Words l$
+        IF wdN >= 3 THEN
+            SELECT CASE wd$(1)
+                CASE "v"
+                    nv = nv + 1
+                    IF nv > UBOUND(imX) THEN REDIM _PRESERVE imX(nv * 2) AS SINGLE: REDIM _PRESERVE imY(nv * 2) AS SINGLE: REDIM _PRESERVE imZ(nv * 2) AS SINGLE
+                    imX(nv) = VAL(wd$(2)): imY(nv) = VAL(wd$(3)): IF wdN >= 4 THEN imZ(nv) = VAL(wd$(4))
+                CASE "vt"
+                    nt = nt + 1
+                    IF nt > UBOUND(imU) THEN REDIM _PRESERVE imU(nt * 2) AS SINGLE: REDIM _PRESERVE imV(nt * 2) AS SINGLE
+                    imU(nt) = VAL(wd$(2)): imV(nt) = 1 - VAL(wd$(3)) ' (OBJ's v counts up from the bottom; ours down from the top)
+                CASE "f"
+                    nfc = 0
+                    FOR k = 2 TO wdN
+                        IF nfc > 63 THEN EXIT FOR
+                        w$ = wd$(k): s1 = INSTR(w$, "/")
+                        fv(nfc) = ImIdx&(w$, nv): ft(nfc) = 0
+                        IF s1 THEN
+                            s2 = INSTR(s1 + 1, w$, "/")
+                            IF s2 <> s1 + 1 THEN ft(nfc) = ImIdx&(MID$(w$, s1 + 1), nt)
+                        END IF
+                        IF fv(nfc) THEN nfc = nfc + 1
+                    NEXT
+                    FOR k = 1 TO nfc - 2 ' (a fan)
+                        ntri = ntri + 1
+                        IF ntri * 3 + 2 > UBOUND(imCV) THEN REDIM _PRESERVE imCV(ntri * 6 + 2) AS LONG: REDIM _PRESERVE imCT(ntri * 6 + 2) AS LONG
+                        c = 3 * ntri
+                        imCV(c) = fv(0): imCT(c) = ft(0)
+                        imCV(c + 1) = fv(k): imCT(c + 1) = ft(k)
+                        imCV(c + 2) = fv(k + 1): imCT(c + 2) = ft(k + 1)
+                    NEXT
+            END SELECT
+        END IF
+    LOOP
+    IF ntri = 0 THEN Msg "No triangles in " + p$: EXIT SUB
+    IF ntri > MAX_TRI - 100 THEN Msg p$ + " has" + STR$(ntri) + " triangles - more than bu1ld0r holds": EXIT SUB
+    ' Its texture, into pictures/neon/
+    tp$ = ObjTexPath$(p$, n$)
+    IF LEN(tp$) THEN
+        IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
+        IF NOT _DIREXISTS(PicDir$ + "neon") THEN MKDIR PicDir$ + "neon"
+        IF NOT _FILEEXISTS(PicDir$ + "neon/" + n$ + ".png") THEN FileCopy tp$, PicDir$ + "neon/" + n$ + ".png" ' (one already there - maybe changed in DRAW - is kept)
+        tx = PicFind("neon/" + n$)
+        IF tx > 0 THEN IF picW(tx) = 0 THEN tx = 0
+    END IF
+    ' Pieces: triangles that share a point (welded) are one
+    EmClear: EmWeldStart ntri * 3
+    REDIM imUp(ntri * 3 + 2) AS LONG, imPc(ntri) AS LONG, imW(ntri * 3 + 2) AS LONG
+    FOR c = 3 TO ntri * 3 + 2
+        j = EmWeld&(CDBL(imX(imCV(c))), CDBL(imY(imCV(c))), CDBL(imZ(imCV(c))))
+        IF j > UBOUND(imUp) THEN REDIM _PRESERVE imUp(j * 2) AS LONG
+        IF imUp(j) = 0 THEN imUp(j) = j
+        imW(c) = j
+    NEXT
+    FOR t = 1 TO ntri
+        pc = ImRoot&(imW(3 * t))
+        FOR k = 1 TO 2
+            q = ImRoot&(imW(3 * t + k)): IF q <> pc THEN imUp(q) = pc
+        NEXT
+    NEXT
+    ' Each piece numbered 1.. in the order it's first met
+    REDIM pcNo(UBOUND(imUp)) AS LONG
+    FOR t = 1 TO ntri
+        pc = ImRoot&(imW(3 * t))
+        IF pcNo(pc) = 0 THEN npc = npc + 1: pcNo(pc) = npc
+        imPc(t) = pcNo(pc)
+    NEXT
+    IF npc > IM_PIECES THEN
+        FOR t = 1 TO ntri: imPc(t) = 1: NEXT
+        npc = 1
+    END IF
+    IF npc > MAX_PARTS - 2 THEN npc = 1
+    ' A new model: each piece a mesh part, its foot in the middle of its bottom
+    ModelNew
+    mdlName$ = n$: mdlTidy = 0
+    g = 0: IF npc > 1 THEN g = 1
+    FOR pc = 1 TO npc
+        tN = 0
+        lo.x = 1E+30: lo.y = 1E+30: lo.z = 1E+30: hi.x = -1E+30: hi.y = -1E+30: hi.z = -1E+30
+        FOR t = 1 TO ntri
+            IF imPc(t) = pc OR npc = 1 THEN
+                tN = tN + 1
+                ImCorner tA(tN), 3 * t, lo, hi
+                ImCorner tB(tN), 3 * t + 1, lo, hi
+                ImCorner tC(tN), 3 * t + 2, lo, hi
+                tEdge(tN) = 7: tTex(tN) = tx
+                u = 0: v = 0
+                FOR k = 0 TO 2
+                    tU(3 * tN + k) = imU(imCT(3 * t + k)): tW(3 * tN + k) = imV(imCT(3 * t + k))
+                    u = u + tU(3 * tN + k) / 3: v = v + tW(3 * tN + k) / 3
+                NEXT
+                col = _RGB32(170, 170, 170)
+                IF tx THEN
+                    r = 0: gg = 0: bb = 0
+                    FOR k = 0 TO 3 ' (its colour, for when the picture's taken off it: the middle and towards each corner)
+                        IF k = 0 THEN
+                            col = PicAt~&(tx, u, v)
+                        ELSE
+                            col = PicAt~&(tx, (u + tU(3 * tN + k - 1)) / 2, (v + tW(3 * tN + k - 1)) / 2)
+                        END IF
+                        r = r + _RED32(col): gg = gg + _GREEN32(col): bb = bb + _BLUE32(col)
+                    NEXT
+                    col = _RGB32(r / 4, gg / 4, bb / 4)
+                END IF
+                tCol(tN) = col
+            END IF
+        NEXT
+        IF tN > 0 THEN
+            pN = pN + 1: i = pN
+            PartFresh i, K_MESH, VAL(Fmt$((lo.x + hi.x) / 2)), VAL(Fmt$(lo.y)), VAL(Fmt$((lo.z + hi.z) / 2))
+            pSX(i) = 1: pSY(i) = 1: pSZ(i) = 1: pGrp(i) = g
+            id = EmFromTris&(1, tN, i, -1) ' (flat neighbours one polygon where the texture runs on across them)
+            MakeMeshPart i, id
+            made = made + 1
+        END IF
+    NEXT
+    tN = 0
+    mdlPf$ = "": undoN = 0: redoN = 0
+    ModelChanged: MeshGc
+    ViewFrameAll
+    Msg "Opened " + p$ + " -" + STR$(ntri) + " triangles, as" + STR$(made) + " mesh part" + IIFS$(made = 1, "", "s") + IIFS$(tx > 0, ", its texture on them", " (no texture found)") + ". Ctrl+S saves it as models/" + n$ + ".bld"
+END SUB
+
+SUB ImCorner (o AS V3, c AS LONG, lo AS V3, hi AS V3)
+    o.x = imX(imCV(c)): o.y = imY(imCV(c)): o.z = imZ(imCV(c))
+    IF o.x < lo.x THEN lo.x = o.x
+    IF o.y < lo.y THEN lo.y = o.y
+    IF o.z < lo.z THEN lo.z = o.z
+    IF o.x > hi.x THEN hi.x = o.x
+    IF o.y > hi.y THEN hi.y = o.y
+    IF o.z > hi.z THEN hi.z = o.z
+END SUB

@@ -1,0 +1,353 @@
+''
+' bu1ld0r - UI/ALIGN.BM
+' =============================================================================
+
+SUB AlBtn (k, y0, x, y, w, h)
+    h = 22: w = 74: x = PX0 + ((k - 1) MOD 3) * 78: y = y0 + 18 + ((k - 1) \ 3) * 26
+END SUB
+
+FUNCTION AlName$ (k)
+    SELECT CASE k
+        CASE AL_LEFT: AlName$ = "LEFT"
+        CASE AL_CENTRE: AlName$ = "CENTRE"
+        CASE AL_RIGHT: AlName$ = "RIGHT"
+        CASE AL_TOP: AlName$ = "TOP"
+        CASE AL_MIDDLE: AlName$ = "MIDDLE"
+        CASE AL_BOTTOM: AlName$ = "BOTTOM"
+    END SELECT
+END FUNCTION
+
+' The ALIGN buttons, from y0 (their heading) down: 70 high
+SUB AlDraw (y0)
+    DIM k, x, y, w, h
+    Txt PX0, y0, "ALIGN (as you see it)", cDim
+    FOR k = 1 TO 6
+        AlBtn k, y0, x, y, w, h: Btn x, y, w, h, AlName$(k), 0
+    NEXT
+END SUB
+
+FUNCTION AlClick (y0)
+    DIM k, x, y, w, h
+    FOR k = 1 TO 6
+        AlBtn k, y0, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN AlignDo k: AlClick = -1: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' The screen's way across (1-3) or up (4-6), and which end: -1 the low one, 0 the middle, 1 the high
+SUB AlAxis (k, ax#, ay#, az#, e)
+    IF k <= 3 THEN
+        ax# = cRX: ay# = cRY: az# = cRZ: e = k - 2
+    ELSE
+        ax# = cUX: ay# = cUY: az# = cUZ: e = -(k - 5) ' (top: the high end)
+    END IF
+    ' (the world's axis nearest it, that way round: the view's tilt doesn't push things back)
+    IF ABS(ax#) >= ABS(ay#) AND ABS(ax#) >= ABS(az#) THEN
+        ax# = SGN(ax#): ay# = 0: az# = 0
+    ELSEIF ABS(ay#) >= ABS(az#) THEN
+        ay# = SGN(ay#): ax# = 0: az# = 0
+    ELSE
+        az# = SGN(az#): ax# = 0: ay# = 0
+    END IF
+END SUB
+
+FUNCTION AlPick# (lo#, hi#, e)
+    IF e < 0 THEN
+        AlPick# = lo#
+    ELSEIF e > 0 THEN
+        AlPick# = hi#
+    ELSE
+        AlPick# = (lo# + hi#) / 2
+    END IF
+END FUNCTION
+
+SUB AlignDo (k)
+    IF edPart THEN EdAlign k ELSE PartsAlign k
+END SUB
+
+' ---------------------------------------------------------------- points and faces (E)
+
+SUB EdAlign (k)
+    DIM ax#, ay#, az#, e, w AS LONG, f AS LONG, i AS LONG, n AS LONG, x#, y#, z#, d#, lo#, hi#, t#, cnt AS LONG
+    DIM r AS LONG, q AS LONG, isl AS LONG, a AS LONG
+    IF NOT EdNeed THEN EXIT SUB
+    AlAxis k, ax#, ay#, az#, e
+    EdBegin -1
+    REDIM pd#(swN), up(swN) AS LONG, inIt(swN) AS _BYTE
+    FOR w = 1 TO swN: EdW w, x#, y#, z#: pd#(w) = x# * ax# + y# * ay# + z# * az#: up(w) = w: NEXT
+    ' (what's moving: picked points, or the picked faces' corners - each joined to the others of its face)
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            FOR i = 0 TO sfCN(f) - 1
+                w = scV(sfC0(f) + i)
+                IF edMode = ED_POINTS THEN
+                    IF wsV(w) THEN inIt(w) = -1
+                ELSEIF edMode = ED_EDGES THEN ' (an edge: its two points one piece)
+                    q = scV(sfC0(f) + (i + 1) MOD sfCN(f))
+                    IF wsV(w) AND wsV(q) THEN
+                        inIt(w) = -1: inIt(q) = -1
+                        a = AlRoot&(up(), w): q = AlRoot&(up(), q): IF a <> q THEN up(q) = a
+                    END IF
+                ELSEIF wsF(f) THEN
+                    inIt(w) = -1
+                    a = AlRoot&(up(), scV(sfC0(f))): q = AlRoot&(up(), w): IF a <> q THEN up(q) = a
+                END IF
+            NEXT
+        END IF
+    NEXT
+    IF edMode = ED_POINTS THEN ' (points: each its own piece, all lined up)
+        FOR w = 1 TO swN
+            IF inIt(w) THEN cnt = cnt + 1
+        NEXT
+    ELSE
+        REDIM seen(swN) AS _BYTE
+        FOR w = 1 TO swN
+            IF inIt(w) THEN
+                r = AlRoot&(up(), w): IF seen(r) = 0 THEN seen(r) = -1: cnt = cnt + 1
+            END IF
+        NEXT
+    END IF
+    IF cnt = 0 THEN EdCommit: EXIT SUB
+    ' (the line: what's picked - or, one thing alone, the whole part)
+    lo# = 1E+30: hi# = -1E+30
+    FOR w = 1 TO swN
+        IF inIt(w) OR cnt = 1 THEN
+            IF pd#(w) < lo# THEN lo# = pd#(w)
+            IF pd#(w) > hi# THEN hi# = pd#(w)
+        END IF
+    NEXT
+    t# = AlPick#(lo#, hi#, e)
+    IF edMode = ED_POINTS THEN
+        FOR w = 1 TO swN
+            IF inIt(w) THEN
+                d# = t# - pd#(w): EdW w, x#, y#, z#: x# = x# + ax# * d#: y# = y# + ay# * d#: z# = z# + az# * d#: EdSetW w, x#, y#, z#
+            END IF
+        NEXT
+    ELSE
+        REDIM plo#(swN), phi#(swN)
+        FOR w = 1 TO swN: plo#(w) = 1E+30: phi#(w) = -1E+30: NEXT
+        FOR w = 1 TO swN
+            IF inIt(w) THEN
+                r = AlRoot&(up(), w)
+                IF pd#(w) < plo#(r) THEN plo#(r) = pd#(w)
+                IF pd#(w) > phi#(r) THEN phi#(r) = pd#(w)
+            END IF
+        NEXT
+        FOR w = 1 TO swN
+            IF inIt(w) THEN
+                r = AlRoot&(up(), w): d# = t# - AlPick#(plo#(r), phi#(r), e)
+                EdW w, x#, y#, z#: x# = x# + ax# * d#: y# = y# + ay# * d#: z# = z# + az# * d#: EdSetW w, x#, y#, z#
+            END IF
+        NEXT
+    END IF
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN EmNormal f
+    NEXT
+    EdCommit
+    IF cnt = 1 THEN
+        Msg "Aligned " + LCASE$(AlName$(k)) + " with the part (pick more to align them with each other)"
+    ELSE
+        Msg LTRIM$(STR$(cnt)) + IIFS$(edMode = ED_POINTS, " points", " pieces") + " aligned " + LCASE$(AlName$(k)) + " (Ctrl+Z: back)"
+    END IF
+END SUB
+
+FUNCTION AlRoot& (up() AS LONG, v AS LONG)
+    DIM r AS LONG, n AS LONG, w AS LONG
+    r = v
+    DO WHILE up(r) <> r: r = up(r): LOOP
+    w = v
+    DO WHILE up(w) <> r: n = up(w): up(w) = r: w = n: LOOP
+    AlRoot& = r
+END FUNCTION
+
+' ---------------------------------------------------------------- parts
+
+SUB PartsAlign (k)
+    DIM ax#, ay#, az#, e, i, j, t AS LONG, c, d#, lo#, hi#, tg#, cnt, p, kk
+    DIM ob(MAX_PARTS) AS INTEGER, olo#(MAX_PARTS), ohi#(MAX_PARTS)
+    IF SelCount = 0 THEN Msg "Select parts (or faces or points, in E) first, then ALIGN": EXIT SUB
+    AlAxis k, ax#, ay#, az#, e
+    ' (each selected part an object - a group's parts one)
+    FOR i = 1 TO pN
+        IF pSel(i) AND ob(i) = 0 THEN
+            cnt = cnt + 1: ob(i) = cnt
+            IF pGrp(i) THEN
+                FOR j = 1 TO pN
+                    IF pSel(j) AND pGrp(j) = pGrp(i) THEN ob(j) = cnt
+                NEXT
+            END IF
+        END IF
+    NEXT
+    FOR c = 1 TO cnt: olo#(c) = 1E+30: ohi#(c) = -1E+30: NEXT
+    lo# = 1E+30: hi# = -1E+30
+    FOR t = 1 TO holeTN
+        p = tPart(t)
+        IF p >= 1 AND p <= pN THEN
+            FOR kk = 0 TO 2
+                SELECT CASE kk
+                    CASE 0: d# = tA(t).x * ax# + tA(t).y * ay# + tA(t).z * az#
+                    CASE 1: d# = tB(t).x * ax# + tB(t).y * ay# + tB(t).z * az#
+                    CASE ELSE: d# = tC(t).x * ax# + tC(t).y * ay# + tC(t).z * az#
+                END SELECT
+                c = ob(p)
+                IF c THEN
+                    IF d# < olo#(c) THEN olo#(c) = d#
+                    IF d# > ohi#(c) THEN ohi#(c) = d#
+                END IF
+                IF c <> 0 OR cnt = 1 THEN ' (the line: the selection's - or, one alone, the model's)
+                    IF d# < lo# THEN lo# = d#
+                    IF d# > hi# THEN hi# = d#
+                END IF
+            NEXT
+        END IF
+    NEXT
+    IF lo# > hi# THEN EXIT SUB
+    tg# = AlPick#(lo#, hi#, e)
+    UndoPush
+    FOR i = 1 TO pN
+        c = ob(i)
+        IF c THEN
+            IF olo#(c) <= ohi#(c) THEN
+                d# = tg# - AlPick#(olo#(c), ohi#(c), e)
+                pX(i) = VAL(Fmt$(pX(i) + ax# * d#)): pY(i) = VAL(Fmt$(pY(i) + ay# * d#)): pZ(i) = VAL(Fmt$(pZ(i) + az# * d#))
+            END IF
+        END IF
+    NEXT
+    ModelChanged
+    IF cnt = 1 THEN
+        Msg "Aligned " + LCASE$(AlName$(k)) + " with the rest of the model (select more to align them with each other)"
+    ELSE
+        Msg LTRIM$(STR$(cnt)) + " aligned " + LCASE$(AlName$(k)) + " (a group moves as one; Ctrl+Z: back)"
+    END IF
+END SUB
+
+' ---------------------------------------------------------------- flip, grow, turn (what's selected)
+
+' The panel's FLIP X / Y / Z (each part mirrored in its own axes, about its own middle),
+' GROW / SHRINK (a quarter bigger / smaller, standing where it stands), TURN L / R (90 round
+' the up axis - Shift: 15). Several selected: grown and turned as one piece
+SUB ShBtn (k, y0, x, y, w, h)
+    h = 22: w = 74: x = PX0 + ((k - 1) MOD 3) * 78: y = y0 + 18 + ((k - 1) \ 3) * 26
+END SUB
+
+FUNCTION ShName$ (k)
+    SELECT CASE k
+        CASE 1: ShName$ = "FLIP X"
+        CASE 2: ShName$ = "FLIP Y"
+        CASE 3: ShName$ = "FLIP Z"
+        CASE 4: ShName$ = "GROW"
+        CASE 5: ShName$ = "SHRINK"
+        CASE 7: ShName$ = "TURN L"
+        CASE 8: ShName$ = "TURN R"
+    END SELECT
+END FUNCTION
+
+SUB ShDraw (y0)
+    DIM k, x, y, w, h
+    IF y0 + 18 + 3 * 26 > scrH - BAR_H THEN EXIT SUB
+    Txt PX0, y0, "FLIP, SIZE, TURN (its own)", cDim
+    FOR k = 1 TO 8
+        IF LEN(ShName$(k)) THEN ShBtn k, y0, x, y, w, h: Btn x, y, w, h, ShName$(k), 0
+    NEXT
+END SUB
+
+FUNCTION ShClick (y0)
+    DIM k, x, y, w, h
+    IF y0 + 18 + 3 * 26 > scrH - BAR_H THEN EXIT FUNCTION
+    FOR k = 1 TO 8
+        ShBtn k, y0, x, y, w, h
+        IF LEN(ShName$(k)) AND InRect(mX, mY, x, y, w, h) THEN
+            SELECT CASE k
+                CASE 1 TO 3: SelFlip k - 1
+                CASE 4: SelSizeBy 1.25
+                CASE 5: SelSizeBy .8
+                CASE 7: SelTurn IIF(kShift, 15, 90): Msg "Turned left (Shift: 15 at a time; R / Shift+R too)"
+                CASE 8: SelTurn IIF(kShift, -15, -90): Msg "Turned right (Shift: 15 at a time; R / Shift+R too)"
+            END SELECT
+            ShClick = -1: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
+
+' Each selected part mirrored along its own axis ax (0 X, 1 Y, 2 Z) about its own middle: a
+' shape that's the same mirrored stays as it is, any other becomes a mesh part to be mirrored
+SUB SelFlip (ax)
+    DIM i, id AS LONG, n, made, same, skip, v AS LONG, f AS LONG, k AS LONG, c0 AS LONG, lo#, hi#, m#
+    DIM e AS _BYTE, j AS LONG, flip
+    IF SelCount = 0 THEN EXIT SUB
+    UndoPush
+    FOR i = 1 TO pN
+        IF pSel(i) THEN
+            flip = 0
+            IF pKind(i) = K_USE THEN
+                skip = skip + 1
+            ELSEIF pKind(i) = K_BOX OR pKind(i) = K_SPHERE AND ax <> 1 OR (pKind(i) = K_CYL OR pKind(i) = K_TUBE) AND ax = 1 THEN
+                same = same + 1 ' (mirrored, it's itself)
+            ELSE
+                IF pKind(i) <> K_MESH THEN
+                    id = PartMeshOf&(i)
+                    IF mbFN(id) > 0 THEN MakeMeshPart i, id: made = made + 1
+                END IF
+                IF pKind(i) = K_MESH THEN flip = -1 ELSE skip = skip + 1
+            END IF
+            IF flip THEN
+                EmLoad pMesh(i)
+                lo# = 1E+30: hi# = -1E+30
+                FOR v = 1 TO swN
+                    m# = IIF(ax = 0, swX(v), IIF(ax = 1, swY(v), swZ(v)))
+                    IF m# < lo# THEN lo# = m#
+                    IF m# > hi# THEN hi# = m#
+                NEXT
+                FOR v = 1 TO swN
+                    SELECT CASE ax
+                        CASE 0: swX(v) = lo# + hi# - swX(v)
+                        CASE 1: swY(v) = lo# + hi# - swY(v)
+                        CASE ELSE: swZ(v) = lo# + hi# - swZ(v)
+                    END SELECT
+                NEXT
+                FOR f = 1 TO sfN ' (each polygon wound the other way, so it still faces out)
+                    IF sfLive(f) THEN
+                        c0 = sfC0(f): n = sfCN(f)
+                        FOR k = 0 TO n \ 2 - 1
+                            j = n - 1 - k
+                            SWAP scV(c0 + k), scV(c0 + j): SWAP scTU(c0 + k), scTU(c0 + j): SWAP scTV(c0 + k), scTV(c0 + j)
+                        NEXT
+                        ' (edge k ran from corner k to k + 1: reversed, it's the old edge n - 2 - k)
+                        e = scE(c0 + n - 1)
+                        FOR k = 0 TO (n - 1) \ 2 - 1
+                            SWAP scE(c0 + k), scE(c0 + n - 2 - k)
+                        NEXT
+                        scE(c0 + n - 1) = e
+                    END IF
+                NEXT
+                pMesh(i) = EmWrite&
+            END IF
+        END IF
+    NEXT
+    IF skip + same = SelCount THEN undoN = undoN - 1 ELSE ModelChanged: MeshGcDue
+    Msg "Flipped along its own " + MID$("XYZ", ax + 1, 1) + IIFS$(made > 0, " (" + LTRIM$(STR$(made)) + " made mesh parts to do it)", "") + IIFS$(same > 0, " - " + LTRIM$(STR$(same)) + " the same mirrored", "") + IIFS$(skip > 0, " - a prefab put down can't be: UNLINK (U) it first", "")
+END SUB
+
+' The selected parts k times the size, standing where they stand (several: as one piece, round the middle of their foot)
+SUB SelSizeBy (k)
+    DIM i, t AS LONG, lo AS V3, hi AS V3, n, cx#, cy#, cz#
+    IF SelCount = 0 THEN EXIT SUB
+    UndoPush
+    lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
+    FOR t = 1 TO holeTN
+        IF tPart(t) >= 1 AND tPart(t) <= pN THEN
+            IF pSel(tPart(t)) THEN BoxGrow lo, hi, tA(t): BoxGrow lo, hi, tB(t): BoxGrow lo, hi, tC(t): n = n + 1
+        END IF
+    NEXT
+    IF n THEN cx# = (lo.x + hi.x) / 2: cy# = lo.y: cz# = (lo.z + hi.z) / 2
+    FOR i = 1 TO pN
+        IF pSel(i) THEN
+            IF SelCount > 1 AND n > 0 THEN
+                pX(i) = VAL(Fmt$(cx# + (pX(i) - cx#) * k)): pY(i) = VAL(Fmt$(cy# + (pY(i) - cy#) * k)): pZ(i) = VAL(Fmt$(cz# + (pZ(i) - cz#) * k))
+            END IF
+            pSX(i) = VAL(Fmt$(pSX(i) * k)): pSY(i) = VAL(Fmt$(pSY(i) * k)): pSZ(i) = VAL(Fmt$(pSZ(i) * k))
+        END IF
+    NEXT
+    ModelChanged
+    Msg IIFS$(k > 1, "Grown", "Shrunk") + " by a quarter (SIZE in the panel sets it exactly; Ctrl+Z: as it was)"
+END SUB

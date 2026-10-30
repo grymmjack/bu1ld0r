@@ -1,0 +1,7 @@
+bu1ld0r 1
+name pipe-elbow
+budget 200
+part cylinder  0.2 0.04 0  0 0 90  0.06 0.2 0.06  7C8090  12  0  name=pipe1
+part cylinder  0 0.04 0  90 0 0  0.06 0.2 0.06  7C8090  12  0  name=pipe2
+part sphere  0 0.005 0  0 0 0  0.07 0.07 0.07  7C8090  12  1  name=joint
+part box  0.12 0 0  0 0 0  0.03 0.012 0.08  2A2A36  0  0  name=bracket

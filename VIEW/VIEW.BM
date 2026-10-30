@@ -63,7 +63,7 @@ SUB RenderEnd
 END SUB
 
 SUB ViewRender
-    DIM t AS LONG, y, k, d
+    DIM t AS LONG, y, k, d, bg&, kSeen, kHid
     d = _DEST
     CamBasis vW, vH
     LightFromCamera .5, .55
@@ -75,15 +75,12 @@ SUB ViewRender
     NEXT
     DrawGrid
     rOrtho = 0: rCull = -1: rGhost = 0
-    IF viewWire THEN
-        ' (filled unseen, so a click still finds the part and the face; then the edges, all of them)
+    IF viewWire THEN ' (TEX off: filled unseen, so a click still finds the part and the face)
         rNoInk = -1
         FOR t = 1 TO holeTN: RasterTri t: NEXT
         rNoInk = 0
-        FOR t = 1 TO sceneTN: WireTri t, WireCol~&(tCol(t)): NEXT
-        FOR t = sceneTN + 1 TO holeTN: WireTri t, HOLE_WIRE: NEXT
-        FOR t = holeTN + 1 TO tN: WireTri t, _RGB32(235, 235, 245): NEXT
     ELSE
+        IF texOp < 100 THEN bg& = _COPYIMAGE(viewImg&) ' (the backdrop and grid: the faces faded towards it)
         FOR t = 1 TO sceneTN
             IF pWire(tPart(t)) = 0 THEN RasterTri t
         NEXT
@@ -92,9 +89,29 @@ SUB ViewRender
             IF pWire(tPart(t)) = 0 THEN RasterTri t
         NEXT
         rHole = 0
-        FOR t = 1 TO holeTN ' (a part shown as lines alone: no fill, so not picked - its row in the parts list is)
-            IF pWire(tPart(t)) THEN WireTri t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t)))
-        NEXT
+        IF edPart THEN ' (the part being edited, if it's lines only: filled unseen, so its faces can be picked)
+            IF pWire(edPart) THEN
+                rNoInk = -1
+                FOR t = 1 TO sceneTN
+                    IF tPart(t) = edPart THEN RasterTri t
+                NEXT
+                rNoInk = 0
+            END IF
+        END IF
+        IF texOp < 100 THEN TexFade bg&: _FREEIMAGE bg&
+    END IF
+    ' The edges: WIRE's (those behind the faces as faint as the faces are solid), and a part shown as lines alone
+    kSeen = INT(wireOp * 2.55 + .5): kHid = kSeen: IF viewWire = 0 THEN kHid = INT(kSeen * (100 - texOp) / 100 + .5)
+    FOR t = 1 TO holeTN
+        IF pWire(tPart(t)) THEN
+            WireTri t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t)))
+        ELSEIF wireOn THEN
+            WireTriZ t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t))), kSeen, kHid
+        END IF
+    NEXT
+    IF viewWire THEN
+        FOR t = holeTN + 1 TO tN: WireTri t, _RGB32(235, 235, 245): NEXT
+    ELSE
         rGhost = -1
         FOR t = holeTN + 1 TO tN: RasterTri t: NEXT
         rGhost = 0
@@ -113,12 +130,66 @@ SUB WireTri (t AS LONG, c AS _UNSIGNED LONG)
     IF e AND 4 THEN Line3D tC(t).x, tC(t).y, tC(t).z, tA(t).x, tA(t).y, tA(t).z, c
 END SUB
 
-' A part's colour for its lines: as it is, but a very dark one lifted so it shows on the backdrop
+' Triangle t's own edges blended in: kSeen strong where they're seen, kHid where a face is in front (0 to 255)
+SUB WireTriZ (t AS LONG, c AS _UNSIGNED LONG, kSeen, kHid)
+    DIM e
+    e = tEdge(t)
+    IF e AND 1 THEN LineZ tA(t).x, tA(t).y, tA(t).z, tB(t).x, tB(t).y, tB(t).z, c, kSeen, kHid
+    IF e AND 2 THEN LineZ tB(t).x, tB(t).y, tB(t).z, tC(t).x, tC(t).y, tC(t).z, c, kSeen, kHid
+    IF e AND 4 THEN LineZ tC(t).x, tC(t).y, tC(t).z, tA(t).x, tA(t).y, tA(t).z, c, kSeen, kHid
+END SUB
+
+' A line in the world blended into the view as it's drawn (RenderBegin's), tested against rZ
+SUB LineZ (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, kSeen, kHid)
+    DIM avx, avy, avz, bvx, bvy, bvz, t, nz, sx0, sy0, sx1, sy1, qa, qb, n, k, x, y, f, q, a
+    DIM i AS LONG, old AS _UNSIGNED LONG, r, g, b
+    IF kSeen <= 0 AND kHid <= 0 THEN EXIT SUB
+    nz = .01
+    CamSpace ax, ay, az, avx, avy, avz
+    CamSpace bx, by, bz, bvx, bvy, bvz
+    IF avz < nz AND bvz < nz THEN EXIT SUB
+    IF avz < nz THEN t = (nz - avz) / (bvz - avz): avx = avx + (bvx - avx) * t: avy = avy + (bvy - avy) * t: avz = nz
+    IF bvz < nz THEN t = (nz - bvz) / (avz - bvz): bvx = bvx + (avx - bvx) * t: bvy = bvy + (avy - bvy) * t: bvz = nz
+    sx0 = cMidX + avx / avz * cFoc: sy0 = cMidY - avy / avz * cFoc: qa = 1 / avz
+    sx1 = cMidX + bvx / bvz * cFoc: sy1 = cMidY - bvy / bvz * cFoc: qb = 1 / bvz
+    n = INT(ABS(sx1 - sx0)): IF ABS(sy1 - sy0) > n THEN n = INT(ABS(sy1 - sy0))
+    IF n > 4000 THEN n = 4000
+    r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
+    FOR k = 0 TO n
+        IF n = 0 THEN f = 0 ELSE f = k / n
+        x = INT(sx0 + (sx1 - sx0) * f): y = INT(sy0 + (sy1 - sy0) * f)
+        IF x >= 0 AND y >= 0 AND x < rW AND y < rH THEN
+            i = y * rW + x: q = qa + (qb - qa) * f
+            IF rZ(i) <= q * 1.004 + .00001 THEN a = kSeen ELSE a = kHid
+            IF a > 0 THEN
+                _MEMGET rMem, rMem.OFFSET + i * 4, old
+                _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(_RED32(old) + (r - _RED32(old)) * a \ 255, _GREEN32(old) + (g - _GREEN32(old)) * a \ 255, _BLUE32(old) + (b - _BLUE32(old)) * a \ 255) AS _UNSIGNED LONG
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' The faces drawn (rId 1 to holeTN) faded towards the backdrop bg& - TEX's slider
+SUB TexFade (bg&)
+    DIM mb AS _MEM, i AS LONG, n AS LONG, id AS LONG, c AS _UNSIGNED LONG, o AS _UNSIGNED LONG, k
+    mb = _MEMIMAGE(bg&): n = rW * rH: k = texOp * 256 \ 100
+    FOR i = 0 TO n - 1
+        id = rId(i)
+        IF id > 0 AND id <= holeTN THEN
+            _MEMGET rMem, rMem.OFFSET + i * 4, c
+            _MEMGET mb, mb.OFFSET + i * 4, o
+            _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(_RED32(o) + ((_RED32(c) - _RED32(o)) * k) \ 256, _GREEN32(o) + ((_GREEN32(c) - _GREEN32(o)) * k) \ 256, _BLUE32(o) + ((_BLUE32(c) - _BLUE32(o)) * k) \ 256) AS _UNSIGNED LONG
+        END IF
+    NEXT
+    _MEMFREE mb
+END SUB
+
+' A part's colour for its lines: as it is, but a dark one lifted towards white so it shows on the backdrop
 FUNCTION WireCol~& (c AS _UNSIGNED LONG)
     DIM r, g, b, l, k
     r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
     l = .3 * r + .59 * g + .11 * b
-    IF l < 70 THEN k = 70 - l: r = r + k: g = g + k: b = b + k
+    IF l < 150 THEN k = (150 - l) / (255 - l): r = r + (255 - r) * k: g = g + (255 - g) * k: b = b + (255 - b) * k
     WireCol~& = _RGB32(r, g, b)
 END FUNCTION
 
@@ -126,19 +197,65 @@ END FUNCTION
 ' stands) bright, eighths of a cell dim - and the X (red) and Z (blue) lines
 SUB DrawGrid
     DIM k, v, c AS _UNSIGNED LONG
+    IF gridWalls THEN GridWallsDraw ELSE gridH = 1
     FOR k = -16 TO 16
         v = k / 16
-        c = _RGB32(34, 32, 54): IF k MOD 4 = 0 THEN c = _RGB32(48, 44, 76)
+        c = GridC~&(34, 32, 54): IF k MOD 4 = 0 THEN c = GridC~&(48, 44, 76)
         Line3D -1, 0, v, 1, 0, v, c
         Line3D v, 0, -1, v, 0, 1, c
     NEXT
-    c = _RGB32(110, 60, 150)
+    c = GridC~&(110, 60, 150)
     Line3D -.5, 0, -.5, .5, 0, -.5, c: Line3D .5, 0, -.5, .5, 0, .5, c
     Line3D .5, 0, .5, -.5, 0, .5, c: Line3D -.5, 0, .5, -.5, 0, -.5, c
     Line3D -1, 0, 0, 1, 0, 0, _RGB32(150, 50, 60)
     Line3D 0, 0, -1, 0, 0, 1, _RGB32(50, 80, 170)
+    Line3D 0, 0, 0, 0, gridH, 0, _RGB32(50, 120, 60) ' (y: up)
     Line3D 0, 0, -.5, 0, 0, -.62, _RGB32(80, 140, 255) ' (its front: towards -z)
 END SUB
+
+' The two walls away from you (x = +-1, z = +-1): the ground's grid stood up,
+' an eighth of a cell apart, fainter - as tall as the model, a cell at least
+SUB GridWallsDraw
+    DIM k, v, n, c AS _UNSIGNED LONG, lo AS V3, hi AS V3
+    MeshBounds lo, hi, 0
+    gridH = INT(hi.y * 4 + .999) / 4: IF gridH < 1 THEN gridH = 1
+    IF gridH > 4 THEN gridH = 4
+    gridWX = -1: IF cEX < 0 THEN gridWX = 1
+    gridWZ = -1: IF cEZ < 0 THEN gridWZ = 1
+    n = gridH * 8
+    FOR k = 0 TO n ' (across: heights)
+        v = k / 8
+        c = GridC~&(24, 23, 42): IF k MOD 2 = 0 THEN c = GridC~&(33, 30, 56)
+        IF k MOD 8 = 0 THEN c = GridC~&(44, 40, 72)
+        Line3D gridWX, v, -1, gridWX, v, 1, c
+        Line3D -1, v, gridWZ, 1, v, gridWZ, c
+    NEXT
+    FOR k = -8 TO 8 ' (up)
+        v = k / 8
+        c = GridC~&(24, 23, 42): IF k MOD 2 = 0 THEN c = GridC~&(33, 30, 56)
+        IF k = 0 THEN c = GridC~&(48, 44, 76)
+        Line3D gridWX, 0, v, gridWX, gridH, v, c
+        Line3D v, 0, gridWZ, v, gridH, gridWZ, c
+    NEXT
+    ' (where the axes meet the walls: a short coloured line up each)
+    Line3D gridWX, 0, 0, gridWX, gridH, 0, GridC~&(40, 50, 100)
+    Line3D 0, 0, gridWZ, 0, gridH, gridWZ, GridC~&(90, 40, 55)
+END SUB
+
+' A grid line's colour at the brightness set: from the backdrop's (0) through as it
+' was (35) to nearly three times as far from it (100)
+FUNCTION GridC~& (r, g, b)
+    DIM k, rr, gg, bb
+    k = gridBright / 35
+    rr = 14 + (r - 14) * k: gg = 12 + (g - 12) * k: bb = 28 + (b - 28) * k
+    IF rr > 255 THEN rr = 255
+    IF gg > 255 THEN gg = 255
+    IF bb > 255 THEN bb = 255
+    IF rr < 0 THEN rr = 0
+    IF gg < 0 THEN gg = 0
+    IF bb < 0 THEN bb = 0
+    GridC~& = _RGB32(rr, gg, bb)
+END FUNCTION
 
 ' A line in the world, drawn on rImg& (cut where it goes behind the eye)
 SUB Line3D (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG)
@@ -152,6 +269,51 @@ SUB Line3D (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG)
     LINE (cMidX + avx / avz * cFoc, cMidY - avy / avz * cFoc)-(cMidX + bvx / bvz * cFoc, cMidY - bvy / bvz * cFoc), c
 END SUB
 
+' A line in the world as two points on the view (cut where it goes behind the eye): ok 0 if none of it's ahead
+SUB LineView (ax, ay, az, bx, by, bz, sx0, sy0, sx1, sy1, ok)
+    DIM avx, avy, avz, bvx, bvy, bvz, t, nz
+    nz = .01: ok = 0
+    CamSpace ax, ay, az, avx, avy, avz
+    CamSpace bx, by, bz, bvx, bvy, bvz
+    IF avz < nz AND bvz < nz THEN EXIT SUB
+    IF avz < nz THEN t = (nz - avz) / (bvz - avz): avx = avx + (bvx - avx) * t: avy = avy + (bvy - avy) * t: avz = nz
+    IF bvz < nz THEN t = (nz - bvz) / (avz - bvz): bvx = bvx + (avx - bvx) * t: bvy = bvy + (avy - bvy) * t: bvz = nz
+    sx0 = cMidX + avx / avz * cFoc: sy0 = cMidY - avy / avz * cFoc
+    sx1 = cMidX + bvx / bvz * cFoc: sy1 = cMidY - bvy / bvz * cFoc: ok = -1
+END SUB
+
+' A line in the world, w pixels wide, with a dark edge round it (it shows on any colour)
+SUB Line3DW (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, w)
+    DIM sx0, sy0, sx1, sy1, ok, dx, dy, l, px, py, k, h
+    LineView ax, ay, az, bx, by, bz, sx0, sy0, sx1, sy1, ok
+    IF ok = 0 THEN EXIT SUB
+    dx = sx1 - sx0: dy = sy1 - sy0: l = SQR(dx * dx + dy * dy)
+    IF l < .5 THEN px = 0: py = 1 ELSE px = -dy / l: py = dx / l
+    h = (w - 1) / 2
+    FOR k = -h - 1 TO h + 1
+        LINE (sx0 + px * k, sy0 + py * k)-(sx1 + px * k, sy1 + py * k), _RGBA32(8, 6, 16, 200)
+    NEXT
+    FOR k = -h TO h
+        LINE (sx0 + px * k, sy0 + py * k)-(sx1 + px * k, sy1 + py * k), c
+    NEXT
+END SUB
+
+' A line in the world on the overlay, only where the view shows nothing (no
+' triangle): the backdrop, the grid - a shadow on the floor or a wall
+SUB LineBehind (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG)
+    DIM sx0, sy0, sx1, sy1, ok, n, k, x, y
+    LineView ax, ay, az, bx, by, bz, sx0, sy0, sx1, sy1, ok
+    IF ok = 0 THEN EXIT SUB
+    n = INT(ABS(sx1 - sx0)): IF ABS(sy1 - sy0) > n THEN n = INT(ABS(sy1 - sy0))
+    IF n > 4000 THEN n = 4000
+    FOR k = 0 TO n
+        IF n = 0 THEN x = sx0: y = sy0 ELSE x = sx0 + (sx1 - sx0) * k / n: y = sy0 + (sy1 - sy0) * k / n
+        IF x >= 0 AND y >= 0 AND x < vW AND y < vH THEN
+            IF rId(INT(y) * vW + INT(x)) = 0 THEN PSET (x, y), c
+        END IF
+    NEXT
+END SUB
+
 ' A world point in the camera's own terms: across, up, ahead
 SUB CamSpace (x, y, z, vx, vy, vz)
     DIM dx, dy, dz
@@ -163,8 +325,8 @@ END SUB
 
 ' Triangle t drawn: lit by the way it faces, cut at the eye, filled
 SUB RasterTri (t AS LONG)
-    DIM n AS V3, lit, sh, col AS _UNSIGNED LONG, k, j, nz, f, ink, inj, cnt
-    DIM wx(2), wy(2), wz(2), vx(4), vy(4), vz(4), sx(4), sy(4), q(4), cx(2), cy(2), cz(2)
+    DIM n AS V3, lit, sh, col AS _UNSIGNED LONG, k, j, nz, f, ink, inj, cnt, tx
+    DIM wx(2), wy(2), wz(2), vx(4), vy(4), vz(4), sx(4), sy(4), q(4), cx(2), cy(2), cz(2), ku(2), kw(2), vu(4), vw(4)
     n = tNrm(t)
     IF rOrtho THEN
         f = -(n.x * cFX + n.y * cFY + n.z * cFZ)
@@ -179,8 +341,16 @@ SUB RasterTri (t AS LONG)
     sh = rShadeLo + rShadeK * lit
     col = Shade~&(tCol(t), sh)
     IF rGhost THEN col = Shade~&(IIFC~&(pHole(0), _RGB32(150, 160, 190), _RGB32(255, 255, 255)), .5 + .5 * lit)
-    IF rHole THEN col = Shade~&(_RGB32(150, 160, 190), .55 + .45 * lit)
+    IF rHole THEN col = Shade~&(IIFC~&(pKeep(tPart(t)), _RGB32(120, 200, 150), _RGB32(150, 160, 190)), .55 + .45 * lit) ' (a KEEP: greenish)
 
+    tx = 0 ' (a picture on it: drawn from that, each pixel - not see-through ones, nor the wireframe's picking)
+    IF tTex(t) > 0 AND rGhost = 0 AND rHole = 0 AND rNoInk = 0 THEN
+        IF picW(tTex(t)) > 0 THEN tx = tTex(t)
+    END IF
+    IF tx THEN
+        FOR k = 0 TO 2: ku(k) = tU(3 * t + k): kw(k) = tW(3 * t + k): NEXT
+        rTexSh = sh
+    END IF
     wx(0) = tA(t).x: wy(0) = tA(t).y: wz(0) = tA(t).z
     wx(1) = tB(t).x: wy(1) = tB(t).y: wz(1) = tB(t).z
     wx(2) = tC(t).x: wy(2) = tC(t).y: wz(2) = tC(t).z
@@ -190,7 +360,11 @@ SUB RasterTri (t AS LONG)
             sy(k) = (1 - (wx(k) * cUX + wy(k) * cUY + wz(k) * cUZ) / rSpan) * rH
             q(k) = 1000 - (wx(k) * cFX + wy(k) * cFY + wz(k) * cFZ)
         NEXT
-        FillTri sx(0), sy(0), q(0), sx(1), sy(1), q(1), sx(2), sy(2), q(2), col, t
+        IF tx THEN
+            FillTriT sx(0), sy(0), q(0), 1, ku(0), kw(0), sx(1), sy(1), q(1), 1, ku(1), kw(1), sx(2), sy(2), q(2), 1, ku(2), kw(2), tx, t
+        ELSE
+            FillTri sx(0), sy(0), q(0), sx(1), sy(1), q(1), sx(2), sy(2), q(2), col, t
+        END IF
         EXIT SUB
     END IF
     ' In the camera's terms, cut at the near plane (a polygon of up to 4 corners)
@@ -201,17 +375,75 @@ SUB RasterTri (t AS LONG)
     FOR k = 0 TO 2
         j = (k + 1) MOD 3
         ink = (cz(k) >= nz): inj = (cz(j) >= nz)
-        IF ink THEN vx(cnt) = cx(k): vy(cnt) = cy(k): vz(cnt) = cz(k): cnt = cnt + 1
+        IF ink THEN vx(cnt) = cx(k): vy(cnt) = cy(k): vz(cnt) = cz(k): vu(cnt) = ku(k): vw(cnt) = kw(k): cnt = cnt + 1
         IF ink <> inj THEN
             f = (nz - cz(k)) / (cz(j) - cz(k))
-            vx(cnt) = cx(k) + (cx(j) - cx(k)) * f: vy(cnt) = cy(k) + (cy(j) - cy(k)) * f: vz(cnt) = nz: cnt = cnt + 1
+            vx(cnt) = cx(k) + (cx(j) - cx(k)) * f: vy(cnt) = cy(k) + (cy(j) - cy(k)) * f: vz(cnt) = nz
+            vu(cnt) = ku(k) + (ku(j) - ku(k)) * f: vw(cnt) = kw(k) + (kw(j) - kw(k)) * f: cnt = cnt + 1
         END IF
     NEXT
     FOR k = 0 TO cnt - 1
         sx(k) = cMidX + vx(k) / vz(k) * cFoc: sy(k) = cMidY - vy(k) / vz(k) * cFoc: q(k) = 1 / vz(k)
     NEXT
     FOR k = 1 TO cnt - 2
-        FillTri sx(0), sy(0), q(0), sx(k), sy(k), q(k), sx(k + 1), sy(k + 1), q(k + 1), col, t
+        IF tx THEN
+            FillTriT sx(0), sy(0), q(0), q(0), vu(0), vw(0), sx(k), sy(k), q(k), q(k), vu(k), vw(k), sx(k + 1), sy(k + 1), q(k + 1), q(k + 1), vu(k + 1), vw(k + 1), tx, t
+        ELSE
+            FillTri sx(0), sy(0), q(0), sx(k), sy(k), q(k), sx(k + 1), sy(k + 1), q(k + 1), col, t
+        END IF
+    NEXT
+END SUB
+
+' FillTri with picture tx on it: each corner's spot (u, w), p how much it
+' counts (1 / depth: the spots follow the face, not the screen; 1 flat)
+SUB FillTriT (ax, ay, aq, ap, au, aw, bx, by, bq, bp, bu, bw, cx, cy, cq, cp, cu, cw, tx, id AS LONG)
+    DIM den, x0, x1, y0, y1, x, y, w0, w1, w2, a0, b0, a1, b1, q, i AS LONG, yy, fx, pw, u, v, c AS _UNSIGNED LONG
+    DIM aup, awp, bup, bwp, cup, cwp, pw0 AS LONG, ph0 AS LONG, po AS LONG, ix AS LONG, iy AS LONG, r, g, b, sh
+    den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    IF ABS(den) < 1E-9 THEN EXIT SUB
+    x0 = INT(ax): IF bx < x0 THEN x0 = INT(bx)
+    IF cx < x0 THEN x0 = INT(cx)
+    x1 = INT(ax): IF bx > x1 THEN x1 = INT(bx)
+    IF cx > x1 THEN x1 = INT(cx)
+    y0 = INT(ay): IF by < y0 THEN y0 = INT(by)
+    IF cy < y0 THEN y0 = INT(cy)
+    y1 = INT(ay): IF by > y1 THEN y1 = INT(by)
+    IF cy > y1 THEN y1 = INT(cy)
+    IF x0 < 0 THEN x0 = 0
+    IF y0 < 0 THEN y0 = 0
+    IF x1 > rW - 1 THEN x1 = rW - 1
+    IF y1 > rH - 1 THEN y1 = rH - 1
+    IF x0 > x1 OR y0 > y1 THEN EXIT SUB
+    a0 = (by - cy) / den: b0 = (cx - bx) / den
+    a1 = (cy - ay) / den: b1 = (ax - cx) / den
+    aup = au * ap: awp = aw * ap: bup = bu * bp: bwp = bw * bp: cup = cu * cp: cwp = cw * cp
+    pw0 = picW(tx): ph0 = picH(tx): po = picOff(tx): sh = rTexSh
+    fx = x0 + .5 - cx
+    FOR y = y0 TO y1
+        yy = y + .5 - cy
+        w0 = a0 * fx + b0 * yy: w1 = a1 * fx + b1 * yy
+        i = y * rW + x0
+        FOR x = x0 TO x1
+            w2 = 1 - w0 - w1
+            IF w0 >= -.00001 AND w1 >= -.00001 AND w2 >= -.00001 THEN
+                q = w0 * aq + w1 * bq + w2 * cq
+                IF q > rZ(i) THEN
+                    pw = w0 * ap + w1 * bp + w2 * cp
+                    u = (w0 * aup + w1 * bup + w2 * cup) / pw: v = (w0 * awp + w1 * bwp + w2 * cwp) / pw
+                    ix = INT((u - INT(u)) * pw0): iy = INT((v - INT(v)) * ph0)
+                    IF ix >= pw0 THEN ix = pw0 - 1
+                    IF iy >= ph0 THEN iy = ph0 - 1
+                    c = picPix(po + iy * pw0 + ix)
+                    r = _RED32(c) * sh: g = _GREEN32(c) * sh: b = _BLUE32(c) * sh
+                    IF r > 255 THEN r = 255
+                    IF g > 255 THEN g = 255
+                    IF b > 255 THEN b = 255
+                    rZ(i) = q: rId(i) = id
+                    _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(r, g, b) AS _UNSIGNED LONG
+                END IF
+            END IF
+            w0 = w0 + a0: w1 = w1 + a1: i = i + 1
+        NEXT
     NEXT
 END SUB
 
@@ -288,7 +520,7 @@ SUB ViewOverlay
         FOR x = 1 TO vW - 2
             p = rPart(i)
             IF p > 0 THEN
-                IF pSel(p) OR p = hoverPart THEN
+                IF (pSel(p) OR p = hoverPart) AND p <> edPart THEN
                     edge = (rPart(i - 1) <> p) OR (rPart(i + 1) <> p) OR (rPart(i - vW) <> p) OR (rPart(i + vW) <> p)
                     IF edge THEN
                         IF pSel(p) THEN c = cSel ELSE c = _RGBA32(0, 240, 255, 200)
@@ -300,7 +532,62 @@ SUB ViewOverlay
         NEXT
     NEXT
     _MEMFREE m
+    IF gridWalls THEN GridShadows
+    IF edPart THEN EdOverlay
     ovDirty = 0
+END SUB
+
+' What's selected (the picked points in E, the shape being put down) shadowed
+' on the floor and the two walls: its box seen straight from below and from
+' each side - where it is, against the grid's lines
+SUB GridShadows
+    DIM lo AS V3, hi AS V3, d, c AS _UNSIGNED LONG, cx, cz, t AS LONG
+    IF edPart THEN
+        EdBox: IF edCnt = 0 THEN EXIT SUB
+        lo = edLo: hi = edHi
+    ELSEIF placeKind <> 0 AND tN > holeTN THEN
+        lo.x = 1E+30: lo.y = 1E+30: lo.z = 1E+30: hi.x = -1E+30: hi.y = -1E+30: hi.z = -1E+30
+        FOR t = holeTN + 1 TO tN: TriGrow t, lo, hi: NEXT
+    ELSEIF SelCount > 0 THEN
+        MeshBounds lo, hi, -1
+    ELSE
+        EXIT SUB
+    END IF
+    d = _DEST: _DEST ovImg&
+    c = _RGBA32(90, 220, 235, 190)
+    ' (the floor)
+    LineBehind lo.x, 0, lo.z, hi.x, 0, lo.z, c: LineBehind hi.x, 0, lo.z, hi.x, 0, hi.z, c
+    LineBehind hi.x, 0, hi.z, lo.x, 0, hi.z, c: LineBehind lo.x, 0, hi.z, lo.x, 0, lo.z, c
+    ' (the wall across x)
+    LineBehind gridWX, lo.y, lo.z, gridWX, lo.y, hi.z, c: LineBehind gridWX, lo.y, hi.z, gridWX, hi.y, hi.z, c
+    LineBehind gridWX, hi.y, hi.z, gridWX, hi.y, lo.z, c: LineBehind gridWX, hi.y, lo.z, gridWX, lo.y, lo.z, c
+    ' (the wall across z)
+    LineBehind lo.x, lo.y, gridWZ, hi.x, lo.y, gridWZ, c: LineBehind hi.x, lo.y, gridWZ, hi.x, hi.y, gridWZ, c
+    LineBehind hi.x, hi.y, gridWZ, lo.x, hi.y, gridWZ, c: LineBehind lo.x, hi.y, gridWZ, lo.x, lo.y, gridWZ, c
+    ' (off the ground: a line down to its shadow)
+    IF lo.y > .001 THEN
+        cx = (lo.x + hi.x) / 2: cz = (lo.z + hi.z) / 2
+        LineBehind cx, 0, cz, cx, lo.y, cz, _RGBA32(90, 220, 235, 120)
+    END IF
+    _DEST d
+END SUB
+
+' Triangle t's corners taken into the box lo..hi
+SUB TriGrow (t AS LONG, lo AS V3, hi AS V3)
+    DIM k, v AS V3
+    FOR k = 0 TO 2
+        SELECT CASE k
+            CASE 0: v = tA(t)
+            CASE 1: v = tB(t)
+            CASE ELSE: v = tC(t)
+        END SELECT
+        IF v.x < lo.x THEN lo.x = v.x
+        IF v.y < lo.y THEN lo.y = v.y
+        IF v.z < lo.z THEN lo.z = v.z
+        IF v.x > hi.x THEN hi.x = v.x
+        IF v.y > hi.y THEN hi.y = v.y
+        IF v.z > hi.z THEN hi.z = v.z
+    NEXT
 END SUB
 
 ' Which triangle the view shows at (sx, sy) - the view's own pixels (0: none)

@@ -20,6 +20,8 @@ SUB AppStart
     IF NOT _DIREXISTS(appDir$ + "export") THEN MKDIR appDir$ + "export"
     IF NOT _DIREXISTS(appDir$ + "prefabs") THEN MKDIR appDir$ + "prefabs"
     listOn = -1 ' (the parts list, unless bu1ld0r.cfg says parts_list=0)
+    gridWalls = -1 ' (the grid up the walls: grid_walls=0 turns it off)
+    gridBright = 35: texOp = 100: wireOp = 100: BIN_W = BIN_MIN: PANEL_W = PANEL_MIN: picTS = 64
     ReadCfg
 
     FOR i = 1 TO _COMMANDCOUNT
@@ -27,13 +29,16 @@ SUB AppStart
         SELECT CASE LCASE$(a$)
             CASE "--open": i = i + 1: argOpen$ = COMMAND$(i)
             CASE "--export": argExport = -1
+            CASE "--drop": i = i + 1: dropFile$ = COMMAND$(i): dropWait = 90 ' (as if dropped on the window, where the pointer is 90 frames on: tests)
+            CASE "--save": argSave = -1 ' (saved as it's opened: an imported prop as a .bld)
+            CASE "--tidy": tidyView = -1 ' (the view tidied, as T)
             CASE "--shot": i = i + 1: argShot$ = COMMAND$(i)
             CASE "--quit": argQuit = -1
             CASE "--bench": i = i + 1: argBench = VAL(COMMAND$(i)) ' (the model made N times: bench.txt says how long)
             CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
             CASE ELSE
                 k$ = LCASE$(RIGHT$(a$, 4))
-                IF k$ = ".bld" THEN argOpen$ = a$
+                IF k$ = ".bld" OR k$ = ".obj" THEN argOpen$ = a$
         END SELECT
     NEXT
     IF LEN(neonDir$) AND RIGHT$(neonDir$, 1) <> "/" THEN neonDir$ = neonDir$ + "/"
@@ -73,12 +78,25 @@ SUB ReadCfg
             k$ = LCASE$(RTRIM$(LEFT$(l$, j - 1))): v$ = LTRIM$(MID$(l$, j + 1))
             SELECT CASE k$
                 CASE "neon_dir": neonDir$ = v$
+                CASE "neon_in": neonIn$ = v$
+                CASE "draw": cfgDraw$ = v$
+                CASE "kaleidotron": cfgKaleido$ = v$
+                CASE "pic_dir": binPicDir$ = v$
+                CASE "pic_size": picTS = INT(Clamp(VAL(v$), PIC_TS_MIN, PIC_TS_MAX))
+                CASE "pic_outside": binPicExt$ = v$
                 CASE "window" ' (WxH)
                     j = INSTR(LCASE$(v$), "x")
                     IF j THEN cfgWinW = VAL(LEFT$(v$, j - 1)): cfgWinH = VAL(MID$(v$, j + 1))
                     IF cfgWinW < 64 OR cfgWinH < 40 THEN cfgWinW = 0: cfgWinH = 0
                 CASE "ui_scale": cfgUiK = INT(Clamp(VAL(v$), 0, 4))
                 CASE "parts_list": listOn = (VAL(v$) <> 0)
+                CASE "grid_walls": gridWalls = (VAL(v$) <> 0)
+                CASE "bin_w": BIN_W = INT(VAL(v$)): IF BIN_W < BIN_MIN THEN BIN_W = BIN_MIN
+                CASE "tex_on": viewWire = (VAL(v$) = 0)
+                CASE "wire_on": wireOn = (VAL(v$) <> 0)
+                CASE "tex_op": texOp = INT(Clamp(VAL(v$), 0, 100))
+                CASE "wire_op": wireOp = INT(Clamp(VAL(v$), 0, 100))
+                CASE "grid_bright": gridBright = VAL(v$): IF gridBright < 0 OR gridBright > 100 THEN gridBright = 35
             END SELECT
         END IF
     LOOP
@@ -153,6 +171,7 @@ SUB WinStart
         IF w < 1 THEN w = 1280: h = 800
     END IF
     ScreenSet w \ uiK, h \ uiK
+    _ACCEPTFILEDROP ' (a PNG dropped on the window goes on the face it lands on: UI/PICS)
 END SUB
 
 ' Our screen made sw x sh (even, no smaller than MIN_SW x MIN_SH, and no
@@ -199,6 +218,7 @@ END SUB
 
 ' Where everything goes on our screen, and the 3D view's pictures made at its size
 SUB Layout
+    DockClamp
     vX0 = BIN_W - LIST_W * (listOn <> 0): vY0 = TOP_H: vW = scrW - vX0 - PANEL_W: vH = scrH - TOP_H - BAR_H
     IF viewImg& < -1 THEN _FREEIMAGE viewImg&
     IF ovImg& < -1 THEN _FREEIMAGE ovImg&
@@ -206,6 +226,40 @@ SUB Layout
     RCap vW * vH
     viewDirty = -1: ovDirty = -1
     binTop = Clamp(binTop, 0, BinMaxTop)
+END SUB
+
+' The bin no narrower than it was made, nor so wide the view's under 240 (the panel stays as it is)
+SUB DockClamp
+    DIM room
+    room = scrW - 240 - LIST_W * -(listOn <> 0)
+    IF BIN_W > room - PANEL_W THEN BIN_W = room - PANEL_W
+    IF BIN_W < BIN_MIN THEN BIN_W = BIN_MIN
+END SUB
+
+' 1 if the pointer's on the bin's edge (dragged wider or narrower), else 0
+FUNCTION DockAt (x, y)
+    IF y < TOP_H OR y >= scrH - BAR_H THEN EXIT FUNCTION
+    IF x >= BIN_W - 4 AND x <= BIN_W + 1 THEN DockAt = 1
+END FUNCTION
+
+' Each frame: an edge dragged (laid out again as it goes; let go: remembered), the pointer a <-> over one
+SUB DockFrame
+    DIM w, c
+    IF dockDrag THEN
+        w = BIN_W
+        BIN_W = mX + 1
+        DockClamp
+        IF BIN_W <> w THEN Layout
+        IF NOT mB1 THEN
+            CfgSet "bin_w", LTRIM$(STR$(BIN_W))
+            dockDrag = 0
+        END IF
+    END IF
+    c = (dockDrag <> 0 OR DockAt(mX, mY) <> 0)
+    IF c <> dockCur THEN
+        dockCur = c
+        IF c THEN _MOUSESHOW "HORIZONTAL" ELSE _MOUSESHOW "DEFAULT"
+    END IF
 END SUB
 
 ' Once a frame: a window dragged to a size of its own, once it's been let
@@ -276,7 +330,7 @@ SUB Words (l$)
     n = 0: p = 1
     DO
         DO WHILE MID$(l$, p, 1) = " " OR MID$(l$, p, 1) = CHR$(9): p = p + 1: LOOP
-        IF p > LEN(l$) OR n >= 40 THEN EXIT DO
+        IF p > LEN(l$) OR n >= 1000 THEN EXIT DO
         j = p
         DO WHILE j <= LEN(l$) AND MID$(l$, j, 1) <> " " AND MID$(l$, j, 1) <> CHR$(9): j = j + 1: LOOP
         n = n + 1: wd$(n) = MID$(l$, p, j - p): p = j

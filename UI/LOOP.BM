@@ -1,0 +1,265 @@
+''
+' bu1ld0r - UI/LOOP.BM
+' =============================================================================
+' LOOP: see LOOP.BI. Each time a slider moves, the part's mesh as it was is
+' read into the work again and cut afresh (as BEVEL does); APPLY keeps it.
+'
+
+' O, or LOOP: begun on the picked edge(s) - O again: made
+SUB LcStart
+    DIM i AS LONG
+    IF bvOn THEN
+        IF bvKind = 2 THEN BvApply
+        EXIT SUB
+    END IF
+    IF edPart = 0 THEN EXIT SUB
+    IF edMode <> ED_EDGES THEN Msg "Loop cut: pick an edge (3: EDGES, click its line), then O - a ring of edges goes round across it": EXIT SUB
+    IF NOT EdAny THEN Msg "Pick an edge (click its line), then O: a ring of new edges round the part, across it": EXIT SUB
+    EdBegin 0
+    EdPickedEdges lcSA(), lcSB(), lcNS
+    IF lcNS = 0 THEN Msg "Pick an edge first: both its points (click its line)": EXIT SUB
+    IF lcCuts < 1 THEN lcCuts = 1: lcPos = 50
+    bvBase = pMesh(edPart): bvPrev = 0: bvPtMode = -1: bvKind = 2
+    EmLoad bvBase: EmEdgeMap: LcRing
+    IF lcFN = 0 THEN Msg "No four-sided face across that edge to cut round": EXIT SUB
+    pvOn = 0: pvArm = 0
+    REDIM bvSelV(edVN) AS _BYTE, bvSelF(edFN) AS _BYTE
+    FOR i = 0 TO edVN - 1: bvSelV(i) = edSelV(i): NEXT
+    bvOn = -1: bvDrag = 0
+    BvPreview
+    Msg "Loop cut: POSITION slides it, CUTS makes more (drag them, or the wheel over them). Enter or APPLY: make it. Esc: as it was"
+END SUB
+
+' The loop made again as the sliders say, and shown - its new points picked
+SUB LcPreview
+    DIM id AS LONG, w AS LONG
+    EmLoad bvBase: EmEdgeMap
+    LcRing
+    IF lcFN = 0 THEN BvShowBase: EXIT SUB
+    LcCut
+    id = EmWrite&
+    pMesh(edPart) = id: bvPrev = id
+    edId = id: edVN = mbVN(id): edFN = mbFN(id)
+    REDIM edSelV(edVN) AS _BYTE, edSelF(edFN) AS _BYTE
+    FOR w = 1 TO swN
+        IF w <= UBOUND(lcNew) THEN
+            IF lcNew(w) AND swMap(w) >= 0 THEN edSelV(swMap(w)) = -1
+        END IF
+    NEXT
+    edPkN = 0
+    edGen = edGen + 1: ovDirty = -1: meshDirty = -1: viewDirty = -1
+END SUB
+
+' Where cut j (of lcCuts) goes along each ring edge, 0 to 1 from its p
+FUNCTION LcT# (j)
+    DIM t#
+    IF lcCuts = 1 THEN t# = lcPos / 100 ELSE t# = j / (lcCuts + 1)
+    IF t# < .01 THEN t# = .01
+    IF t# > .99 THEN t# = .99
+    LcT# = t#
+END FUNCTION
+
+' ---------------------------------------------------------------- the ring
+
+' Each picked edge's ring: its edges (lcP/lcQ) and faces (lcF between lcFA and lcFB)
+SUB LcRing
+    DIM i AS LONG, g1 AS LONG, g2 AS LONG, e0 AS LONG, f0 AS LONG, came
+    lcEN = 0: lcFN = 0
+    REDIM lcUsed(sfN) AS _BYTE
+    REDIM lcP(64) AS LONG, lcQ(64) AS LONG, lcF(64) AS LONG, lcFA(64) AS LONG, lcFB(64) AS LONG
+    FOR i = 1 TO lcNS
+        g1 = EmEdgeFind&(lcSA(i), lcSB(i)): g2 = EmEdgeFind&(lcSB(i), lcSA(i))
+        e0 = LcEdgeAdd&(lcSA(i), lcSB(i)): f0 = lcFN
+        came = LcWalk(e0, g1)
+        IF came = 0 THEN came = LcWalk(e0, g2) ' (the other way from it too, unless it came round)
+        IF lcFN = f0 THEN lcEN = e0 - 1 ' (nothing cut across it: not kept)
+    NEXT
+END SUB
+
+FUNCTION LcEdgeAdd& (p AS LONG, q AS LONG)
+    lcEN = lcEN + 1
+    IF lcEN > UBOUND(lcP) THEN REDIM _PRESERVE lcP(lcEN * 2) AS LONG: REDIM _PRESERVE lcQ(lcEN * 2) AS LONG
+    lcP(lcEN) = p: lcQ(lcEN) = q
+    LcEdgeAdd& = lcEN
+END FUNCTION
+
+SUB LcFaceAdd (g AS LONG, a AS LONG, b AS LONG)
+    lcFN = lcFN + 1
+    IF lcFN > UBOUND(lcF) THEN REDIM _PRESERVE lcF(lcFN * 2) AS LONG: REDIM _PRESERVE lcFA(lcFN * 2) AS LONG: REDIM _PRESERVE lcFB(lcFN * 2) AS LONG
+    lcF(lcFN) = g: lcFA(lcFN) = a: lcFB(lcFN) = b
+END SUB
+
+' From ring edge e0 through face g on: each four-sided face to its opposite side,
+' then the face past it. True if it came round to e0 again.
+FUNCTION LcWalk (e0 AS LONG, g0 AS LONG)
+    DIM e AS LONG, g AS LONG, p AS LONG, q AS LONG, k AS LONG, c0 AS LONG, i AS LONG, np AS LONG, nq AS LONG, ne AS LONG, h AS LONG
+    e = e0: g = g0
+    DO
+        IF g <= 0 OR g > UBOUND(lcUsed) THEN EXIT FUNCTION
+        IF lcUsed(g) OR sfLive(g) = 0 OR sfCN(g) <> 4 THEN EXIT FUNCTION
+        p = lcP(e): q = lcQ(e): c0 = sfC0(g): k = -1
+        FOR i = 0 TO 3
+            IF scV(c0 + i) = p AND scV(c0 + (i + 1) MOD 4) = q THEN k = i: np = scV(c0 + (i + 3) MOD 4): nq = scV(c0 + (i + 2) MOD 4): EXIT FOR
+            IF scV(c0 + i) = q AND scV(c0 + (i + 1) MOD 4) = p THEN k = i: np = scV(c0 + (i + 2) MOD 4): nq = scV(c0 + (i + 3) MOD 4): EXIT FOR
+        NEXT
+        IF k < 0 THEN EXIT FUNCTION
+        lcUsed(g) = -1
+        IF (np = lcP(e0) AND nq = lcQ(e0)) OR (np = lcQ(e0) AND nq = lcP(e0)) THEN LcFaceAdd g, e, e0: LcWalk = -1: EXIT FUNCTION ' (round)
+        ne = LcEdgeAdd&(np, nq)
+        LcFaceAdd g, e, ne
+        h = EmEdgeFind&(np, nq): IF h = g THEN h = EmEdgeFind&(nq, np)
+        e = ne: g = h
+    LOOP
+END FUNCTION
+
+' ---------------------------------------------------------------- the cut
+
+' The ring's faces cut into strips (lcCuts + 1 each), and the faces at its
+' ends (not four-sided) given its points in their sides
+SUB LcCut
+    DIM e AS LONG, j AS LONG, w AS LONG, t#, p AS LONG, q AS LONG, i AS LONG, f AS LONG, g AS LONG, n
+    DIM s AS LONG, a AS LONG, b AS LONG, rev, oa, eA, eB, fL, fR, k AS LONG, c0 AS LONG, r AS LONG, tx
+    DIM pu#(LC_K), pw#(LC_K), qu#(LC_K), qw#(LC_K), pp(LC_K) AS LONG, qq(LC_K) AS LONG
+    DIM u0#, w0#, u1#, w1#, x#
+    n = lcCuts
+    REDIM lcC((lcEN + 1) * LC_K) AS LONG
+    REDIM lcNew(swN + (lcEN + 1) * LC_MAX + 8) AS _BYTE
+    ' (each edge's points: its ends and the cuts)
+    FOR e = 1 TO lcEN
+        p = lcP(e): q = lcQ(e)
+        lcC(e * LC_K) = p: lcC(e * LC_K + n + 1) = q
+        FOR j = 1 TO n
+            t# = LcT#(j)
+            w = EmAddV&(swX(p) + (swX(q) - swX(p)) * t#, swY(p) + (swY(q) - swY(p)) * t#, swZ(p) + (swZ(q) - swZ(p)) * t#)
+            lcC(e * LC_K + j) = w: lcNew(w) = -1
+        NEXT
+    NEXT
+    ' (each ring face: strips from its edge A's points to its edge B's)
+    FOR i = 1 TO lcFN
+        g = lcF(i): c0 = sfC0(g): tx = sfTex(g)
+        FOR j = 0 TO n + 1: pp(j) = lcC(lcFA(i) * LC_K + j): NEXT
+        rev = NOT LcHas(g, pp(0), lcC(lcFB(i) * LC_K)) ' (B's p not beside A's p: B taken the other way)
+        FOR j = 0 TO n + 1
+            IF rev THEN qq(j) = lcC(lcFB(i) * LC_K + n + 1 - j) ELSE qq(j) = lcC(lcFB(i) * LC_K + j)
+        NEXT
+        ' (the face's own order: does it go p0 -> p(n+1)?)
+        oa = 0
+        FOR k = 0 TO 3
+            IF scV(c0 + k) = pp(0) AND scV(c0 + (k + 1) MOD 4) = pp(n + 1) THEN oa = -1
+        NEXT
+        eA = LcSideE(g, pp(0), pp(n + 1)): eB = LcSideE(g, qq(0), qq(n + 1))
+        fL = LcSideE(g, pp(0), qq(0)): fR = LcSideE(g, pp(n + 1), qq(n + 1))
+        IF tx THEN
+            LcUV g, pp(0), u0#, w0#: LcUV g, pp(n + 1), u1#, w1#
+            FOR j = 0 TO n + 1: x# = EdAlong#(pp(0), pp(n + 1), pp(j)): pu#(j) = u0# + (u1# - u0#) * x#: pw#(j) = w0# + (w1# - w0#) * x#: NEXT
+            LcUV g, qq(0), u0#, w0#: LcUV g, qq(n + 1), u1#, w1#
+            FOR j = 0 TO n + 1: x# = EdAlong#(qq(0), qq(n + 1), qq(j)): qu#(j) = u0# + (u1# - u0#) * x#: qw#(j) = w0# + (w1# - w0#) * x#: NEXT
+        END IF
+        FOR s = 0 TO n
+            IF oa THEN
+                emL(0) = pp(s): emL(1) = pp(s + 1): emL(2) = qq(s + 1): emL(3) = qq(s)
+                emE(0) = eA: emE(1) = IIF(s = n, fR, 1): emE(2) = eB: emE(3) = IIF(s = 0, fL, 1)
+                IF tx THEN emU(0) = pu#(s): emW(0) = pw#(s): emU(1) = pu#(s + 1): emW(1) = pw#(s + 1): emU(2) = qu#(s + 1): emW(2) = qw#(s + 1): emU(3) = qu#(s): emW(3) = qw#(s)
+            ELSE
+                emL(0) = pp(s + 1): emL(1) = pp(s): emL(2) = qq(s): emL(3) = qq(s + 1)
+                emE(0) = eA: emE(1) = IIF(s = 0, fL, 1): emE(2) = eB: emE(3) = IIF(s = n, fR, 1)
+                IF tx THEN emU(0) = pu#(s + 1): emW(0) = pw#(s + 1): emU(1) = pu#(s): emW(1) = pw#(s): emU(2) = qu#(s): emW(2) = qw#(s): emU(3) = qu#(s + 1): emW(3) = qw#(s + 1)
+            END IF
+            IF tx THEN emTex = tx
+            r = EmAddF&(4, sfCol(g))
+        NEXT
+        sfLive(g) = 0
+    NEXT
+    ' (the faces past the ring's ends: its points put in their sides)
+    REDIM seen(sfN) AS _BYTE
+    FOR e = 1 TO lcEN
+        FOR k = 0 TO 1
+            IF k = 0 THEN f = EmEdgeFind&(lcP(e), lcQ(e)) ELSE f = EmEdgeFind&(lcQ(e), lcP(e))
+            IF f > 0 AND f <= UBOUND(seen) THEN
+                IF sfLive(f) AND seen(f) = 0 THEN seen(f) = -1: LcInsert f
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+' Face f rebuilt with the ring's points in any of its sides that are ring edges
+SUB LcInsert (f AS LONG)
+    DIM k AS LONG, m AS LONG, n AS LONG, c0 AS LONG, a AS LONG, b AS LONG, e AS LONG, j AS LONG, w AS LONG, r AS LONG, x#, hit
+    DIM nu#(EM_MAXC), nw#(EM_MAXC)
+    n = sfCN(f): c0 = sfC0(f)
+    FOR k = 0 TO n - 1
+        a = scV(c0 + k): b = scV(c0 + (k + 1) MOD n)
+        IF m >= EM_MAXC THEN EXIT SUB
+        emL(m) = a: emE(m) = scE(c0 + k): nu#(m) = scTU(c0 + k): nw#(m) = scTV(c0 + k): m = m + 1
+        FOR e = 1 TO lcEN
+            IF (lcP(e) = a AND lcQ(e) = b) OR (lcP(e) = b AND lcQ(e) = a) THEN
+                FOR j = 1 TO lcCuts
+                    IF lcP(e) = a THEN w = lcC(e * LC_K + j) ELSE w = lcC(e * LC_K + lcCuts + 1 - j)
+                    IF m >= EM_MAXC THEN EXIT SUB
+                    x# = EdAlong#(a, b, w)
+                    emL(m) = w: emE(m) = scE(c0 + k)
+                    nu#(m) = scTU(c0 + k) + (scTU(c0 + (k + 1) MOD n) - scTU(c0 + k)) * x#
+                    nw#(m) = scTV(c0 + k) + (scTV(c0 + (k + 1) MOD n) - scTV(c0 + k)) * x#
+                    m = m + 1: hit = -1
+                NEXT
+                EXIT FOR
+            END IF
+        NEXT
+    NEXT
+    IF hit = 0 THEN EXIT SUB
+    IF sfTex(f) THEN
+        emTex = sfTex(f)
+        FOR k = 0 TO m - 1: emU(k) = nu#(k): emW(k) = nw#(k): NEXT
+    END IF
+    r = EmAddF&(m, sfCol(f)): sfLive(f) = 0
+END SUB
+
+' Has face g a side between points a and b (either way round)?
+FUNCTION LcHas (g AS LONG, a AS LONG, b AS LONG)
+    DIM k AS LONG, n AS LONG, c0 AS LONG, x AS LONG, y AS LONG
+    n = sfCN(g): c0 = sfC0(g)
+    FOR k = 0 TO n - 1
+        x = scV(c0 + k): y = scV(c0 + (k + 1) MOD n)
+        IF (x = a AND y = b) OR (x = b AND y = a) THEN LcHas = -1: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Face g's side between points a and b (either way round): its edge flag (0 if it has none)
+FUNCTION LcSideE (g AS LONG, a AS LONG, b AS LONG)
+    DIM k AS LONG, n AS LONG, c0 AS LONG, x AS LONG, y AS LONG
+    n = sfCN(g): c0 = sfC0(g)
+    FOR k = 0 TO n - 1
+        x = scV(c0 + k): y = scV(c0 + (k + 1) MOD n)
+        IF (x = a AND y = b) OR (x = b AND y = a) THEN LcSideE = scE(c0 + k): EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Face g's picture spot at its corner on point v
+SUB LcUV (g AS LONG, v AS LONG, u#, w#)
+    DIM k AS LONG
+    FOR k = 0 TO sfCN(g) - 1
+        IF scV(sfC0(g) + k) = v THEN u# = scTU(sfC0(g) + k): w# = scTV(sfC0(g) + k): EXIT SUB
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- the panel, while cutting
+
+SUB LcDraw
+    DIM x, y, w, h
+    Txt PX0, 86, "LOOP CUT", cHi
+    Txt PX0 + 80, 86, LTRIM$(STR$(lcFN)) + IIFS$(lcFN = 1, " FACE", " FACES"), cText
+    Txt PX0, 110, "POSITION", cDim
+    Txt PX0 + 104, 110, IIFS$(lcCuts = 1, LTRIM$(STR$(lcPos)) + "%", "(even)"), cText
+    BvSlideDraw 1
+    Txt PX0, 158, "CUTS", cDim: Txt PX0 + 104, 158, LTRIM$(STR$(lcCuts)), cText
+    BvSlideDraw 2
+    BvBtn 1, x, y, w, h: Btn x, y, w, h, "APPLY  Enter", 0
+    BvBtn 2, x, y, w, h: Btn x, y, w, h, "CANCEL  Esc", 0
+    Txt PX0, 244, "POSITION: near one side", cDim
+    Txt PX0, 260, "(0) or the other (100) -", cDim
+    Txt PX0, 276, "near an edge, a thin face", cDim
+    Txt PX0, 292, "along it", cDim
+    Txt PX0, 316, "APPLY makes it (its new", cDim
+    Txt PX0, 332, "edges picked); Esc: as", cDim
+    Txt PX0, 348, "it was", cDim
+END SUB
