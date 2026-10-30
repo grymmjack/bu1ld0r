@@ -43,6 +43,9 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
 - A prefab used whole: `use NAME  x y z  turnX turnY turnZ  scaleX scaleY scaleZ`
   (NAME its path in prefabs/ without .bld: `panels/toggle`). Its parts
   come from the prefab's file, so it's linked; prefabs can use prefabs.
+- After the numbers, a part's flags, as words: `hole` (it cuts the solid
+  parts before it), `hide` (not in the view; still exported), `wire`
+  (lines only), `name=NAME` (no spaces). Older copies ignore them.
 - Later stages add lines after a part (`face`, `paint`).
 
 ## Stages
@@ -74,14 +77,17 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
    level editor's faces in pieces), push a piece out or in; on round shapes
    rings along the length. Faces stay flat four-sided pieces. The triangle
    count on screen, against NEON-CASTER's ~200 a prop.
-7. **Booleans**: each part ADD (as now), CUT (its shape taken out of the
-   parts it overlaps: a hole, a slot, a recess) or KEEP (only where it
-   overlaps them: an intersection); a prefab use can cut too (a vent's
-   slots into a wall). Live, not destructive: a mode in the panel (and a
-   word on the part's line), worked out when the mesh is made (BSP CSG on
-   the triangles, as csg.js), so a cut part can still be moved and sized;
-   the cutters shown as see-through outlines. Flattened on export. The
-   new faces take the colour of the part they're cut into.
+7. **Booleans**: holes done (0.3.0) - any part (a prefab too) can be a
+   HOLE (C): its shape is taken out of every solid part before it in the
+   list (a hole, a slot, a recess), live, so it can still be moved and
+   sized; shown see-through grey and pickable; the walls take the colour
+   of the part they're cut into; flattened on export. Faces near the hole
+   are split only where they cross it, each piece kept or not by rays from
+   its middle (MODEL/CSG). With it: the shape set up before it's put down
+   (a hole put on a face drills into it), and the parts list (L: select,
+   hide, lines only, rename, order). Still to do: KEEP (only where it
+   overlaps: an intersection), and a hole cutting only the parts it's
+   grouped with.
 8. **Retopology**: the mesh tidied for the game, as the last step before
    export (and shown: the count before and after): corners welded, faces
    hidden inside other parts or pressed flat against them taken away,

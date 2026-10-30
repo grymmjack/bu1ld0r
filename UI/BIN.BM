@@ -9,7 +9,8 @@
 
 SUB BinSetup
     DIM k, i, ok
-    Words "00C8E6 FF3CC8 FFD23C 50FF8C FF6E3C 8C64FF F0F0F5 9AA0B4 5A6478 2D3240 141620 C8B496 8C6E50 503C2D B4283C FF9EB4 3C78FF 28B4A0 A0E650 E6A028 C83C28 6E2896 DCDCE6 6E7896 0A5064 640A50 645A0A 0A6432 A04614 321E6E 465064 000000"
+    ' The palette: ANSI32 (lospec.com/palette-list/ansi32 - as DRAW's ASSETS/PALETTES)
+    Words "000000 0000A3 0037D1 4B4CFF 91A4F0 4CFFFF ACFFFF 00A3A3 004746 0C380C 007701 4CFF4D C5FFC5 DFDFDF CACACA A3A3A3 707070 4C4C4C 292929 773800 DC6A00 FFA300 FE4746 C20000 770000 762979 CC29CC FF4CFE FF9DFF EFBBBB FFF28C FFFFFF"
     FOR i = 0 TO NUM_PAL - 1: palCol(i) = ParseCol~&(wd$(i + 1), ok): NEXT
     HelpSetup
     FOR k = 1 TO NUM_KINDS
@@ -64,7 +65,7 @@ SUB RenderIcon (k, r$, img&)
     tN = t0
     camTX = sTX: camTY = sTY: camTZ = sTZ: camYaw = sYaw: camPitch = sPitch: camDist = sDist
     viewDirty = -1: ghostKey$ = "" ' (part 0, the ghost, was used: it's made again)
-    IF ghostOn THEN meshDirty = -1
+    IF ghostOn THEN GhostRemake
 END SUB
 
 ' ---------------------------------------------------------------- layout
@@ -190,15 +191,17 @@ END SUB
 ' A shape (or prefab r$) to put down: the ghost follows the pointer
 SUB PlaceStart (k, r$)
     placeKind = k: placeRef$ = r$: placeDrag = -1: ghostKey$ = "": SelNone: ovDirty = -1
+    PartFresh P_TPL, k, 0, 0, 0: pRef$(P_TPL) = r$ ' (set up as the last one of its kind was - the panel changes it)
+    gHave = 0: IF ghostOn THEN ghostOn = 0: meshDirty = -1
     IF k = K_USE THEN
         Msg "Click where " + PfBase$(r$) + " goes (or drag it there): it stands on the face you point at. Shift: keep putting them down. Esc: stop"
     ELSE
-        Msg "Click where the " + kindName$(k) + " goes (or drag it there): it stands on the face you point at. Shift: keep putting them down. Esc: stop"
+        Msg "Click where the " + kindName$(k) + " goes: it stands on the face you point at. The panel sets it up first (C: a hole). Shift: keep putting them down. Esc: stop"
     END IF
 END SUB
 
 SUB PlaceStop
-    placeKind = 0: placeRef$ = "": ghostKey$ = ""
+    placeKind = 0: placeRef$ = "": ghostKey$ = "": gHave = 0
     IF ghostOn THEN ghostOn = 0: meshDirty = -1
 END SUB
 

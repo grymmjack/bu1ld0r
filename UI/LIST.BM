@@ -1,0 +1,184 @@
+''
+' bu1ld0r - UI/LIST.BM
+' =============================================================================
+' The parts list. Each row: shown (a dot; hollow when hidden), solid or lines
+' (a square, filled or not), its colour, its number and its name (a hole's
+' with a minus: it takes away).
+'
+
+FUNCTION ListY0
+    ListY0 = TOP_H + 26
+END FUNCTION
+
+FUNCTION ListFootY ' (the UP and DOWN buttons' row)
+    ListFootY = scrH - BAR_H - 30
+END FUNCTION
+
+FUNCTION ListRows
+    ListRows = (ListFootY - 4 - ListY0) \ LIST_ROW
+END FUNCTION
+
+SUB ListBtn (k, x, y, w, h)
+    x = BIN_W + 6 + (k - 1) * 100: y = ListFootY + 4: w = 96: h = 22
+END SUB
+
+' The part in the row at y (0: none)
+FUNCTION ListPartAt (x, y)
+    DIM r, i
+    IF listOn = 0 OR x < BIN_W OR x >= BIN_W + LIST_W OR y < ListY0 THEN EXIT FUNCTION
+    r = (y - ListY0) \ LIST_ROW
+    IF r >= ListRows THEN EXIT FUNCTION
+    i = listTop + 1 + r
+    IF i <= pN THEN ListPartAt = i
+END FUNCTION
+
+FUNCTION ListName$ (i)
+    IF LEN(pName$(i)) THEN
+        ListName$ = pName$(i)
+    ELSEIF pKind(i) = K_USE THEN
+        ListName$ = PfBase$(pRef$(i))
+    ELSE
+        ListName$ = kindName$(pKind(i))
+    END IF
+END FUNCTION
+
+' A name a part can have: letters, digits, - and _ (a space becomes _)
+FUNCTION PartNameSafe$ (n$)
+    DIM i, ch$, o$
+    FOR i = 1 TO LEN(n$)
+        ch$ = MID$(n$, i, 1)
+        IF ch$ = " " THEN ch$ = "_"
+        IF INSTR("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_", ch$) THEN o$ = o$ + ch$
+    NEXT
+    PartNameSafe$ = LEFT$(o$, 24)
+END FUNCTION
+
+SUB ListToggle
+    listOn = NOT listOn
+    Layout
+    CfgSet "parts_list", IIFS$(listOn, "1", "0")
+    Msg IIFS$(listOn, "The parts list (L: hide it)", "Parts list hidden (L: show it)")
+END SUB
+
+SUB ListDraw
+    DIM x0, y, r, i, rows, c AS _UNSIGNED LONG, t$, w, x, h, k, p
+    x0 = BIN_W
+    LINE (x0, TOP_H)-(x0 + LIST_W - 1, scrH - BAR_H - 1), cPanel, BF
+    LINE (x0 + LIST_W - 1, TOP_H)-(x0 + LIST_W - 1, scrH - BAR_H - 1), cLine
+    Txt x0 + 8, TOP_H + 6, "PARTS", cHi
+    IF pN THEN Txt x0 + 56, TOP_H + 6, LTRIM$(STR$(pN)), cDim
+    rows = ListRows
+    IF listTop > pN - rows THEN listTop = pN - rows
+    IF listTop < 0 THEN listTop = 0
+    IF listFollow THEN ' (a part picked in the view: its row shown)
+        p = SelFirst
+        IF p > 0 THEN
+            IF p <= listTop THEN listTop = p - 1
+            IF p > listTop + rows THEN listTop = p - rows
+        END IF
+        listFollow = 0
+    END IF
+    IF pN = 0 THEN Txt x0 + 8, ListY0 + 4, "(none yet)", cDim
+    FOR r = 0 TO rows - 1
+        i = listTop + 1 + r: IF i > pN THEN EXIT FOR
+        y = ListY0 + r * LIST_ROW
+        IF pSel(i) THEN
+            LINE (x0 + 2, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(60, 36, 104), BF
+        ELSEIF i = hoverPart OR ListPartAt(mX, mY) = i THEN
+            LINE (x0 + 2, y)-(x0 + LIST_W - 4, y + LIST_ROW - 2), _RGB32(34, 30, 56), BF
+        END IF
+        ' (shown: a dot - hollow if hidden)
+        IF pHide(i) THEN CIRCLE (x0 + 10, y + 8), 4, cDim ELSE CIRCLE (x0 + 10, y + 8), 4, cText: PAINT (x0 + 10, y + 8), cText, cText
+        ' (solid: a filled square in its colour; lines only: just its edge)
+        c = WireCol~&(pCol(i)): IF pKind(i) = K_USE THEN c = cText
+        IF pHole(i) THEN c = HOLE_WIRE
+        IF pWire(i) THEN LINE (x0 + 21, y + 4)-(x0 + 29, y + 12), c, B ELSE LINE (x0 + 21, y + 4)-(x0 + 29, y + 12), c, BF
+        t$ = RIGHT$("   " + LTRIM$(STR$(i)), 3)
+        Txt x0 + 34, y + 1, t$, cDim
+        IF typeField = F_PNAME AND listEdit = i THEN
+            FieldDraw F_PNAME
+        ELSE
+            t$ = ListName$(i): IF pHole(i) THEN t$ = "-" + t$
+            w = (LIST_W - 66) \ 8: IF LEN(t$) > w THEN t$ = LEFT$(t$, w - 1) + "~"
+            c = cText
+            IF pHole(i) THEN c = HOLE_WIRE
+            IF pHide(i) THEN c = cDim
+            Txt x0 + 62, y + 1, t$, c
+        END IF
+    NEXT
+    IF listTop > 0 THEN Txt x0 + LIST_W - 20, ListY0 - 18, CHR$(24), cDim ' (more above / below)
+    IF listTop + rows < pN THEN Txt x0 + LIST_W - 20, ListFootY - 16, CHR$(25), cDim
+    FOR k = 1 TO 2
+        ListBtn k, x, y, w, h: Btn x, y, w, h, IIFS$(k = 1, "UP", "DOWN"), 0
+    NEXT
+END SUB
+
+SUB ListClick
+    DIM i, k, x, y, w, h, x0
+    FOR k = 1 TO 2
+        ListBtn k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN ListMove IIF(k = 1, -1, 1): EXIT SUB
+    NEXT
+    i = ListPartAt(mX, mY)
+    IF i = 0 THEN
+        IF mY >= ListY0 AND mY < ListFootY AND NOT kShift THEN SelNone: ovDirty = -1
+        EXIT SUB
+    END IF
+    IF placeKind THEN PlaceStop
+    x0 = BIN_W
+    IF mX < x0 + 17 THEN ' (shown / hidden)
+        UndoPush: pHide(i) = NOT pHide(i): ModelChanged
+        Msg IIFS$(pHide(i), ListName$(i) + " hidden (the export still has it)", ListName$(i) + " shown")
+        EXIT SUB
+    END IF
+    IF mX < x0 + 32 THEN ' (solid / lines)
+        UndoPush: pWire(i) = NOT pWire(i): ModelChanged
+        Msg IIFS$(pWire(i), ListName$(i) + " as lines only (pick it here)", ListName$(i) + " solid")
+        EXIT SUB
+    END IF
+    IF kShift THEN
+        pSel(i) = NOT pSel(i)
+    ELSE
+        IF listClickP = i AND TIMER(.001) - listClickT < .45 AND TIMER(.001) >= listClickT THEN ' (twice: rename it)
+            SelNone: pSel(i) = -1
+            listEdit = i: typeField = F_PNAME: typeBuf$ = ListName$(i): typeFresh = -1
+            listClickP = 0: ovDirty = -1
+            EXIT SUB
+        END IF
+        SelNone: pSel(i) = -1
+    END IF
+    listClickP = i: listClickT = TIMER(.001)
+    ovDirty = -1
+END SUB
+
+SUB ListWheel
+    listTop = listTop + SGN(mWheel) * 3
+    IF listTop > pN - ListRows THEN listTop = pN - ListRows
+    IF listTop < 0 THEN listTop = 0
+END SUB
+
+' Each selected part one place earlier (d -1) or later (1) in the model:
+' a hole cuts the solid parts before it, so this says what it cuts
+SUB ListMove (d)
+    DIM i, moved
+    IF SelCount = 0 THEN Msg "Select parts to move them up or down the list": EXIT SUB
+    UndoPush
+    IF d < 0 THEN
+        FOR i = 2 TO pN
+            IF pSel(i) AND pSel(i - 1) = 0 THEN PartSwap i, i - 1: moved = -1
+        NEXT
+    ELSE
+        FOR i = pN - 1 TO 1 STEP -1
+            IF pSel(i) AND pSel(i + 1) = 0 THEN PartSwap i, i + 1: moved = -1
+        NEXT
+    END IF
+    IF moved = 0 THEN undoN = undoN - 1: EXIT SUB
+    ModelChanged: listFollow = -1
+    Msg IIFS$(d < 0, "Earlier in the list", "Later in the list") + " (a hole cuts the solid parts above it)"
+END SUB
+
+SUB PartSwap (a, b)
+    DIM s
+    PartCopy a, P_SWAP: PartCopy b, a: PartCopy P_SWAP, b
+    s = pSel(a): pSel(a) = pSel(b): pSel(b) = s
+END SUB

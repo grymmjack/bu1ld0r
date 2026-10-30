@@ -12,8 +12,10 @@ SUB PartsSetup
     FOR k = 1 TO NUM_KINDS: kindSX(k) = 0.25: kindSY(k) = 0.25: kindSZ(k) = 0.25: NEXT
     kindSY(K_CYL) = 0.3: kindSY(K_TUBE) = 0.15: kindAmt(K_TUBE) = 0.6: kindAmt(K_SPHERE) = 1
     kindName$(K_USE) = "prefab": kindSX(K_USE) = 1: kindSY(K_USE) = 1: kindSZ(K_USE) = 1 ' (a prefab's size is its scale)
+    FOR k = 1 TO K_USE: defSX(k) = kindSX(k): defSY(k) = kindSY(k): defSZ(k) = kindSZ(k): NEXT
     snapStep = 1 / 32
-    curCol = _RGB32(0, 200, 230)
+    curCol = _RGB32(76, 255, 255) ' (ANSI32's cyan, 4CFFFF)
+    defCol = curCol
 END SUB
 
 FUNCTION KindOf (n$)
@@ -29,6 +31,7 @@ SUB PartFresh (i, k, x, y, z)
     pRX(i) = 0: pRY(i) = 0: pRZ(i) = 0
     pSX(i) = kindSX(k): pSY(i) = kindSY(k): pSZ(i) = kindSZ(k)
     pAmt(i) = kindAmt(k): pSeg(i) = 0: pCol(i) = curCol: pSel(i) = 0: pRef$(i) = ""
+    pHole(i) = 0: pHide(i) = 0: pWire(i) = 0: pName$(i) = ""
 END SUB
 
 ' Part a copied over part b (all but whether it's selected)
@@ -37,6 +40,7 @@ SUB PartCopy (a, b)
     pRX(b) = pRX(a): pRY(b) = pRY(a): pRZ(b) = pRZ(a)
     pSX(b) = pSX(a): pSY(b) = pSY(a): pSZ(b) = pSZ(a)
     pAmt(b) = pAmt(a): pSeg(b) = pSeg(a): pCol(b) = pCol(a): pRef$(b) = pRef$(a)
+    pHole(b) = pHole(a): pHide(b) = pHide(a): pWire(b) = pWire(a): pName$(b) = pName$(a)
 END SUB
 
 ' The ghost (part 0) put in the model as a part of its own: its number
@@ -110,10 +114,16 @@ FUNCTION PartLine$ (i)
     DIM t$
     t$ = Fmt$(pX(i)) + " " + Fmt$(pY(i)) + " " + Fmt$(pZ(i)) + "  " + Fmt$(pRX(i)) + " " + Fmt$(pRY(i)) + " " + Fmt$(pRZ(i)) + "  " + Fmt$(pSX(i)) + " " + Fmt$(pSY(i)) + " " + Fmt$(pSZ(i))
     IF pKind(i) = K_USE THEN
-        PartLine$ = "use " + pRef$(i) + "  " + t$
+        t$ = "use " + pRef$(i) + "  " + t$
     ELSE
-        PartLine$ = "part " + kindName$(pKind(i)) + "  " + t$ + "  " + HexCol$(pCol(i)) + "  " + LTRIM$(STR$(pSeg(i))) + "  " + Fmt$(pAmt(i))
+        t$ = "part " + kindName$(pKind(i)) + "  " + t$ + "  " + HexCol$(pCol(i)) + "  " + LTRIM$(STR$(pSeg(i))) + "  " + Fmt$(pAmt(i))
     END IF
+    ' (then its flags, words of their own after the numbers: older copies leave them out)
+    IF pHole(i) THEN t$ = t$ + "  hole"
+    IF pHide(i) THEN t$ = t$ + "  hide"
+    IF pWire(i) THEN t$ = t$ + "  wire"
+    IF LEN(pName$(i)) THEN t$ = t$ + "  name=" + pName$(i)
+    PartLine$ = t$
 END FUNCTION
 
 ' The model read back from text
@@ -125,7 +135,7 @@ END SUB
 ' A .bld's parts read into at0 + 1 on (room of them at most): how many.
 ' The lines it doesn't know are left out; its name line goes in txtName$.
 FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
-    DIM p AS LONG, j AS LONG, l$, k, ok, c AS _UNSIGNED LONG, n AS LONG, i
+    DIM p AS LONG, j AS LONG, l$, k, ok, c AS _UNSIGNED LONG, n AS LONG, i, w
     n = 0: p = 1: txtName$ = ""
     DO WHILE p <= LEN(t$)
         j = INSTR(p, t$, CHR$(10)): IF j = 0 THEN j = LEN(t$) + 1
@@ -151,6 +161,14 @@ FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
                     IF wdN >= 13 THEN pSeg(i) = VAL(wd$(13))
                     IF wdN >= 14 THEN pAmt(i) = Clamp(VAL(wd$(14)), 0, 1)
                 END IF
+                FOR w = 12 TO wdN
+                    SELECT CASE LCASE$(wd$(w))
+                        CASE "hole": pHole(i) = -1
+                        CASE "hide": pHide(i) = -1
+                        CASE "wire": pWire(i) = -1
+                        CASE ELSE: IF LCASE$(LEFT$(wd$(w), 5)) = "name=" THEN pName$(i) = MID$(wd$(w), 6)
+                    END SELECT
+                NEXT
             END IF
         END IF
     LOOP

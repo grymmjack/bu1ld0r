@@ -5,7 +5,7 @@
 ' them, and the messages along the bottom.
 '
 CONST APP_NAME$ = "bu1ld0r"
-CONST APP_VERSION$ = "0.2.0"
+CONST APP_VERSION$ = "0.3.0"
 CONST MIN_SW = 800, MIN_SH = 700 ' (the smallest our screen is laid out at)
 CONST BIN_W = 150 ' (the bin, down the left)
 CONST PANEL_W = 250 ' (the panel, down the right)
@@ -17,19 +17,16 @@ TYPE V3
     z AS SINGLE
 END TYPE
 
-' The window, as DRAW's: our screen is scrW x scrH, drawn uiK times bigger
-' (a whole number: square pixels) to fill it. Drag the window and, once
-' it's let go, the screen is made again at the window's size / uiK and
-' everything laid out again on it - the 3D view takes the room. The size
-' and uiK are remembered in bu1ld0r.cfg (window=WxH, ui_scale=). winsize.h
-' sets the window's size: QB64PE can't.
-DECLARE LIBRARY "winsize"
-    SUB winsize_set (BYVAL w AS LONG, BYVAL h AS LONG)
-    FUNCTION winsize_w& ()
-    FUNCTION winsize_h& ()
-END DECLARE
-DIM SHARED scrW, scrH, scrImg&, uiK ' (our screen, and how many times bigger the window shows it)
-DIM SHARED winW, winH ' (the window's size, as we last set it)
+' The window, as DRAW's: everything is drawn on our screen, uiImg& (scrW x
+' scrH), which each frame is shown uiK times bigger (a whole number:
+' square pixels) - by the graphics card, as a hardware image - on the
+' window's own SCREEN, uiK times our size. Drag the window and, once it's
+' let go, our screen is made again at the window's size / uiK and
+' everything laid out again on it: the 3D view takes the room. The size and
+' uiK are remembered in bu1ld0r.cfg (window=WxH, ui_scale=).
+DIM SHARED scrW, scrH, uiImg&, uiK ' (our screen, and how many times bigger the window shows it)
+DIM SHARED winImg&, winW, winH ' (the window's SCREEN: uiK times ours)
+DIM SHARED presHw& ' (the frame shown last, as a hardware image: freed once the next is up)
 DIM SHARED cfgWinW, cfgWinH, cfgUiK ' (bu1ld0r.cfg's window= and ui_scale=)
 DIM SHARED preFullW, preFullH ' (our screen's size before full screen)
 
@@ -51,7 +48,7 @@ DIM SHARED cDim AS _UNSIGNED LONG, cHi AS _UNSIGNED LONG, cSel AS _UNSIGNED LONG
 DIM SHARED cHover AS _UNSIGNED LONG, cWarn AS _UNSIGNED LONG
 
 ' The command line's (tests): --open FILE, --export, --shot FILE, --quit, --neon DIR
-DIM SHARED argOpen$, argExport, argShot$, argQuit, argFrames
+DIM SHARED argOpen$, argExport, argShot$, argQuit, argFrames, argBench
 
 ' Words of a line split at spaces (Words): wd$(1 to wdN)
 DIM SHARED wd$(40), wdN

@@ -22,6 +22,7 @@ END FUNCTION
 ' Every .bld under prefabs/ read in again (folders and all)
 SUB PfLoadAll
     DIM i, q, qN, f$, d$, nN, dq$(200), nm$(MAX_PF)
+    pfGen = pfGen + 1
     FOR i = 1 TO pfN
         IF pfIcon&(i) < -1 THEN _FREEIMAGE pfIcon&(i)
         pfIcon&(i) = 0

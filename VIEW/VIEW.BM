@@ -75,14 +75,52 @@ SUB ViewRender
     NEXT
     DrawGrid
     rOrtho = 0: rCull = -1: rGhost = 0
-    FOR t = 1 TO sceneTN: RasterTri t: NEXT
-    rGhost = -1
-    FOR t = sceneTN + 1 TO tN: RasterTri t: NEXT
-    rGhost = 0
+    IF viewWire THEN
+        ' (filled unseen, so a click still finds the part and the face; then the edges, all of them)
+        rNoInk = -1
+        FOR t = 1 TO holeTN: RasterTri t: NEXT
+        rNoInk = 0
+        FOR t = 1 TO sceneTN: WireTri t, WireCol~&(tCol(t)): NEXT
+        FOR t = sceneTN + 1 TO holeTN: WireTri t, HOLE_WIRE: NEXT
+        FOR t = holeTN + 1 TO tN: WireTri t, _RGB32(235, 235, 245): NEXT
+    ELSE
+        FOR t = 1 TO sceneTN
+            IF pWire(tPart(t)) = 0 THEN RasterTri t
+        NEXT
+        rHole = -1
+        FOR t = sceneTN + 1 TO holeTN
+            IF pWire(tPart(t)) = 0 THEN RasterTri t
+        NEXT
+        rHole = 0
+        FOR t = 1 TO holeTN ' (a part shown as lines alone: no fill, so not picked - its row in the parts list is)
+            IF pWire(tPart(t)) THEN WireTri t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t)))
+        NEXT
+        rGhost = -1
+        FOR t = holeTN + 1 TO tN: RasterTri t: NEXT
+        rGhost = 0
+    END IF
     RenderEnd
     _DEST d
     viewDirty = 0: ovDirty = -1
 END SUB
+
+' Triangle t's own edges (not a quad's diagonal, nor a lid's spokes) as lines
+SUB WireTri (t AS LONG, c AS _UNSIGNED LONG)
+    DIM e
+    e = tEdge(t)
+    IF e AND 1 THEN Line3D tA(t).x, tA(t).y, tA(t).z, tB(t).x, tB(t).y, tB(t).z, c
+    IF e AND 2 THEN Line3D tB(t).x, tB(t).y, tB(t).z, tC(t).x, tC(t).y, tC(t).z, c
+    IF e AND 4 THEN Line3D tC(t).x, tC(t).y, tC(t).z, tA(t).x, tA(t).y, tA(t).z, c
+END SUB
+
+' A part's colour for its lines: as it is, but a very dark one lifted so it shows on the backdrop
+FUNCTION WireCol~& (c AS _UNSIGNED LONG)
+    DIM r, g, b, l, k
+    r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
+    l = .3 * r + .59 * g + .11 * b
+    IF l < 70 THEN k = 70 - l: r = r + k: g = g + k: b = b + k
+    WireCol~& = _RGB32(r, g, b)
+END FUNCTION
 
 ' The ground: a grid on y = 0 - a cell's square (where a NEON-CASTER prop
 ' stands) bright, eighths of a cell dim - and the X (red) and Z (blue) lines
@@ -140,7 +178,8 @@ SUB RasterTri (t AS LONG)
     lit = n.x * rLX + n.y * rLY + n.z * rLZ: IF lit < 0 THEN lit = 0
     sh = rShadeLo + rShadeK * lit
     col = Shade~&(tCol(t), sh)
-    IF rGhost THEN col = Shade~&(_RGB32(255, 255, 255), .5 + .5 * lit)
+    IF rGhost THEN col = Shade~&(IIFC~&(pHole(0), _RGB32(150, 160, 190), _RGB32(255, 255, 255)), .5 + .5 * lit)
+    IF rHole THEN col = Shade~&(_RGB32(150, 160, 190), .55 + .45 * lit)
 
     wx(0) = tA(t).x: wy(0) = tA(t).y: wz(0) = tA(t).z
     wx(1) = tB(t).x: wy(1) = tB(t).y: wz(1) = tB(t).z
@@ -216,7 +255,13 @@ SUB FillTri (ax, ay, aq, bx, by, bq, cx, cy, cq, col AS _UNSIGNED LONG, id AS LO
             IF w0 >= -.00001 AND w1 >= -.00001 AND w2 >= -.00001 THEN
                 q = w0 * aq + w1 * bq + w2 * cq
                 IF q > rZ(i) THEN
-                    IF rGhost THEN
+                    IF rNoInk THEN
+                        rZ(i) = q: rId(i) = id
+                    ELSEIF rHole THEN
+                        rZ(i) = q: rId(i) = id
+                        _MEMGET rMem, rMem.OFFSET + i * 4, old
+                        _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32((_RED32(old) * 3 + _RED32(col) * 2) \ 5, (_GREEN32(old) * 3 + _GREEN32(col) * 2) \ 5, (_BLUE32(old) * 3 + _BLUE32(col) * 2) \ 5) AS _UNSIGNED LONG
+                    ELSEIF rGhost THEN
                         _MEMGET rMem, rMem.OFFSET + i * 4, old
                         _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32((_RED32(old) + _RED32(col)) \ 2, (_GREEN32(old) + _GREEN32(col)) \ 2, (_BLUE32(old) + _BLUE32(col)) \ 2) AS _UNSIGNED LONG
                     ELSE

@@ -13,3 +13,4 @@ CONST MAX_PF = 500
 DIM SHARED pfN, pfTop AS LONG ' (prefabs, and the parts they take: PF_BASE + 1 to PF_BASE + pfTop)
 DIM SHARED pfName$(MAX_PF), pfFirst(MAX_PF) AS LONG, pfCnt(MAX_PF) AS LONG
 DIM SHARED pfIcon&(MAX_PF) ' (its picture for the bin: 0 until it's wanted)
+DIM SHARED pfGen AS LONG ' (one more each time the library's read: the model's triangles may change)

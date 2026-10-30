@@ -1,0 +1,550 @@
+''
+' bu1ld0r - MODEL/CSG.BM
+' =============================================================================
+' A solid less a hole: the solid's faces inside the hole go, and the hole's
+' faces inside the solid stay, turned to face in - its walls.
+'
+' Only faces near the other's are looked at, and of those only a face that
+' crosses one of the other's is split - by the planes of the ones it meets,
+' so no piece crosses the other's surface. Then each piece is in or out as
+' its middle is (rays from it: how many faces they go through). A face that
+' only touches the other's (a hole as tall as the solid, flush top and
+' bottom) is tested just off it, so the hole goes through. A split none of
+' whose pieces went is undone: the face is kept as it was.
+'
+' A face split keeps which of its edges are its shape's own (the wireframe
+' draws only those); an edge made by a split is drawn only on the hole's
+' faces - there it's the rim, where the hole meets the solid.
+'
+$CHECKING:OFF
+' (no bounds checks in here: it's the hot path, and every index is the pool's own)
+
+' The pool's tops now: CsgRelease gives back all taken since
+SUB CsgMark (a AS LONG, b AS LONG)
+    a = cgTop: b = cvTop
+END SUB
+
+SUB CsgRelease (a AS LONG, b AS LONG)
+    cgTop = a: cvTop = b
+END SUB
+
+' A new polygon with nv corners (only where they start is set)
+FUNCTION CsgPoly& (nv)
+    DIM n AS LONG
+    IF cgTop + 1 > cgCap THEN
+        n = cgCap * 2 + 4096
+        REDIM _PRESERVE cgNx(n) AS DOUBLE, cgNy(n) AS DOUBLE, cgNz(n) AS DOUBLE, cgW(n) AS DOUBLE
+        REDIM _PRESERVE cgV0(n) AS LONG, cgVn(n) AS INTEGER, cgNext(n) AS LONG
+        REDIM _PRESERVE cgPart(n) AS INTEGER, cgFace(n) AS INTEGER, cgCol(n) AS _UNSIGNED LONG, cgCut(n) AS INTEGER
+        REDIM _PRESERVE cgPar(n) AS LONG, cgOn(n) AS INTEGER
+        cgCap = n
+    END IF
+    IF cvTop + nv > cvCap THEN
+        n = (cvTop + nv) * 2 + 16384
+        REDIM _PRESERVE cvX(n) AS DOUBLE, cvY(n) AS DOUBLE, cvZ(n) AS DOUBLE, cvE(n) AS INTEGER
+        cvCap = n
+    END IF
+    cgTop = cgTop + 1
+    cgV0(cgTop) = cvTop + 1: cgVn(cgTop) = nv: cgNext(cgTop) = 0
+    cvTop = cvTop + nv
+    CsgPoly& = cgTop
+END FUNCTION
+
+' Triangles t0 to t1 as a list of polygons (cut: they're a hole's)
+FUNCTION CsgFromTris& (t0 AS LONG, t1 AS LONG, cut)
+    DIM t AS LONG, p AS LONG, v AS LONG, h AS LONG, ux#, uy#, uz#, wx#, wy#, wz#, nx#, ny#, nz#, l#
+    FOR t = t0 TO t1
+        p = CsgPoly&(3): v = cgV0(p)
+        cvX(v) = tA(t).x: cvY(v) = tA(t).y: cvZ(v) = tA(t).z
+        cvX(v + 1) = tB(t).x: cvY(v + 1) = tB(t).y: cvZ(v + 1) = tB(t).z
+        cvX(v + 2) = tC(t).x: cvY(v + 2) = tC(t).y: cvZ(v + 2) = tC(t).z
+        cvE(v) = -((tEdge(t) AND 1) <> 0): cvE(v + 1) = -((tEdge(t) AND 2) <> 0): cvE(v + 2) = -((tEdge(t) AND 4) <> 0)
+        ux# = cvX(v + 1) - cvX(v): uy# = cvY(v + 1) - cvY(v): uz# = cvZ(v + 1) - cvZ(v)
+        wx# = cvX(v + 2) - cvX(v): wy# = cvY(v + 2) - cvY(v): wz# = cvZ(v + 2) - cvZ(v)
+        nx# = uy# * wz# - uz# * wy#: ny# = uz# * wx# - ux# * wz#: nz# = ux# * wy# - uy# * wx#
+        l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+        IF l# < 1E-12 THEN
+            cgTop = cgTop - 1: cvTop = cvTop - 3 ' (no area: left out)
+        ELSE
+            nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+            cgNx(p) = nx#: cgNy(p) = ny#: cgNz(p) = nz#: cgW(p) = nx# * cvX(v) + ny# * cvY(v) + nz# * cvZ(v)
+            cgPart(p) = tPart(t): cgFace(p) = tFace(t): cgCol(p) = tCol(t): cgCut(p) = cut
+            cgNext(p) = h: h = p
+        END IF
+    NEXT
+    CsgFromTris& = h
+END FUNCTION
+
+' Polygon p, by the plane n . x = w: on it (facing its way or not), in front,
+' behind - or split in two, a piece each side (each knowing it's p's). Each
+' goes on the front of its list.
+SUB CsgSplitP (nx#, ny#, nz#, w#, p AS LONG, cf AS LONG, cb AS LONG, f AS LONG, b AS LONG)
+    DIM n, i, j, v0 AS LONG, t#, ptype, ti, tj, e, se, fn, bn, q AS LONG, k, s#, x#, y#, z#
+    n = cgVn(p): v0 = cgV0(p)
+    IF n > CSG_MAXV THEN n = CSG_MAXV ' (never met: a split adds one corner at most)
+    ptype = 0
+    FOR i = 0 TO n - 1
+        t# = nx# * cvX(v0 + i) + ny# * cvY(v0 + i) + nz# * cvZ(v0 + i) - w#
+        csT(i) = t#
+        IF t# < -CSG_EPS THEN
+            csP(i) = CSG_BACK
+        ELSEIF t# > CSG_EPS THEN
+            csP(i) = CSG_FRONT
+        ELSE
+            csP(i) = CSG_ON
+        END IF
+        ptype = ptype OR csP(i)
+    NEXT
+    SELECT CASE ptype
+        CASE CSG_ON
+            IF nx# * cgNx(p) + ny# * cgNy(p) + nz# * cgNz(p) > 0 THEN cgNext(p) = cf: cf = p ELSE cgNext(p) = cb: cb = p
+        CASE CSG_FRONT
+            cgNext(p) = f: f = p
+        CASE CSG_BACK
+            cgNext(p) = b: b = p
+        CASE ELSE
+            se = -(cgCut(p) <> 0)
+            fn = 0: bn = 0
+            FOR i = 0 TO n - 1
+                j = i + 1: IF j = n THEN j = 0
+                ti = csP(i): tj = csP(j): e = cvE(v0 + i)
+                IF ti <> CSG_BACK THEN
+                    csFX(fn) = cvX(v0 + i): csFY(fn) = cvY(v0 + i): csFZ(fn) = cvZ(v0 + i)
+                    IF ti = CSG_FRONT OR tj <> CSG_BACK THEN csFE(fn) = e ELSE csFE(fn) = se
+                    fn = fn + 1
+                END IF
+                IF ti <> CSG_FRONT THEN
+                    csBX(bn) = cvX(v0 + i): csBY(bn) = cvY(v0 + i): csBZ(bn) = cvZ(v0 + i)
+                    IF ti = CSG_BACK OR tj <> CSG_FRONT THEN csBE(bn) = e ELSE csBE(bn) = se
+                    bn = bn + 1
+                END IF
+                IF (ti OR tj) = CSG_SPAN THEN
+                    s# = -csT(i) / (csT(j) - csT(i))
+                    x# = cvX(v0 + i) + (cvX(v0 + j) - cvX(v0 + i)) * s#
+                    y# = cvY(v0 + i) + (cvY(v0 + j) - cvY(v0 + i)) * s#
+                    z# = cvZ(v0 + i) + (cvZ(v0 + j) - cvZ(v0 + i)) * s#
+                    csFX(fn) = x#: csFY(fn) = y#: csFZ(fn) = z#: csFE(fn) = IIF(ti = CSG_BACK, e, se): fn = fn + 1
+                    csBX(bn) = x#: csBY(bn) = y#: csBZ(bn) = z#: csBE(bn) = IIF(ti = CSG_FRONT, e, se): bn = bn + 1
+                END IF
+            NEXT
+            IF fn >= 3 THEN
+                q = CsgPoly&(fn): CsgLike p, q
+                FOR k = 0 TO fn - 1
+                    cvX(cgV0(q) + k) = csFX(k): cvY(cgV0(q) + k) = csFY(k): cvZ(cgV0(q) + k) = csFZ(k): cvE(cgV0(q) + k) = csFE(k)
+                NEXT
+                cgNext(q) = f: f = q
+            END IF
+            IF bn >= 3 THEN
+                q = CsgPoly&(bn): CsgLike p, q
+                FOR k = 0 TO bn - 1
+                    cvX(cgV0(q) + k) = csBX(k): cvY(cgV0(q) + k) = csBY(k): cvZ(cgV0(q) + k) = csBZ(k): cvE(cgV0(q) + k) = csBE(k)
+                NEXT
+                cgNext(q) = b: b = q
+            END IF
+    END SELECT
+END SUB
+
+' Polygon q given p's plane and what p came from, as a piece of p
+SUB CsgLike (p AS LONG, q AS LONG)
+    cgNx(q) = cgNx(p): cgNy(q) = cgNy(p): cgNz(q) = cgNz(p): cgW(q) = cgW(p)
+    cgPart(q) = cgPart(p): cgFace(q) = cgFace(p): cgCol(q) = cgCol(p): cgCut(q) = cgCut(p)
+    cgOn(q) = cgOn(p): cgPar(q) = p
+END SUB
+
+' Polygon p turned to face the other way (its corners round the other way)
+SUB CsgFlip (p AS LONG)
+    DIM n, k, v0 AS LONG
+    n = cgVn(p): v0 = cgV0(p)
+    FOR k = 0 TO n - 1
+        csFX(k) = cvX(v0 + k): csFY(k) = cvY(v0 + k): csFZ(k) = cvZ(v0 + k): csFE(k) = cvE(v0 + k)
+    NEXT
+    FOR k = 0 TO n - 1
+        cvX(v0 + k) = csFX(n - 1 - k): cvY(v0 + k) = csFY(n - 1 - k): cvZ(v0 + k) = csFZ(n - 1 - k)
+        cvE(v0 + k) = csFE((n - 2 - k + n) MOD n) ' (its edge to the next was the old next's to it)
+    NEXT
+    cgNx(p) = -cgNx(p): cgNy(p) = -cgNy(p): cgNz(p) = -cgNz(p): cgW(p) = -cgW(p)
+END SUB
+
+' List a, then list b
+FUNCTION CsgJoin& (a AS LONG, b AS LONG)
+    DIM p AS LONG
+    IF a = 0 THEN CsgJoin& = b: EXIT FUNCTION
+    p = a
+    DO WHILE cgNext(p): p = cgNext(p): LOOP
+    cgNext(p) = b
+    CsgJoin& = a
+END FUNCTION
+
+' Polygon p's box
+SUB CsgPolyBox (p AS LONG, lo AS V3, hi AS V3)
+    DIM k, v AS LONG
+    lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
+    FOR k = 0 TO cgVn(p) - 1
+        v = cgV0(p) + k
+        IF cvX(v) < lo.x THEN lo.x = cvX(v)
+        IF cvY(v) < lo.y THEN lo.y = cvY(v)
+        IF cvZ(v) < lo.z THEN lo.z = cvZ(v)
+        IF cvX(v) > hi.x THEN hi.x = cvX(v)
+        IF cvY(v) > hi.y THEN hi.y = cvY(v)
+        IF cvZ(v) > hi.z THEN hi.z = cvZ(v)
+    NEXT
+END SUB
+
+' A list's polygons as solid s (0 or 1) for the inside tests: triangles in
+' the ray buffer, its box, and its grid
+SUB CsgRays (s, lst AS LONG)
+    DIM p AS LONG, k, v0 AS LONG, n AS LONG, plo AS V3, phi AS V3, r0 AS LONG
+    rgLo(s).x = 1E9: rgLo(s).y = 1E9: rgLo(s).z = 1E9: rgHi(s).x = -1E9: rgHi(s).y = -1E9: rgHi(s).z = -1E9
+    r0 = rbN + 1
+    p = lst
+    DO WHILE p
+        CsgPolyBox p, plo, phi: BoxGrow rgLo(s), rgHi(s), plo: BoxGrow rgLo(s), rgHi(s), phi
+        v0 = cgV0(p)
+        FOR k = 1 TO cgVn(p) - 2
+            IF rbN + 1 > rbCap THEN
+                n = rbCap * 2 + 8192
+                REDIM _PRESERVE rbAx(n) AS DOUBLE, rbAy(n) AS DOUBLE, rbAz(n) AS DOUBLE, rbUx(n) AS DOUBLE, rbUy(n) AS DOUBLE, rbUz(n) AS DOUBLE, rbVx(n) AS DOUBLE, rbVy(n) AS DOUBLE, rbVz(n) AS DOUBLE
+                rbCap = n
+            END IF
+            rbN = rbN + 1
+            rbAx(rbN) = cvX(v0): rbAy(rbN) = cvY(v0): rbAz(rbN) = cvZ(v0)
+            rbUx(rbN) = cvX(v0 + k) - cvX(v0): rbUy(rbN) = cvY(v0 + k) - cvY(v0): rbUz(rbN) = cvZ(v0 + k) - cvZ(v0)
+            rbVx(rbN) = cvX(v0 + k + 1) - cvX(v0): rbVy(rbN) = cvY(v0 + k + 1) - cvY(v0): rbVz(rbN) = cvZ(v0 + k + 1) - cvZ(v0)
+        NEXT
+        p = cgNext(p)
+    LOOP
+    CsgGrid s, r0, rbN
+END SUB
+
+' Solid s's grid: each cell lists the triangles over or under it (their
+' boxes widened by as far as a ray leans, going up through it all)
+SUB CsgGrid (s, r0 AS LONG, r1 AS LONG)
+    DIM t AS LONG, c AS LONG, m#, x0, x1, z0, z1, cx, cz, at0 AS LONG, g
+    DIM cnt(CSG_GRID * CSG_GRID) AS LONG, cur(CSG_GRID * CSG_GRID) AS LONG
+    g = CSG_GRID
+    m# = .004 * (rgHi(s).y - rgLo(s).y) + .00001
+    rgX0(s) = rgLo(s).x - m#: rgZ0(s) = rgLo(s).z - m#
+    rgCW(s) = (rgHi(s).x - rgLo(s).x + 2 * m#) / g: rgCH(s) = (rgHi(s).z - rgLo(s).z + 2 * m#) / g
+    FOR t = r0 TO r1
+        CsgTriCells s, t, m#, x0, x1, z0, z1
+        FOR cz = z0 TO z1: FOR cx = x0 TO x1: c = cz * g + cx: cnt(c) = cnt(c) + 1: NEXT: NEXT
+    NEXT
+    at0 = 0: IF s = 1 THEN at0 = rgStart(0, g * g)
+    FOR c = 0 TO g * g - 1
+        rgStart(s, c) = at0: cur(c) = at0: at0 = at0 + cnt(c)
+    NEXT
+    rgStart(s, g * g) = at0
+    IF at0 > rgIdxCap THEN rgIdxCap = at0 * 2 + 8192: REDIM _PRESERVE rgIdx(rgIdxCap) AS LONG
+    FOR t = r0 TO r1
+        CsgTriCells s, t, m#, x0, x1, z0, z1
+        FOR cz = z0 TO z1: FOR cx = x0 TO x1: c = cz * g + cx: rgIdx(cur(c)) = t: cur(c) = cur(c) + 1: NEXT: NEXT
+    NEXT
+END SUB
+
+' The cells ray-buffer triangle t covers in solid s's grid (widened by m)
+SUB CsgTriCells (s, t AS LONG, m#, x0, x1, z0, z1)
+    DIM mnx#, mxx#, mnz#, mxz#
+    mnx# = rbAx(t): mxx# = mnx#: mnz# = rbAz(t): mxz# = mnz#
+    IF rbAx(t) + rbUx(t) < mnx# THEN mnx# = rbAx(t) + rbUx(t)
+    IF rbAx(t) + rbUx(t) > mxx# THEN mxx# = rbAx(t) + rbUx(t)
+    IF rbAx(t) + rbVx(t) < mnx# THEN mnx# = rbAx(t) + rbVx(t)
+    IF rbAx(t) + rbVx(t) > mxx# THEN mxx# = rbAx(t) + rbVx(t)
+    IF rbAz(t) + rbUz(t) < mnz# THEN mnz# = rbAz(t) + rbUz(t)
+    IF rbAz(t) + rbUz(t) > mxz# THEN mxz# = rbAz(t) + rbUz(t)
+    IF rbAz(t) + rbVz(t) < mnz# THEN mnz# = rbAz(t) + rbVz(t)
+    IF rbAz(t) + rbVz(t) > mxz# THEN mxz# = rbAz(t) + rbVz(t)
+    x0 = CsgCell(mnx# - m#, rgX0(s), rgCW(s)): x1 = CsgCell(mxx# + m#, rgX0(s), rgCW(s))
+    z0 = CsgCell(mnz# - m#, rgZ0(s), rgCH(s)): z1 = CsgCell(mxz# + m#, rgZ0(s), rgCH(s))
+END SUB
+
+FUNCTION CsgCell (v#, v0#, w#)
+    DIM c
+    IF w# < 1E-12 THEN EXIT FUNCTION
+    c = INT((v# - v0#) / w#)
+    IF c < 0 THEN c = 0
+    IF c > CSG_GRID - 1 THEN c = CSG_GRID - 1
+    CsgCell = c
+END FUNCTION
+
+' Is (x, y, z) inside solid s? Rays up from it three ways (each leaning a
+' little), counting the faces each goes through: odd is inside.
+FUNCTION CsgInside (x#, y#, z#, s)
+    DIM k, i AS LONG, i1 AS LONG, t AS LONG, n, votes, c AS LONG, dx#, dz#, px#, py#, pz#, det#, inv#, sx#, sy#, sz#, u#, v#, qx#, qy#, qz#
+    IF x# < rgLo(s).x OR y# < rgLo(s).y OR z# < rgLo(s).z OR x# > rgHi(s).x OR y# > rgHi(s).y OR z# > rgHi(s).z THEN EXIT FUNCTION
+    c = CsgCell(z#, rgZ0(s), rgCH(s)) * CSG_GRID + CsgCell(x#, rgX0(s), rgCW(s))
+    i1 = rgStart(s, c + 1) - 1
+    FOR k = 1 TO 3
+        SELECT CASE k
+            CASE 1: dx# = .00137: dz# = .00291
+            CASE 2: dx# = -.00253: dz# = .00119
+            CASE ELSE: dx# = .00211: dz# = -.00173
+        END SELECT
+        n = 0
+        FOR i = rgStart(s, c) TO i1
+            t = rgIdx(i)
+            ' (Moller-Trumbore, the ray (dx, 1, dz))
+            px# = rbVz(t) - dz# * rbVy(t): py# = dz# * rbVx(t) - dx# * rbVz(t): pz# = dx# * rbVy(t) - rbVx(t)
+            det# = rbUx(t) * px# + rbUy(t) * py# + rbUz(t) * pz#
+            IF ABS(det#) > 1E-15 THEN
+                inv# = 1 / det#
+                sx# = x# - rbAx(t): sy# = y# - rbAy(t): sz# = z# - rbAz(t)
+                u# = (sx# * px# + sy# * py# + sz# * pz#) * inv#
+                IF u# >= 0 AND u# <= 1 THEN
+                    qx# = sy# * rbUz(t) - sz# * rbUy(t): qy# = sz# * rbUx(t) - sx# * rbUz(t): qz# = sx# * rbUy(t) - sy# * rbUx(t)
+                    v# = (dx# * qx# + qy# + dz# * qz#) * inv#
+                    IF v# >= 0 AND u# + v# <= 1 THEN
+                        IF (rbVx(t) * qx# + rbVy(t) * qy# + rbVz(t) * qz#) * inv# > 0 THEN n = n + 1
+                    END IF
+                END IF
+            END IF
+        NEXT
+        IF n AND 1 THEN votes = votes + 1
+        IF votes = 2 OR (k = 2 AND votes = 0) THEN EXIT FOR ' (two agree: no need of the third)
+    NEXT
+    CsgInside = (votes >= 2)
+END FUNCTION
+
+' Polygon p's middle, nudged d along its normal
+SUB CsgMid (p AS LONG, d#, x#, y#, z#)
+    DIM k, v AS LONG, n
+    n = cgVn(p): x# = 0: y# = 0: z# = 0
+    FOR k = 0 TO n - 1
+        v = cgV0(p) + k: x# = x# + cvX(v): y# = y# + cvY(v): z# = z# + cvZ(v)
+    NEXT
+    x# = x# / n + cgNx(p) * d#: y# = y# / n + cgNy(p) * d#: z# = z# / n + cgNz(p) * d#
+END SUB
+
+' Solid a less solid b: a's faces outside b, and b's inside a turned in
+' (they take a's colour: a hole's walls are what it's cut from)
+FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
+    DIM p AS LONG, nx AS LONG, q AS LONG, pp AS LONG, l AS LONG, nl AS LONG, f AS LONG, b AS LONG, cf AS LONG, cb AS LONG
+    DIM plo AS V3, phi AS V3, aNear AS LONG, aFar AS LONG, bNear AS LONG, aP AS LONG, bP AS LONG, na AS LONG, nb AS LONG, i AS LONG, k AS LONG
+    DIM x#, y#, z#, ins, res AS LONG, c AS _UNSIGNED LONG, side
+    IF la = 0 OR lb = 0 THEN CsgSubtract& = la: EXIT FUNCTION
+    c = cgCol(la)
+    ' Both whole, for the inside tests
+    rbN = 0
+    CsgRays 0, la: CsgRays 1, lb
+    IF BoxesMeet(rgLo(0), rgHi(0), rgLo(1), rgHi(1)) = 0 THEN CsgSubtract& = la: EXIT FUNCTION
+    ' a's faces near b, and b's near a (b's others are outside a: gone)
+    p = la
+    DO WHILE p
+        nx = cgNext(p): cgPar(p) = 0: cgOn(p) = 0
+        CsgPolyBox p, plo, phi
+        IF BoxesMeet(plo, phi, rgLo(1), rgHi(1)) THEN cgNext(p) = aNear: aNear = p ELSE cgNext(p) = aFar: aFar = p
+        p = nx
+    LOOP
+    p = lb
+    DO WHILE p
+        nx = cgNext(p): cgPar(p) = 0: cgOn(p) = 0
+        CsgPolyBox p, plo, phi
+        IF BoxesMeet(plo, phi, rgLo(0), rgHi(0)) THEN cgNext(p) = bNear: bNear = p
+        p = nx
+    LOOP
+    IF aNear = 0 OR bNear = 0 THEN CsgSubtract& = CsgJoin&(aNear, aFar): EXIT FUNCTION
+    ' Which near faces meet which; each that meets any split by their planes
+    CsgCrossing aNear, bNear, na, nb
+    FOR i = 1 TO na + nb
+        l = csXP(i): cgNext(l) = 0
+        FOR k = 0 TO csAdN(i) - 1
+            q = csXP(csAdj(csAd0(i) + k))
+            nl = 0: pp = l
+            DO WHILE pp
+                nx = cgNext(pp): f = 0: b = 0: cf = 0: cb = 0
+                CsgSplitP cgNx(q), cgNy(q), cgNz(q), cgW(q), pp, cf, cb, f, b
+                IF cf THEN cgOn(cf) = -1: f = CsgJoin&(cf, f)
+                IF cb THEN cgOn(cb) = -1: f = CsgJoin&(cb, f)
+                IF f THEN nl = CsgJoin&(f, nl)
+                IF b THEN nl = CsgJoin&(b, nl)
+                pp = nx
+            LOOP
+            l = nl
+        NEXT
+        IF i <= na THEN aP = CsgJoin&(l, aP) ELSE bP = CsgJoin&(l, bP)
+    NEXT
+    IF cgTop + 1 > csGoneCap THEN
+        csGoneCap = cgTop + 8192: REDIM csGone(csGoneCap) AS _BYTE, csDone(csGoneCap) AS _BYTE
+    ELSE
+        CsgFill csGone(): CsgFill csDone()
+    END IF
+    ' Which pieces go: a's inside b (one on b's surface tested just inside a);
+    ' b's outside a (one on a's surface stays only if inside a both sides of
+    ' it). Each that goes marks the faces it was split from, back to the first.
+    FOR side = 0 TO 1
+        p = aP: IF side THEN p = bP
+        DO WHILE p
+            IF side = 0 THEN
+                IF cgOn(p) THEN CsgMid p, -.0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
+                ins = CsgInside(x#, y#, z#, 1)
+            ELSE
+                IF cgOn(p) THEN CsgMid p, .0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
+                ins = CsgInside(x#, y#, z#, 0)
+                IF ins AND cgOn(p) <> 0 THEN CsgMid p, -.0002, x#, y#, z#: ins = CsgInside(x#, y#, z#, 0)
+            END IF
+            IF ins = (side = 0) THEN ' (it goes)
+                q = p
+                DO WHILE q
+                    IF csGone(q) THEN EXIT DO
+                    csGone(q) = 1: q = cgPar(q)
+                LOOP
+            END IF
+            p = cgNext(p)
+        LOOP
+    NEXT
+    ' What's left: a's far faces, and of each piece kept the first face it was
+    ' split from that lost nothing (once) - b's turned in
+    res = aFar
+    FOR side = 0 TO 1
+        p = aP: IF side THEN p = bP
+        DO WHILE p
+            nx = cgNext(p)
+            IF csGone(p) = 0 THEN
+                q = p
+                DO WHILE cgPar(q)
+                    IF csGone(cgPar(q)) THEN EXIT DO
+                    q = cgPar(q)
+                LOOP
+                IF csDone(q) = 0 THEN
+                    csDone(q) = 1
+                    IF side THEN CsgFlip q: cgCol(q) = c
+                    cgNext(q) = res: res = q
+                END IF
+            END IF
+            p = nx
+        LOOP
+    NEXT
+    CsgSubtract& = res
+END FUNCTION
+
+' Near lists a and b into csXP (a's 1 to na, b's after), and which of a's
+' meet which of b's: each one's list of the other's it meets (csAdj)
+SUB CsgCrossing (a AS LONG, b AS LONG, na AS LONG, nb AS LONG)
+    DIM p AS LONG, i AS LONG, j AS LONG, n AS LONG, k AS LONG
+    na = 0: nb = 0
+    p = a: DO WHILE p: na = na + 1: p = cgNext(p): LOOP
+    p = b: DO WHILE p: nb = nb + 1: p = cgNext(p): LOOP
+    n = na + nb
+    IF n + 2 > csXCap THEN
+        csXCap = n * 2 + 1024
+        REDIM csXP(csXCap) AS LONG, csXLo(csXCap) AS V3, csXHi(csXCap) AS V3, csAd0(csXCap) AS LONG, csAdN(csXCap) AS LONG
+    END IF
+    i = 0: p = a
+    DO WHILE p: i = i + 1: csXP(i) = p: csAdN(i) = 0: CsgPolyBox p, csXLo(i), csXHi(i): p = cgNext(p): LOOP
+    p = b
+    DO WHILE p: i = i + 1: csXP(i) = p: csAdN(i) = 0: CsgPolyBox p, csXLo(i), csXHi(i): p = cgNext(p): LOOP
+    csPrN = 0
+    FOR i = 1 TO na
+        FOR j = na + 1 TO n
+            IF BoxesMeet(csXLo(i), csXHi(i), csXLo(j), csXHi(j)) THEN
+                IF CsgPolysMeet(csXP(i), csXP(j)) THEN
+                    IF csPrN + 1 > csPrCap THEN csPrCap = csPrCap * 2 + 4096: REDIM _PRESERVE csPrI(csPrCap) AS LONG, csPrJ(csPrCap) AS LONG
+                    csPrN = csPrN + 1: csPrI(csPrN) = i: csPrJ(csPrN) = j
+                    csAdN(i) = csAdN(i) + 1: csAdN(j) = csAdN(j) + 1
+                END IF
+            END IF
+        NEXT
+    NEXT
+    ' (each one's list: where it starts, then filled)
+    k = 0
+    FOR i = 1 TO n: csAd0(i) = k: k = k + csAdN(i): csAdN(i) = 0: NEXT
+    IF k + 1 > UBOUND(csAdj) THEN REDIM csAdj(k * 2 + 1024) AS LONG
+    FOR k = 1 TO csPrN
+        i = csPrI(k): j = csPrJ(k)
+        csAdj(csAd0(i) + csAdN(i)) = j: csAdN(i) = csAdN(i) + 1
+        csAdj(csAd0(j) + csAdN(j)) = i: csAdN(j) = csAdN(j) + 1
+    NEXT
+END SUB
+
+' Do polygons a and b meet? (each crosses the other's plane, and where they
+' do the two cuts overlap). Flat on the same plane counts as meeting.
+FUNCTION CsgPolysMeet (a AS LONG, b AS LONG)
+    DIM lx#, ly#, lz#, a0#, a1#, b0#, b1#, r
+    r = CsgPlaneCut(a, b, a0#, a1#, lx#, ly#, lz#, 0)
+    IF r = 0 THEN EXIT FUNCTION
+    IF r = 2 THEN CsgPolysMeet = -1: EXIT FUNCTION
+    r = CsgPlaneCut(b, a, b0#, b1#, lx#, ly#, lz#, 0)
+    IF r = 0 THEN EXIT FUNCTION
+    IF r = 2 THEN CsgPolysMeet = -1: EXIT FUNCTION
+    ' (the line both planes share: each polygon's stretch along it)
+    lx# = cgNy(a) * cgNz(b) - cgNz(a) * cgNy(b): ly# = cgNz(a) * cgNx(b) - cgNx(a) * cgNz(b): lz# = cgNx(a) * cgNy(b) - cgNy(a) * cgNx(b)
+    r = CsgPlaneCut(a, b, a0#, a1#, lx#, ly#, lz#, -1)
+    r = CsgPlaneCut(b, a, b0#, b1#, lx#, ly#, lz#, -1)
+    CsgPolysMeet = (a0# <= b1# + CSG_EPS AND b0# <= a1# + CSG_EPS)
+END FUNCTION
+
+' Polygon p against q's plane: 0 wholly one side, 2 flat on it, 1 it
+' crosses - and then (if span) how far along l its crossing goes, t0 to t1
+FUNCTION CsgPlaneCut (p AS LONG, q AS LONG, t0#, t1#, lx#, ly#, lz#, span)
+    DIM n, i, j, v0 AS LONG, d#, dj#, nf, nb, s#, x#, y#, z#, t#
+    n = cgVn(p): v0 = cgV0(p)
+    IF n > CSG_MAXV THEN n = CSG_MAXV
+    FOR i = 0 TO n - 1
+        d# = cgNx(q) * cvX(v0 + i) + cgNy(q) * cvY(v0 + i) + cgNz(q) * cvZ(v0 + i) - cgW(q)
+        csT(i) = d#
+        IF d# > CSG_EPS THEN
+            nf = nf + 1
+        ELSEIF d# < -CSG_EPS THEN
+            nb = nb + 1
+        END IF
+    NEXT
+    IF nf = 0 AND nb = 0 THEN CsgPlaneCut = 2: EXIT FUNCTION
+    IF nf = n OR nb = n THEN EXIT FUNCTION
+    CsgPlaneCut = 1
+    IF span = 0 THEN EXIT FUNCTION
+    t0# = 1E30: t1# = -1E30
+    FOR i = 0 TO n - 1
+        j = i + 1: IF j = n THEN j = 0
+        d# = csT(i): dj# = csT(j)
+        IF ABS(d#) <= CSG_EPS THEN
+            t# = lx# * cvX(v0 + i) + ly# * cvY(v0 + i) + lz# * cvZ(v0 + i)
+            IF t# < t0# THEN t0# = t#
+            IF t# > t1# THEN t1# = t#
+        END IF
+        IF (d# > CSG_EPS AND dj# < -CSG_EPS) OR (d# < -CSG_EPS AND dj# > CSG_EPS) THEN
+            s# = d# / (d# - dj#)
+            x# = cvX(v0 + i) + (cvX(v0 + j) - cvX(v0 + i)) * s#
+            y# = cvY(v0 + i) + (cvY(v0 + j) - cvY(v0 + i)) * s#
+            z# = cvZ(v0 + i) + (cvZ(v0 + j) - cvZ(v0 + i)) * s#
+            t# = lx# * x# + ly# * y# + lz# * z#
+            IF t# < t0# THEN t0# = t#
+            IF t# > t1# THEN t1# = t#
+        END IF
+    NEXT
+END FUNCTION
+
+SUB CsgFill (a() AS _BYTE)
+    DIM m AS _MEM
+    m = _MEM(a()): _MEMFILL m, m.OFFSET, m.SIZE, 0 AS _BYTE: _MEMFREE m
+END SUB
+
+' A list's polygons made triangles (a fan from each one's first corner)
+SUB CsgEmit (lst AS LONG)
+    DIM p AS LONG, n, k, v0 AS LONG, t AS LONG, e, ux, uy, uz, wx, wy, wz, cx, cy, cz
+    p = lst
+    DO WHILE p
+        n = cgVn(p): v0 = cgV0(p)
+        FOR k = 1 TO n - 2
+            IF tN >= MAX_TRI THEN EXIT SUB
+            t = tN + 1
+            tA(t).x = cvX(v0): tA(t).y = cvY(v0): tA(t).z = cvZ(v0)
+            tB(t).x = cvX(v0 + k): tB(t).y = cvY(v0 + k): tB(t).z = cvZ(v0 + k)
+            tC(t).x = cvX(v0 + k + 1): tC(t).y = cvY(v0 + k + 1): tC(t).z = cvZ(v0 + k + 1)
+            ux = tB(t).x - tA(t).x: uy = tB(t).y - tA(t).y: uz = tB(t).z - tA(t).z
+            wx = tC(t).x - tA(t).x: wy = tC(t).y - tA(t).y: wz = tC(t).z - tA(t).z
+            cx = uy * wz - uz * wy: cy = uz * wx - ux * wz: cz = ux * wy - uy * wx
+            IF cx * cx + cy * cy + cz * cz > 1E-16 THEN ' (a sliver with no area left out)
+                e = 0
+                IF k = 1 AND cvE(v0) THEN e = 1
+                IF cvE(v0 + k) THEN e = e OR 2
+                IF k + 1 = n - 1 AND cvE(v0 + n - 1) THEN e = e OR 4
+                tEdge(t) = e
+                tNrm(t).x = cgNx(p): tNrm(t).y = cgNy(p): tNrm(t).z = cgNz(p)
+                tPart(t) = cgPart(p): tFace(t) = cgFace(p): tCol(t) = cgCol(p)
+                tN = t
+            END IF
+        NEXT
+        p = cgNext(p)
+    LOOP
+END SUB
+
+$CHECKING:ON

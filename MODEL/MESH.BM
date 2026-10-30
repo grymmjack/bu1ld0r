@@ -9,13 +9,94 @@
 '
 
 SUB MeshBuild
-    DIM i
-    tN = 0
-    FOR i = 1 TO pN: MeshPart i: NEXT
-    sceneTN = tN
+    DIM i, k$
+    k$ = ModelText$ + STR$(pfGen) + STR$(meshAll)
+    IF k$ = meshKey$ THEN
+        tN = holeTN ' (the model as it was: the ghost alone moved - holes aren't cut again)
+    ELSE
+        meshKey$ = k$
+        tN = 0: usN = 0
+        MeshRun 1, pN, -1
+        sceneTN = tN
+        FOR i = 1 TO pN
+            IF pHole(i) AND pHide(i) = 0 AND meshAll = 0 THEN usN = 0: MeshItem i, i
+        NEXT
+        holeTN = tN
+    END IF
     IF ghostOn THEN MeshPart 0
     meshDirty = 0: viewDirty = -1
 END SUB
+
+' Parts q0 to q1 (the model's, or a prefab's) as triangles, each hole cut
+' out of the solid parts before it that it reaches. owner: whose they all
+' count as (-1: each its own). Holes and hidden parts make none here.
+SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
+    DIM q AS LONG, k, nh, t0 AS LONG, t1 AS LONG, lo AS V3, hi AS V3, la AS LONG, lb AS LONG, m1 AS LONG, m2 AS LONG, o, cut
+    FOR q = q0 TO q1
+        IF pHole(q) AND Shown(q, owner) THEN nh = nh + 1
+    NEXT
+    IF nh = 0 THEN
+        FOR q = q0 TO q1
+            IF Shown(q, owner) THEN MeshItem q, IIF(owner = -1, q, owner)
+        NEXT
+        EXIT SUB
+    END IF
+    ' Each hole's box (its triangles made to see, then let go)
+    DIM hq(nh) AS LONG, hlo(nh) AS V3, hhi(nh) AS V3
+    nh = 0
+    FOR q = q0 TO q1
+        IF pHole(q) AND Shown(q, owner) THEN
+            nh = nh + 1: hq(nh) = q
+            t0 = tN: MeshItem q, 0: TriBounds t0 + 1, tN, hlo(nh), hhi(nh): tN = t0
+        END IF
+    NEXT
+    FOR q = q0 TO q1
+        IF pHole(q) = 0 AND Shown(q, owner) THEN
+            o = IIF(owner = -1, q, owner)
+            t0 = tN: MeshItem q, o
+            TriBounds t0 + 1, tN, lo, hi
+            la = 0: cut = 0
+            FOR k = 1 TO nh
+                IF hq(k) > q AND BoxesMeet(lo, hi, hlo(k), hhi(k)) THEN
+                    IF cut = 0 THEN cut = -1: CsgMark m1, m2: la = CsgFromTris&(t0 + 1, tN, 0): tN = t0
+                    t1 = tN: MeshItem hq(k), IIF(owner = -1, hq(k), owner)
+                    lb = CsgFromTris&(t1 + 1, tN, -1): tN = t1
+                    la = CsgSubtract&(la, lb)
+                END IF
+            NEXT
+            IF cut THEN CsgEmit la: CsgRelease m1, m2 ' (its pieces in place of it)
+        END IF
+    NEXT
+END SUB
+
+' Part q is made (not hidden - hiding is the model's own: a prefab's parts all show, and the export has them all)
+FUNCTION Shown (q AS LONG, owner)
+    Shown = (pHide(q) = 0 OR owner <> -1 OR meshAll <> 0)
+END FUNCTION
+
+' The box round triangles t0 to t1
+SUB TriBounds (t0 AS LONG, t1 AS LONG, lo AS V3, hi AS V3)
+    DIM t AS LONG
+    lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
+    FOR t = t0 TO t1
+        BoxGrow lo, hi, tA(t): BoxGrow lo, hi, tB(t): BoxGrow lo, hi, tC(t)
+    NEXT
+END SUB
+
+SUB BoxGrow (lo AS V3, hi AS V3, p AS V3)
+    IF p.x < lo.x THEN lo.x = p.x
+    IF p.y < lo.y THEN lo.y = p.y
+    IF p.z < lo.z THEN lo.z = p.z
+    IF p.x > hi.x THEN hi.x = p.x
+    IF p.y > hi.y THEN hi.y = p.y
+    IF p.z > hi.z THEN hi.z = p.z
+END SUB
+
+FUNCTION BoxesMeet (alo AS V3, ahi AS V3, blo AS V3, bhi AS V3)
+    DIM e
+    e = .0005
+    BoxesMeet = alo.x < bhi.x + e AND blo.x < ahi.x + e AND alo.y < bhi.y + e AND blo.y < ahi.y + e AND alo.z < bhi.z + e AND blo.z < ahi.z + e
+END FUNCTION
 
 FUNCTION SegsOf (i)
     DIM s
@@ -41,12 +122,13 @@ SUB MeshItem (j, owner)
     usCY(usN) = DCos(pRY(j)): usSYr(usN) = DSin(pRY(j))
     usCZ(usN) = DCos(pRZ(j)): usSZr(usN) = DSin(pRZ(j))
     usPX(usN) = pX(j): usPY(usN) = pY(j): usPZ(usN) = pZ(j)
-    FOR q = pfFirst(pf) + 1 TO pfFirst(pf) + pfCnt(pf): MeshItem q, owner: NEXT
+    MeshRun pfFirst(pf) + 1, pfFirst(pf) + pfCnt(pf), owner
     usN = usN - 1
 END SUB
 
 SUB MeshShape (i, owner)
     DIM k, s, a0, a1, am, r0, r1, ri, amt, ph0, ph1, phm, phMax, nl, j, sp0, sp1, cp0, cp1, y0, y1, kd
+    mkTriE = 7: mkQuadE = 15
     mkPart = owner: mkCol = pCol(i)
     mkSX = pSX(i): mkSY = pSY(i): mkSZ = pSZ(i)
     kd = pKind(i)
@@ -73,8 +155,10 @@ SUB MeshShape (i, owner)
                 a0 = 360 * k / s: a1 = 360 * (k + 1) / s: am = (a0 + a1) / 2
                 mkFace = 0
                 MkQuad r0 * DCos(a0), 0, r0 * DSin(a0), r0 * DCos(a1), 0, r0 * DSin(a1), r1 * DCos(a1), 1, r1 * DSin(a1), r1 * DCos(a0), 1, r1 * DSin(a0), DCos(am), (r0 - r1), DSin(am)
+                mkTriE = 2 ' (a lid: only its rim)
                 mkFace = 2: MkTri 0, 0, 0, r0 * DCos(a0), 0, r0 * DSin(a0), r0 * DCos(a1), 0, r0 * DSin(a1), 0, -1, 0
                 IF r1 > .001 THEN mkFace = 1: MkTri 0, 1, 0, r1 * DCos(a0), 1, r1 * DSin(a0), r1 * DCos(a1), 1, r1 * DSin(a1), 0, 1, 0
+                mkTriE = 7
             NEXT
         CASE K_TUBE
             ri = .5 * Clamp(pAmt(i), .05, .95)
@@ -82,8 +166,10 @@ SUB MeshShape (i, owner)
                 a0 = 360 * k / s: a1 = 360 * (k + 1) / s: am = (a0 + a1) / 2
                 mkFace = 0: MkQuad .5 * DCos(a0), 0, .5 * DSin(a0), .5 * DCos(a1), 0, .5 * DSin(a1), .5 * DCos(a1), 1, .5 * DSin(a1), .5 * DCos(a0), 1, .5 * DSin(a0), DCos(am), 0, DSin(am)
                 mkFace = 3: MkQuad ri * DCos(a0), 0, ri * DSin(a0), ri * DCos(a1), 0, ri * DSin(a1), ri * DCos(a1), 1, ri * DSin(a1), ri * DCos(a0), 1, ri * DSin(a0), -DCos(am), 0, -DSin(am)
+                mkQuadE = 10 ' (its ends: the two circles, not the spokes)
                 mkFace = 1: MkQuad ri * DCos(a0), 1, ri * DSin(a0), .5 * DCos(a0), 1, .5 * DSin(a0), .5 * DCos(a1), 1, .5 * DSin(a1), ri * DCos(a1), 1, ri * DSin(a1), 0, 1, 0
                 mkFace = 2: MkQuad ri * DCos(a0), 0, ri * DSin(a0), .5 * DCos(a0), 0, .5 * DSin(a0), .5 * DCos(a1), 0, .5 * DSin(a1), ri * DCos(a1), 0, ri * DSin(a1), 0, -1, 0
+                mkQuadE = 15
             NEXT
         CASE K_SPHERE
             ' Its share from the top (amount 1 whole, 0.5 a dome), stretched to fill the box
@@ -104,7 +190,7 @@ SUB MeshShape (i, owner)
                 cp1 = .5 * DSin(phMax)
                 FOR k = 0 TO s - 1
                     a0 = 360 * k / s: a1 = 360 * (k + 1) / s
-                    mkFace = 1: MkTri 0, 0, 0, cp1 * DCos(a0), 0, cp1 * DSin(a0), cp1 * DCos(a1), 0, cp1 * DSin(a1), 0, -1, 0
+                    mkTriE = 2: mkFace = 1: MkTri 0, 0, 0, cp1 * DCos(a0), 0, cp1 * DSin(a0), cp1 * DCos(a1), 0, cp1 * DSin(a1), 0, -1, 0: mkTriE = 7
                 NEXT
             END IF
         CASE K_WEDGE
@@ -154,9 +240,15 @@ SUB RotZXY (p AS V3, cx, sx, cy, sy, cz, sz)
     x = p.x * cy + p.z * sy: z = -p.x * sy + p.z * cy: p.x = x: p.z = z
 END SUB
 
+' Two triangles, a-b-c and a-c-d: the diagonal a-c isn't an edge of the shape
 SUB MkQuad (ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, hx, hy, hz)
+    DIM e
+    e = mkTriE
+    mkTriE = (mkQuadE AND 1) OR (mkQuadE AND 2) ' (a-b, b-c)
     MkTri ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz
+    mkTriE = (mkQuadE AND 4) \ 2 OR (mkQuadE AND 8) \ 2 ' (c-d, d-a)
     MkTri ax, ay, az, cx, cy, cz, dx, dy, dz, hx, hy, hz
+    mkTriE = e
 END SUB
 
 ' A triangle of the part's own shape; h is which way's out
@@ -176,8 +268,9 @@ SUB MkTri (ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz)
     t = tN + 1
     IF n.x * h.x + n.y * h.y + n.z * h.z < 0 THEN
         tA(t) = a: tB(t) = c: tC(t) = b: n.x = -n.x: n.y = -n.y: n.z = -n.z
+        tEdge(t) = (mkTriE AND 2) OR (mkTriE AND 1) * 4 OR (mkTriE AND 4) \ 4 ' (b and c swapped: A-B is what C-A was)
     ELSE
-        tA(t) = a: tB(t) = b: tC(t) = c
+        tA(t) = a: tB(t) = b: tC(t) = c: tEdge(t) = mkTriE
     END IF
     tNrm(t) = n: tPart(t) = mkPart: tFace(t) = mkFace: tCol(t) = mkCol
     tN = t
@@ -187,7 +280,7 @@ END SUB
 SUB MeshBounds (lo AS V3, hi AS V3, selOnly)
     DIM t AS LONG, k, p AS V3, found
     lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
-    FOR t = 1 TO sceneTN
+    FOR t = 1 TO holeTN
         IF selOnly = 0 OR pSel(tPart(t)) THEN
             found = -1
             FOR k = 0 TO 2

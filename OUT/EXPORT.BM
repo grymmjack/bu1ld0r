@@ -7,7 +7,7 @@ SUB ExportAll
     IF pN = 0 THEN Msg "Nothing to export: put some shapes down first": EXIT SUB
     n$ = ModelMissing$
     IF LEN(n$) THEN Msg "Not exported: prefab " + n$ + " isn't in prefabs/ (the red box)": EXIT SUB
-    g = ghostOn: ghostOn = 0: MeshBuild ' (the model alone, not the shape being put down)
+    g = ghostOn: ghostOn = 0: meshAll = -1: MeshBuild ' (the model alone, not the shape being put down - hidden parts too)
     n$ = SafeName$(mdlName$): mdlName$ = n$
     ExColours
     ExFrameWork
@@ -36,7 +36,7 @@ SUB ExportAll
             made$ = made$ + " (neon_dir has no models/ folder: " + nd$ + ")"
         END IF
     END IF
-    ghostOn = g: meshDirty = -1: viewDirty = -1
+    ghostOn = g: meshAll = 0: meshDirty = -1: viewDirty = -1
     IF sceneTN > NEON_TRI_WARN THEN made$ = made$ + " - " + LTRIM$(STR$(sceneTN)) + " triangles: a lot for a NEON-CASTER prop (fewer slices?)"
     Msg "Exported " + made$
 END SUB

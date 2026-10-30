@@ -14,6 +14,11 @@
 ' keys and clicks), OUT (OBJ and NEON-CASTER export). PLAN.md has what's
 ' next.
 '
+' The window can be resized by the window manager only if it's made so -
+' $RESIZE, at compile time (the _RESIZE statement alone doesn't). ON, not
+' STRETCH or SMOOTH: those lock the window's shape to our screen's. We
+' show our screen at a whole-number scale ourselves (CORE/APP.BM: Present).
+$RESIZE:ON
 '$INCLUDE:'./_ALL.BI'
 
 AppStart
@@ -23,7 +28,7 @@ DO
     IF meshDirty THEN MeshBuild
     IF viewDirty THEN ViewRender
     UiDraw
-    _DISPLAY
+    Present
     WindowFrame
     UiAfterFrame
     _LIMIT 60

@@ -7,6 +7,7 @@
 SUB AppStart
     DIM a$, i, k$
     _TITLE APP_NAME$ + " " + APP_VERSION$
+    _DISPLAYORDER _HARDWARE ' (only Present's picture is shown: the window's SCREEN is never drawn on)
     cBg = _RGB32(14, 12, 24): cPanel = _RGB32(24, 22, 38): cLine = _RGB32(60, 54, 90)
     cText = _RGB32(225, 225, 240): cDim = _RGB32(130, 125, 160): cHi = _RGB32(0, 240, 255)
     cSel = _RGB32(255, 60, 200): cBtn = _RGB32(40, 36, 62): cHover = _RGB32(62, 56, 96): cWarn = _RGB32(255, 190, 60)
@@ -18,6 +19,7 @@ SUB AppStart
     IF NOT _DIREXISTS(appDir$ + "models") THEN MKDIR appDir$ + "models"
     IF NOT _DIREXISTS(appDir$ + "export") THEN MKDIR appDir$ + "export"
     IF NOT _DIREXISTS(appDir$ + "prefabs") THEN MKDIR appDir$ + "prefabs"
+    listOn = -1 ' (the parts list, unless bu1ld0r.cfg says parts_list=0)
     ReadCfg
 
     FOR i = 1 TO _COMMANDCOUNT
@@ -27,6 +29,7 @@ SUB AppStart
             CASE "--export": argExport = -1
             CASE "--shot": i = i + 1: argShot$ = COMMAND$(i)
             CASE "--quit": argQuit = -1
+            CASE "--bench": i = i + 1: argBench = VAL(COMMAND$(i)) ' (the model made N times: bench.txt says how long)
             CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
             CASE ELSE
                 k$ = LCASE$(RIGHT$(a$, 4))
@@ -41,10 +44,21 @@ SUB AppStart
     BinSetup
     IF LEN(argOpen$) THEN
         ModelLoad argOpen$ ' (its message says how it went)
+        IF argBench > 0 THEN Bench argBench
     ELSE
         ModelNew
         Msg "Pick a shape on the left (or 1-6), click on the grid to put it down. H: every key"
     END IF
+END SUB
+
+' The model made into triangles n times: the time each took, in bench.txt
+SUB Bench (n)
+    DIM i, t0#, fh
+    t0# = TIMER(.001)
+    FOR i = 1 TO n: meshKey$ = "": MeshBuild: NEXT
+    fh = FREEFILE: OPEN appDir$ + "bench.txt" FOR OUTPUT AS #fh
+    PRINT #fh, "build ms"; (TIMER(.001) - t0#) * 1000 / n; " triangles"; sceneTN; " holes"; holeTN - sceneTN
+    CLOSE #fh
 END SUB
 
 ' bu1ld0r.cfg, beside the program: key=value lines
@@ -64,6 +78,7 @@ SUB ReadCfg
                     IF j THEN cfgWinW = VAL(LEFT$(v$, j - 1)): cfgWinH = VAL(MID$(v$, j + 1))
                     IF cfgWinW < 64 OR cfgWinH < 40 THEN cfgWinW = 0: cfgWinH = 0
                 CASE "ui_scale": cfgUiK = INT(Clamp(VAL(v$), 0, 4))
+                CASE "parts_list": listOn = (VAL(v$) <> 0)
             END SELECT
         END IF
     LOOP
@@ -84,9 +99,9 @@ SUB InputFrame
         IF b3 AND NOT mB3 THEN mP3 = -1
         IF mB3 AND NOT b3 THEN mR3 = -1
         mB1 = b1: mB2 = b2: mB3 = b3
-        IF mP1 OR mP2 OR mP3 THEN mX = INT(_MOUSEX): mY = INT(_MOUSEY): EXIT DO ' (a press is handled where it happened)
+        IF mP1 OR mP2 OR mP3 THEN mX = INT(_MOUSEX / uiK): mY = INT(_MOUSEY / uiK): EXIT DO ' (a press is handled where it happened)
     LOOP
-    mX = INT(_MOUSEX): mY = INT(_MOUSEY) ' (our screen's pixels, however big the window shows it)
+    mX = INT(_MOUSEX / uiK): mY = INT(_MOUSEY / uiK) ' (our screen's pixels: the window's are uiK times smaller)
     kShift = _KEYDOWN(100304) OR _KEYDOWN(100303)
     kCtrl = _KEYDOWN(100306) OR _KEYDOWN(100305)
     kAlt = _KEYDOWN(100308) OR _KEYDOWN(100307)
@@ -142,7 +157,7 @@ END SUB
 
 ' Our screen made sw x sh (even, no smaller than MIN_SW x MIN_SH, and no
 ' bigger than the display holds at uiK) - everything laid out on it again -
-' and the window set to uiK times that (unless it's full screen)
+' and the window's SCREEN made uiK times that (which sizes the window)
 SUB ScreenSet (sw0, sh0)
     DIM sw, sh, mw, mh, img&
     sw = sw0: sh = sh0
@@ -154,24 +169,37 @@ SUB ScreenSet (sw0, sh0)
     IF sw < MIN_SW THEN sw = MIN_SW
     IF sh < MIN_SH THEN sh = MIN_SH
     sw = (sw \ 2) * 2: sh = (sh \ 2) * 2
-    IF sw <> scrW OR sh <> scrH OR scrImg& = 0 THEN
+    IF sw <> scrW OR sh <> scrH OR uiImg& = 0 THEN
         img& = _NEWIMAGE(sw, sh, 32)
-        SCREEN img&
-        IF scrImg& < -1 THEN _FREEIMAGE scrImg&
-        scrImg& = img&: scrW = sw: scrH = sh
+        IF uiImg& < -1 THEN _FREEIMAGE uiImg&
+        uiImg& = img&: scrW = sw: scrH = sh
+        _DEST uiImg&: _SOURCE uiImg&
         _PRINTMODE _KEEPBACKGROUND
         Layout
     END IF
-    _RESIZE ON , _STRETCH ' (a whole uiK: square pixels)
-    IF _FULLSCREEN = 0 THEN
-        winW = scrW * uiK: winH = scrH * uiK
-        IF winsize_w& <> winW OR winsize_h& <> winH THEN winsize_set winW, winH
+    IF sw * uiK <> winW OR sh * uiK <> winH OR winImg& = 0 THEN
+        winW = sw * uiK: winH = sh * uiK
+        img& = _NEWIMAGE(winW, winH, 32)
+        SCREEN img&
+        IF winImg& < -1 THEN _FREEIMAGE winImg&
+        winImg& = img&
+        _DEST uiImg&: _SOURCE uiImg& ' (SCREEN makes the new one the place to draw: ours again)
     END IF
+END SUB
+
+' The frame shown: our screen, uiK times bigger, by the graphics card
+SUB Present
+    DIM hw&
+    hw& = _COPYIMAGE(uiImg&, 33)
+    _PUTIMAGE (0, 0)-(winW - 1, winH - 1), hw&
+    _DISPLAY
+    IF presHw& < -1 THEN _FREEIMAGE presHw&
+    presHw& = hw&
 END SUB
 
 ' Where everything goes on our screen, and the 3D view's pictures made at its size
 SUB Layout
-    vX0 = BIN_W: vY0 = TOP_H: vW = scrW - BIN_W - PANEL_W: vH = scrH - TOP_H - BAR_H
+    vX0 = BIN_W - LIST_W * (listOn <> 0): vY0 = TOP_H: vW = scrW - vX0 - PANEL_W: vH = scrH - TOP_H - BAR_H
     IF viewImg& < -1 THEN _FREEIMAGE viewImg&
     IF ovImg& < -1 THEN _FREEIMAGE ovImg&
     viewImg& = _NEWIMAGE(vW, vH, 32): ovImg& = _NEWIMAGE(vW, vH, 32)
@@ -189,11 +217,7 @@ SUB WindowFrame
     DIM rw, rh, f
     IF _RESIZE THEN
         rw = _RESIZEWIDTH: rh = _RESIZEHEIGHT
-        IF rw = scrW AND rh = scrH AND uiK > 1 AND _FULLSCREEN = 0 THEN
-            winsize_set winW, winH ' (a new screen makes the window its size: ours again)
-        ELSEIF rw <> winW OR rh <> winH THEN
-            pw = rw: ph = rh: pend = -1: pendAt = TIMER(0.001) ' (dragged)
-        END IF
+        IF rw <> winW OR rh <> winH THEN pw = rw: ph = rh: pend = -1: pendAt = TIMER(0.001) ' (dragged - not our own size arriving)
     END IF
     f = _FULLSCREEN
     IF f <> fullWas THEN
