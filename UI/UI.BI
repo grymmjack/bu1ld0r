@@ -6,10 +6,9 @@
 ' right (the selected parts' place, turn, size, colour), the message line.
 '
 CONST F_PX = 1, F_PY = 2, F_PZ = 3, F_RX = 4, F_RY = 5, F_RZ = 6, F_SX = 7, F_SY = 8, F_SZ = 9
-CONST F_SEG = 10, F_AMT = 11, F_COL = 12, F_NAME = 20, F_LAST = 12
+CONST F_SEG = 10, F_AMT = 11, F_COL = 12, F_NAME = 20, F_DIR = 21, F_LAST = 12 ' (F_DIR: a new folder's name, in the bin)
 CONST NUM_PAL = 32
 
-DIM SHARED binIcon&(NUM_KINDS)
 DIM SHARED palCol(NUM_PAL - 1) AS _UNSIGNED LONG
 
 ' What the mouse is doing

@@ -4,45 +4,13 @@
 ' Each frame: keys, then the mouse (the bars and panel's buttons, the view:
 ' orbit, pan, zoom, select, drag, put a shape down), then everything drawn.
 ' Where things are on the screen is worked out by the same routines that
-' draw them and that test a click (FieldRect, BinTile, TopBtn).
+' draw them and that test a click (FieldRect, TopBtn; the bin's in BIN.BM).
 '
-
-SUB BinSetup
-    DIM k, i, ok
-    Words "00C8E6 FF3CC8 FFD23C 50FF8C FF6E3C 8C64FF F0F0F5 9AA0B4 5A6478 2D3240 141620 C8B496 8C6E50 503C2D B4283C FF9EB4 3C78FF 28B4A0 A0E650 E6A028 C83C28 6E2896 DCDCE6 6E7896 0A5064 640A50 645A0A 0A6432 A04614 321E6E 465064 000000"
-    FOR i = 0 TO NUM_PAL - 1: palCol(i) = ParseCol~&(wd$(i + 1), ok): NEXT
-    HelpSetup
-    FOR k = 1 TO NUM_KINDS
-        binIcon&(k) = _NEWIMAGE(64, 64, 32)
-        RenderIcon k, binIcon&(k)
-    NEXT
-END SUB
-
-' A shape's picture for the bin: part 0 made that shape, drawn on its own
-SUB RenderIcon (k, img&)
-    DIM sTX, sTY, sTZ, sYaw, sPitch, sDist, t0 AS LONG, t AS LONG, d
-    sTX = camTX: sTY = camTY: sTZ = camTZ: sYaw = camYaw: sPitch = camPitch: sDist = camDist
-    PartFresh 0, k, 0, 0, 0
-    pSX(0) = 1: pSY(0) = 1: pSZ(0) = 1: pCol(0) = _RGB32(0, 200, 230)
-    IF k = K_TUBE THEN pSY(0) = .5
-    t0 = tN: MeshPart 0
-    camTX = 0: camTY = .45: camTZ = 0: camYaw = 35: camPitch = 24: camDist = 2.7
-    CamBasis 64, 64
-    LightFromCamera .45, .6
-    RenderBegin img&, 64, 64
-    d = _DEST: _DEST img&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
-    rOrtho = 0: rCull = -1: rGhost = 0
-    FOR t = t0 + 1 TO tN: RasterTri t: NEXT
-    RenderEnd
-    tN = t0
-    camTX = sTX: camTY = sTY: camTZ = sTZ: camYaw = sYaw: camPitch = sPitch: camDist = sDist
-    viewDirty = -1
-END SUB
 
 ' ---------------------------------------------------------------- layout
 
 FUNCTION PX0
-    PX0 = SCR_W - PANEL_W + 10
+    PX0 = scrW - PANEL_W + 10
 END FUNCTION
 
 SUB FieldRect (f, x, y, w, h)
@@ -55,6 +23,7 @@ SUB FieldRect (f, x, y, w, h)
         CASE F_AMT: y = 252: x = PX0 + 100
         CASE F_COL: y = 282: x = PX0 + 100: w = 90
         CASE F_NAME: y = 3: x = 56: w = 200: h = 22
+        CASE F_DIR: BinBtn x, y, w, h
         CASE ELSE: x = -100: y = -100
     END SELECT
 END SUB
@@ -67,19 +36,23 @@ FUNCTION FieldAt (x, y)
     NEXT
     FieldRect F_NAME, fx, fy, fw, fh
     IF InRect(x, y, fx, fy, fw, fh) THEN FieldAt = F_NAME
+    FieldRect F_DIR, fx, fy, fw, fh
+    IF InRect(x, y, fx, fy, fw, fh) AND typeField = F_DIR THEN FieldAt = F_DIR
 END FUNCTION
 
 ' A field there to type in: a part's only when parts are selected; slices and amount only for shapes that have them
 FUNCTION FieldShown (f)
     DIM p
     IF f = F_NAME THEN FieldShown = -1: EXIT FUNCTION
+    IF f = F_DIR THEN FieldShown = (typeField = F_DIR): EXIT FUNCTION
     p = SelFirst
     IF p = 0 THEN
         FieldShown = (f = F_COL)
         EXIT FUNCTION
     END IF
     SELECT CASE f
-        CASE F_SEG: FieldShown = (pKind(p) <> K_BOX AND pKind(p) <> K_WEDGE)
+        CASE F_SEG: FieldShown = (pKind(p) <> K_BOX AND pKind(p) <> K_WEDGE AND pKind(p) <> K_USE)
+        CASE F_COL: FieldShown = (pKind(p) <> K_USE) ' (a prefab has its own colours)
         CASE F_AMT: FieldShown = (pKind(p) = K_CONE OR pKind(p) = K_TUBE OR pKind(p) = K_SPHERE)
         CASE ELSE: FieldShown = -1
     END SELECT
@@ -93,11 +66,7 @@ FUNCTION AmtName$ (k)
     END SELECT
 END FUNCTION
 
-SUB BinTile (k, x, y, w, h)
-    x = 6 + ((k - 1) MOD 2) * 72: y = 52 + ((k - 1) \ 2) * 96: w = 66: h = 90
-END SUB
-
-' The top bar's buttons: 1 NEW, 2 OPEN, 3 SAVE, 4 EXPORT, 5 HELP
+' The top bar's buttons: 1 NEW, 2 OPEN, 3 SAVE, 4 EXPORT, 5 HELP, 6 PREFAB (save as one)
 SUB TopBtn (k, x, y, w, h)
     x = 270 + (k - 1) * 76: y = 3: w = 70: h = 22
 END SUB
@@ -109,6 +78,7 @@ FUNCTION TopBtnName$ (k)
         CASE 3: TopBtnName$ = "SAVE"
         CASE 4: TopBtnName$ = "EXPORT"
         CASE 5: TopBtnName$ = "HELP"
+        CASE 6: TopBtnName$ = "PREFAB"
     END SELECT
 END FUNCTION
 
@@ -201,6 +171,7 @@ SUB UiFrame
         lmX = mX: lmY = mY
     END IF
     IF mP3 AND inView THEN panOn = -1: lmX = mX: lmY = mY
+    IF mP2 AND mX < BIN_W AND mY >= TOP_H THEN BinRightClick
     IF orbitOn THEN
         camYaw = camYaw - (mX - lmX) * .4: camPitch = Clamp(camPitch + (mY - lmY) * .4, -89, 89)
         IF mX <> lmX OR mY <> lmY THEN viewDirty = -1
@@ -221,6 +192,8 @@ SUB UiFrame
             FieldWheel f, -SGN(mWheel)
         ELSEIF inView THEN
             camDist = Clamp(camDist * 1.12 ^ mWheel, .03, 60): viewDirty = -1
+        ELSEIF mX < BIN_W AND mY >= BI_Y0 THEN
+            BinWheel
         END IF
     END IF
 
@@ -231,23 +204,13 @@ SUB UiFrame
         IF f > 0 THEN
             typeField = f: typeBuf$ = FieldValue$(f): typeFresh = -1
         ELSEIF mY < TOP_H THEN
-            FOR k = 1 TO 5
+            FOR k = 1 TO 6
                 TopBtn k, x, y, w, h
                 IF InRect(mX, mY, x, y, w, h) THEN TopAction k
             NEXT
         ELSEIF mX < BIN_W THEN
-            FOR k = 1 TO NUM_KINDS
-                BinTile k, x, y, w, h
-                IF InRect(mX, mY, x, y, w, h) THEN
-                    IF placeKind = k THEN
-                        placeKind = 0: ghostOn = 0: meshDirty = -1
-                    ELSE
-                        placeKind = k: placeDrag = -1: SelNone: ovDirty = -1
-                        Msg "Click where it goes (or drag it there): it stands on the face you point at. Shift: keep putting them down. Esc: stop"
-                    END IF
-                END IF
-            NEXT
-        ELSEIF mX >= SCR_W - PANEL_W THEN
+            BinClick
+        ELSEIF mX >= scrW - PANEL_W THEN
             PanelClick
         ELSEIF inView THEN
             IF placeKind THEN
@@ -298,6 +261,7 @@ SUB UiFrame
         t = PickTri(lx, ly): IF t > 0 THEN hoverPart = tPart(t)
     END IF
     IF hoverPart <> oldHover THEN ovDirty = -1
+    BinIconsDue
 END SUB
 
 SUB UiAfterFrame
@@ -335,7 +299,7 @@ SUB UiKey (k&)
         ELSEIF CtrlIs(k&, "y") THEN
             RedoStep
         ELSEIF CtrlIs(k&, "s") THEN
-            ModelSave
+            IF kShift THEN PrefabSave ELSE ModelSave
         ELSEIF CtrlIs(k&, "o") THEN
             TopAction 2
         ELSEIF CtrlIs(k&, "n") THEN
@@ -346,6 +310,10 @@ SUB UiKey (k&)
             SelDuplicate
         ELSEIF CtrlIs(k&, "a") THEN
             FOR i = 1 TO pN: pSel(i) = -1: NEXT: ovDirty = -1
+        ELSEIF k& = 61 OR k& = 43 THEN ' (Ctrl + =, Ctrl + +: the UI bigger)
+            UiScaleStep 1
+        ELSEIF k& = 45 OR k& = 95 THEN ' (Ctrl + -: smaller)
+            UiScaleStep -1
         ELSEIF CtrlIs(k&, "q") THEN
             IF mdlDirty AND quitAsk = 0 THEN quitAsk = 1: Msg "Not saved: Ctrl+Q again to leave anyway" ELSE quitWant = -1
         END IF
@@ -355,7 +323,7 @@ SUB UiKey (k&)
     SELECT CASE k&
         CASE 27
             IF placeKind THEN
-                placeKind = 0: ghostOn = 0: meshDirty = -1: ghostKey$ = ""
+                PlaceStop
             ELSEIF dragOn THEN
                 DragCancel
             ELSE
@@ -363,13 +331,9 @@ SUB UiKey (k&)
             END IF
         CASE 21248: SelDelete ' (Delete)
         CASE 49 TO 54 ' (1-6: a shape to put down)
-            IF placeKind = k& - 48 THEN
-                placeKind = 0: ghostOn = 0: meshDirty = -1
-            ELSE
-                placeKind = k& - 48: SelNone: ovDirty = -1
-                Msg "Click where the " + kindName$(placeKind) + " goes. Shift: keep putting them down. Esc: stop"
-            END IF
+            IF placeKind = k& - 48 THEN PlaceStop ELSE PlaceStart k& - 48, "": placeDrag = 0
         CASE 104, 72, 15104: helpOn = NOT helpOn ' (H, F1)
+        CASE 34048: FullToggle ' (F11)
         CASE 102, 70: ViewFrameAll ' (F)
         CASE 18176: ViewHome ' (Home)
         CASE 9 ' (Tab: the next part)
@@ -454,6 +418,7 @@ SUB TopAction (k)
         CASE 3: ModelSave
         CASE 4: ExportAll
         CASE 5: helpOn = NOT helpOn
+        CASE 6: PrefabSave
     END SELECT
 END SUB
 
@@ -470,10 +435,11 @@ SUB PanelClick
                 CASE 11 TO 15: snapStep = SnapOf(k - 11): Msg "Snap: " + SnapName$(k - 11) + IIFS$(snapStep > 0, " of a cell", "")
                 CASE 21, 22
                     p = SelFirst
+                    IF p THEN p = pKind(p) <> K_USE ' (a prefab isn't one of the shapes)
                     IF p THEN
                         UndoPush
                         FOR i = 1 TO pN
-                            IF pSel(i) THEN
+                            IF pSel(i) AND pKind(i) <> K_USE THEN
                                 pKind(i) = pKind(i) + IIF(k = 22, 1, -1)
                                 IF pKind(i) > NUM_KINDS THEN pKind(i) = 1
                                 IF pKind(i) < 1 THEN pKind(i) = NUM_KINDS
@@ -492,7 +458,7 @@ SUB PanelClick
             IF SelCount THEN
                 UndoPush
                 FOR p = 1 TO pN
-                    IF pSel(p) THEN pCol(p) = c
+                    IF pSel(p) AND pKind(p) <> K_USE THEN pCol(p) = c
                 NEXT
                 ModelChanged
             END IF
@@ -517,6 +483,7 @@ END FUNCTION
 FUNCTION FieldValue$ (f)
     DIM p
     IF f = F_NAME THEN FieldValue$ = mdlName$: EXIT FUNCTION
+    IF f = F_DIR THEN EXIT FUNCTION
     p = SelFirst
     IF p = 0 THEN
         IF f = F_COL THEN FieldValue$ = HexCol$(curCol)
@@ -543,6 +510,13 @@ END FUNCTION
 SUB FieldApply (f, v$)
     DIM p, i, v, d, ok, c AS _UNSIGNED LONG
     IF f = F_NAME THEN mdlName$ = SafeName$(v$): mdlDirty = -1: EXIT SUB
+    IF f = F_DIR THEN ' (a new folder in the bin's, opened)
+        v$ = SafeName$(v$)
+        IF NOT _DIREXISTS(PfDir$ + binDir$ + v$) THEN MKDIR PfDir$ + binDir$ + v$
+        binDir$ = binDir$ + v$ + "/": binTop = 0: BinList
+        Msg "prefabs/" + binDir$ + " made - PREFAB (Ctrl+Shift+S) saves the model in here"
+        EXIT SUB
+    END IF
     p = SelFirst
     IF f = F_COL THEN
         c = ParseCol~&(v$, ok): IF ok = 0 THEN Msg "A colour is 6 hex digits: RRGGBB": EXIT SUB
@@ -574,7 +548,7 @@ SUB FieldApply (f, v$)
                 CASE F_SZ: pSZ(i) = PosSize(v)
                 CASE F_SEG: pSeg(i) = INT(Clamp(v, 3, 64))
                 CASE F_AMT: pAmt(i) = Clamp(v, 0, 1)
-                CASE F_COL: pCol(i) = c
+                CASE F_COL: IF pKind(i) <> K_USE THEN pCol(i) = c
             END SELECT
         END IF
     NEXT
@@ -586,7 +560,7 @@ SUB FieldCommit
     f = typeField: typeField = 0
     IF f = 0 THEN EXIT SUB
     IF typeBuf$ = FieldValue$(f) THEN EXIT SUB
-    IF f <> F_NAME AND SelFirst > 0 THEN UndoPush
+    IF f <> F_NAME AND f <> F_DIR AND SelFirst > 0 THEN UndoPush
     FieldApply f, typeBuf$
 END SUB
 
@@ -594,14 +568,18 @@ END SUB
 SUB TypeKey (k&)
     DIM f
     IF CtrlIs(k&, "a") THEN typeFresh = -1: EXIT SUB ' (all of it: the next key types over it)
-    IF CtrlIs(k&, "s") THEN FieldCommit: ModelSave: EXIT SUB
+    IF CtrlIs(k&, "s") THEN
+        FieldCommit
+        IF kShift THEN PrefabSave ELSE ModelSave
+        EXIT SUB
+    END IF
     IF kCtrl OR CtrlCode(k&) THEN EXIT SUB
     SELECT CASE k&
         CASE 13: FieldCommit
         CASE 27: typeField = 0
         CASE 9
             f = typeField: FieldCommit
-            IF f <> F_NAME THEN
+            IF f <> F_NAME AND f <> F_DIR THEN
                 DO
                     f = f + 1: IF f > F_LAST THEN f = 1
                 LOOP UNTIL FieldShown(f) OR f = typeField
@@ -633,6 +611,7 @@ SUB FieldWheel (f, dir)
         CASE F_RX TO F_RZ: st = 15: IF kShift THEN st = 1
         CASE F_SEG: st = 1
         CASE F_AMT: st = .05
+        CASE F_SX TO F_SZ: IF pKind(p) = K_USE THEN st = .05: IF kShift THEN st = .01 ' (a prefab's scale)
     END SELECT
     v = VAL(FieldValue$(f)) + st * dir
     FieldApply f, Fmt$(v)
@@ -663,11 +642,12 @@ SUB GhostUpdate (lx, ly)
     END IF
     rx = 0: ry = 0
     IF n.y < .9999 THEN rx = _ACOS(Clamp(n.y, -1, 1)) * 180 / 3.14159265: ry = _ATAN2(n.x, n.z) * 180 / 3.14159265
-    k$ = STR$(placeKind) + STR$(hit.x) + STR$(hit.y) + STR$(hit.z) + STR$(rx) + STR$(ry) + HexCol$(curCol)
+    k$ = STR$(placeKind) + placeRef$ + STR$(hit.x) + STR$(hit.y) + STR$(hit.z) + STR$(rx) + STR$(ry) + HexCol$(curCol)
     IF k$ = ghostKey$ AND ghostOn THEN EXIT SUB
     ghostKey$ = k$
     PartFresh 0, placeKind, hit.x, hit.y, hit.z
     pRX(0) = VAL(Fmt$(rx)): pRY(0) = VAL(Fmt$(ry))
+    IF placeKind = K_USE THEN pRef$(0) = placeRef$
     ghostOn = -1: meshDirty = -1
 END SUB
 
@@ -677,9 +657,13 @@ SUB PlaceDrop
     UndoPush
     p = PartFromGhost: IF p = 0 THEN EXIT SUB
     SelNone: pSel(p) = -1
-    IF NOT kShift THEN placeKind = 0: ghostOn = 0: ghostKey$ = "" ELSE ghostKey$ = ""
+    IF NOT kShift THEN PlaceStop ELSE ghostKey$ = ""
     ModelChanged
-    Msg "A " + kindName$(pKind(p)) + " put down: drag it to move it (Shift: up and down), the panel sets it exactly"
+    IF pKind(p) = K_USE THEN
+        Msg PfBase$(pRef$(p)) + " put down (linked: change the prefab and this changes). Drag to move it, = and - to scale it"
+    ELSE
+        Msg "A " + kindName$(pKind(p)) + " put down: drag it to move it (Shift: up and down), the panel sets it exactly"
+    END IF
 END SUB
 
 ' ---------------------------------------------------------------- dragging
@@ -777,41 +761,32 @@ SUB UiDraw
     _PUTIMAGE (vX0, vY0), ovImg&
     LINE (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1), cLine, B
     Txt vX0 + 8, vY0 + 6, "parts" + STR$(pN) + "   triangles" + STR$(sceneTN), cDim
-    IF placeKind THEN Txt vX0 + 8, vY0 + 24, "PUTTING DOWN: " + UCASE$(kindName$(placeKind)), cHi
+    IF placeKind = K_USE THEN
+        Txt vX0 + 8, vY0 + 24, "PUTTING DOWN: PREFAB " + placeRef$, cHi
+    ELSEIF placeKind THEN
+        Txt vX0 + 8, vY0 + 24, "PUTTING DOWN: " + UCASE$(kindName$(placeKind)), cHi
+    END IF
 
     ' The top bar
-    LINE (0, 0)-(SCR_W - 1, TOP_H - 1), cPanel, BF
-    LINE (0, TOP_H - 1)-(SCR_W - 1, TOP_H - 1), cLine
+    LINE (0, 0)-(scrW - 1, TOP_H - 1), cPanel, BF
+    LINE (0, TOP_H - 1)-(scrW - 1, TOP_H - 1), cLine
     Txt 8, 6, "NAME", cDim
     FieldDraw F_NAME
-    FOR k = 1 TO 5
+    FOR k = 1 TO 6
         TopBtn k, x, y, w, h: Btn x, y, w, h, TopBtnName$(k), (k = 5 AND helpOn)
     NEXT
-    t$ = APP_NAME$ + " " + APP_VERSION$: IF mdlDirty THEN t$ = "* not saved   " + t$
-    Txt SCR_W - 8 - 8 * LEN(t$), 6, t$, IIFC~&(mdlDirty, cWarn, cDim)
+    t$ = APP_NAME$ + " " + APP_VERSION$
+    IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
+    IF mdlDirty THEN t$ = "* not saved   " + t$
+    Txt scrW - 8 - 8 * LEN(t$), 6, t$, IIFC~&(mdlDirty, cWarn, cDim)
 
-    ' The bin
-    LINE (0, TOP_H)-(BIN_W - 1, SCR_H - BAR_H - 1), cPanel, BF
-    Txt 10, TOP_H + 4, "SHAPES", cHi
-    FOR k = 1 TO NUM_KINDS
-        BinTile k, x, y, w, h
-        c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover
-        IF placeKind = k THEN c = _RGB32(90, 30, 110)
-        LINE (x, y)-(x + w - 1, y + h - 1), c, BF
-        LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
-        _PUTIMAGE (x + 1, y + 2), binIcon&(k)
-        t$ = UCASE$(kindName$(k)): Txt x + (w - 8 * LEN(t$)) \ 2, y + 68, t$, cText
-        Txt x + 3, y + 2, LTRIM$(STR$(k)), cDim
-    NEXT
-    Txt 10, 350, "Prefabs come in", cDim
-    Txt 10, 366, "a later version.", cDim
-
+    BinDraw
     PanelDraw
 
     ' The message line
-    LINE (0, SCR_H - BAR_H)-(SCR_W - 1, SCR_H - 1), cPanel, BF
-    LINE (0, SCR_H - BAR_H)-(SCR_W - 1, SCR_H - BAR_H), cLine
-    Txt 8, SCR_H - BAR_H + 5, LEFT$(msgText$, 156), cText
+    LINE (0, scrH - BAR_H)-(scrW - 1, scrH - 1), cPanel, BF
+    LINE (0, scrH - BAR_H)-(scrW - 1, scrH - BAR_H), cLine
+    Txt 8, scrH - BAR_H + 5, LEFT$(msgText$, (scrW - 16) \ 8), cText
 
     IF helpOn THEN HelpDraw
     IF openOn THEN OpenDraw
@@ -837,9 +812,9 @@ END SUB
 
 SUB PanelDraw
     DIM x, y, w, h, k, p, n, t$, c AS _UNSIGNED LONG
-    x = SCR_W - PANEL_W
-    LINE (x, TOP_H)-(SCR_W - 1, SCR_H - BAR_H - 1), cPanel, BF
-    LINE (x, TOP_H)-(x, SCR_H - BAR_H - 1), cLine
+    x = scrW - PANEL_W
+    LINE (x, TOP_H)-(scrW - 1, scrH - BAR_H - 1), cPanel, BF
+    LINE (x, TOP_H)-(x, scrH - BAR_H - 1), cLine
     p = SelFirst: n = SelCount
     IF n = 0 THEN
         Txt PX0, 36, "NOTHING SELECTED", cDim
@@ -848,20 +823,36 @@ SUB PanelDraw
     ELSE
         IF n = 1 THEN t$ = "PART" + STR$(p) + " OF" + STR$(pN) ELSE t$ = LTRIM$(STR$(n)) + " PARTS SELECTED"
         Txt PX0, 36, t$, cHi
-        Txt PX0, 61, "SHAPE", cDim
-        t$ = UCASE$(kindName$(pKind(p))): Txt PX0 + 126 + (78 - 8 * LEN(t$)) \ 2, 61, t$, cText
-        PanelBtn 21, x, y, w, h: Btn x, y, w, h, "<", 0
-        PanelBtn 22, x, y, w, h: Btn x, y, w, h, ">", 0
+        IF pKind(p) = K_USE THEN
+            Txt PX0, 61, "PREFAB", cDim
+            t$ = pRef$(p): IF LEN(t$) > 21 THEN t$ = ".." + RIGHT$(t$, 19)
+            Txt PX0 + 56, 61, t$, IIFC~&(PfFind(pRef$(p)) > 0, cText, cWarn)
+            IF PfFind(pRef$(p)) = 0 THEN
+                Txt PX0, 228, "MISSING: no prefabs/", cWarn
+                Txt PX0, 244, pRef$(p) + ".bld", cWarn
+            ELSE
+                Txt PX0, 228, "Linked: right-click it in", cDim
+                Txt PX0, 244, "the bin to change it", cDim
+            END IF
+        ELSE
+            Txt PX0, 61, "SHAPE", cDim
+            t$ = UCASE$(kindName$(pKind(p))): Txt PX0 + 126 + (78 - 8 * LEN(t$)) \ 2, 61, t$, cText
+            PanelBtn 21, x, y, w, h: Btn x, y, w, h, "<", 0
+            PanelBtn 22, x, y, w, h: Btn x, y, w, h, ">", 0
+        END IF
         Txt PX0, 86, "POSITION    X  Y  Z", cDim
         Txt PX0, 132, "TURN        X  Y  Z", cDim
-        Txt PX0, 178, "SIZE        X  Y  Z", cDim
+        Txt PX0, 178, IIFS$(pKind(p) = K_USE, "SCALE       X  Y  Z", "SIZE        X  Y  Z"), cDim
         IF FieldShown(F_SEG) THEN Txt PX0, 228, "SLICES", cDim
         IF FieldShown(F_AMT) THEN Txt PX0, 254, AmtName$(pKind(p)), cDim
         FOR k = F_PX TO F_AMT: FieldDraw k: NEXT
     END IF
     Txt PX0, 284, "COLOUR", cDim
     c = curCol: IF p THEN c = pCol(p)
-    LINE (PX0 + 64, 282)-(PX0 + 92, 301), c, BF: LINE (PX0 + 64, 282)-(PX0 + 92, 301), cLine, B
+    IF p = 0 OR FieldShown(F_COL) THEN ' (a prefab has its own colours: none shown)
+        LINE (PX0 + 64, 282)-(PX0 + 92, 301), c, BF: LINE (PX0 + 64, 282)-(PX0 + 92, 301), cLine, B
+    END IF
+    IF p THEN IF pKind(p) = K_USE THEN c = curCol
     FieldDraw F_COL
     FOR k = 0 TO NUM_PAL - 1
         PalRect k, x, y, w, h
@@ -916,6 +907,8 @@ SUB HelpSetup
     HelpAdd "- THE VIEW"
     HelpAdd "Right drag: turn round      Middle drag (Shift+right): pan"
     HelpAdd "Wheel: nearer / further     F: frame it     Home: start view"
+    HelpAdd "The window: any size (the view takes the room)  F11: full screen"
+    HelpAdd "Ctrl+ / Ctrl-: everything bigger or smaller (the UI's scale)"
     HelpAdd "Arrows (nothing selected): turn round by steps"
     HelpAdd "- PUTTING SHAPES DOWN"
     HelpAdd "A shape on the left (or 1-6), then click where it goes:"
@@ -932,6 +925,11 @@ SUB HelpSetup
     HelpAdd "Ctrl+E export: export/NAME.obj, and NEON-CASTER's"
     HelpAdd "  models/ when neon_dir= is set in bu1ld0r.cfg"
     HelpAdd "Ctrl+Q: quit"
+    HelpAdd "- PREFABS (the bin, under the shapes)"
+    HelpAdd "PREFAB (Ctrl+Shift+S): this model into the bin's open folder"
+    HelpAdd "Click or drag one onto a face: it stands out from it, linked"
+    HelpAdd "Right-click one in the bin: open it to change it"
+    HelpAdd "Folders: click to go in, .. back up, + FOLDER makes one"
     HelpAdd ""
     HelpAdd "Sizes are in NEON-CASTER cells: 1 is a wall's width."
     HelpAdd "The model's foot is the middle of the purple square."

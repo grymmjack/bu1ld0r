@@ -24,16 +24,41 @@ FUNCTION SegsOf (i)
     SegsOf = s
 END FUNCTION
 
+' Part i's triangles (a prefab's: all of its parts')
 SUB MeshPart (i)
-    DIM k, s, a0, a1, am, r0, r1, ri, amt, ph0, ph1, phm, phMax, nl, j, sp0, sp1, cp0, cp1, y0, y1
-    mkPart = i: mkCol = pCol(i)
+    usN = 0: MeshItem i, i
+END SUB
+
+' Part j as triangles that count as part owner's (a prefab's parts are its use's)
+SUB MeshItem (j, owner)
+    DIM pf, q
+    IF pKind(j) <> K_USE THEN MeshShape j, owner: EXIT SUB
+    pf = PfFind(pRef$(j))
+    IF pf = 0 OR usN >= MAX_USE_DEPTH THEN MeshShape j, owner: EXIT SUB ' (missing, or in itself: a red box)
+    usN = usN + 1
+    usSX(usN) = pSX(j): usSY(usN) = pSY(j): usSZ(usN) = pSZ(j)
+    usCX(usN) = DCos(pRX(j)): usSXr(usN) = DSin(pRX(j))
+    usCY(usN) = DCos(pRY(j)): usSYr(usN) = DSin(pRY(j))
+    usCZ(usN) = DCos(pRZ(j)): usSZr(usN) = DSin(pRZ(j))
+    usPX(usN) = pX(j): usPY(usN) = pY(j): usPZ(usN) = pZ(j)
+    FOR q = pfFirst(pf) + 1 TO pfFirst(pf) + pfCnt(pf): MeshItem q, owner: NEXT
+    usN = usN - 1
+END SUB
+
+SUB MeshShape (i, owner)
+    DIM k, s, a0, a1, am, r0, r1, ri, amt, ph0, ph1, phm, phMax, nl, j, sp0, sp1, cp0, cp1, y0, y1, kd
+    mkPart = owner: mkCol = pCol(i)
     mkSX = pSX(i): mkSY = pSY(i): mkSZ = pSZ(i)
+    kd = pKind(i)
+    IF kd = K_USE THEN ' (a prefab that isn't there: a red box a quarter its size)
+        kd = K_BOX: mkCol = _RGB32(255, 40, 60): mkSX = mkSX * .25: mkSY = mkSY * .25: mkSZ = mkSZ * .25
+    END IF
     mkCX = DCos(pRX(i)): mkSXr = DSin(pRX(i))
     mkCY = DCos(pRY(i)): mkSYr = DSin(pRY(i))
     mkCZ = DCos(pRZ(i)): mkSZr = DSin(pRZ(i))
     mkPX = pX(i): mkPY = pY(i): mkPZ = pZ(i)
     s = SegsOf(i)
-    SELECT CASE pKind(i)
+    SELECT CASE kd
         CASE K_BOX
             mkFace = 0: MkQuad -.5, 0, -.5, .5, 0, -.5, .5, 1, -.5, -.5, 1, -.5, 0, 0, -1 ' (front)
             mkFace = 1: MkQuad .5, 0, -.5, .5, 0, .5, .5, 1, .5, .5, 1, -.5, 1, 0, 0 ' (right)
@@ -43,7 +68,7 @@ SUB MeshPart (i)
             mkFace = 5: MkQuad -.5, 0, -.5, -.5, 0, .5, .5, 0, .5, .5, 0, -.5, 0, -1, 0 ' (bottom)
         CASE K_CYL, K_CONE
             r0 = .5: r1 = .5
-            IF pKind(i) = K_CONE THEN r1 = .5 * Clamp(pAmt(i), 0, 1)
+            IF kd = K_CONE THEN r1 = .5 * Clamp(pAmt(i), 0, 1)
             FOR k = 0 TO s - 1
                 a0 = 360 * k / s: a1 = 360 * (k + 1) / s: am = (a0 + a1) / 2
                 mkFace = 0
@@ -92,19 +117,41 @@ SUB MeshPart (i)
     END SELECT
 END SUB
 
-' A point of the part's own 1 x 1 x 1 shape to the world: sized, turned, placed
+' A point of the part's own 1 x 1 x 1 shape to the world: sized, turned,
+' placed - then through each prefab it's in, innermost first
 SUB XformPt (p AS V3)
+    DIM lv
     p.x = p.x * mkSX: p.y = p.y * mkSY: p.z = p.z * mkSZ
     XformRot p
     p.x = p.x + mkPX: p.y = p.y + mkPY: p.z = p.z + mkPZ
+    FOR lv = usN TO 1 STEP -1
+        p.x = p.x * usSX(lv): p.y = p.y * usSY(lv): p.z = p.z * usSZ(lv)
+        RotZXY p, usCX(lv), usSXr(lv), usCY(lv), usSYr(lv), usCZ(lv), usSZr(lv)
+        p.x = p.x + usPX(lv): p.y = p.y + usPY(lv): p.z = p.z + usPZ(lv)
+    NEXT
 END SUB
 
-' Turned: Z, then X, then Y
+' Which way's out, through the sizes and turns as a normal goes (not placed)
+SUB XformHint (h AS V3)
+    DIM lv
+    h.x = h.x / mkSX: h.y = h.y / mkSY: h.z = h.z / mkSZ: XformRot h
+    FOR lv = usN TO 1 STEP -1
+        h.x = h.x / usSX(lv): h.y = h.y / usSY(lv): h.z = h.z / usSZ(lv)
+        RotZXY h, usCX(lv), usSXr(lv), usCY(lv), usSYr(lv), usCZ(lv), usSZr(lv)
+    NEXT
+END SUB
+
+' Turned as the part being made is: Z, then X, then Y
 SUB XformRot (p AS V3)
+    RotZXY p, mkCX, mkSXr, mkCY, mkSYr, mkCZ, mkSZr
+END SUB
+
+' Turned Z, then X, then Y, by these cosines and sines
+SUB RotZXY (p AS V3, cx, sx, cy, sy, cz, sz)
     DIM x, y, z
-    x = p.x * mkCZ - p.y * mkSZr: y = p.x * mkSZr + p.y * mkCZ: p.x = x: p.y = y
-    y = p.y * mkCX - p.z * mkSXr: z = p.y * mkSXr + p.z * mkCX: p.y = y: p.z = z
-    x = p.x * mkCY + p.z * mkSYr: z = -p.x * mkSYr + p.z * mkCY: p.x = x: p.z = z
+    x = p.x * cz - p.y * sz: y = p.x * sz + p.y * cz: p.x = x: p.y = y
+    y = p.y * cx - p.z * sx: z = p.y * sx + p.z * cx: p.y = y: p.z = z
+    x = p.x * cy + p.z * sy: z = -p.x * sy + p.z * cy: p.x = x: p.z = z
 END SUB
 
 SUB MkQuad (ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, hx, hy, hz)
@@ -119,7 +166,7 @@ SUB MkTri (ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz)
     a.x = ax: a.y = ay: a.z = az: XformPt a
     b.x = bx: b.y = by: b.z = bz: XformPt b
     c.x = cx: c.y = cy: c.z = cz: XformPt c
-    h.x = hx / mkSX: h.y = hy / mkSY: h.z = hz / mkSZ: XformRot h ' (out, through the sizes: as a normal goes)
+    h.x = hx: h.y = hy: h.z = hz: XformHint h
     n.x = (b.y - a.y) * (c.z - a.z) - (b.z - a.z) * (c.y - a.y)
     n.y = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z)
     n.z = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)

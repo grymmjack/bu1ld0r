@@ -5,8 +5,8 @@
 ' them, and the messages along the bottom.
 '
 CONST APP_NAME$ = "bu1ld0r"
-CONST APP_VERSION$ = "0.1.0"
-CONST SCR_W = 1280, SCR_H = 800
+CONST APP_VERSION$ = "0.2.0"
+CONST MIN_SW = 800, MIN_SH = 700 ' (the smallest our screen is laid out at)
 CONST BIN_W = 150 ' (the bin, down the left)
 CONST PANEL_W = 250 ' (the panel, down the right)
 CONST TOP_H = 28, BAR_H = 26 ' (the bar along the top, the message line along the bottom)
@@ -16,6 +16,22 @@ TYPE V3
     y AS SINGLE
     z AS SINGLE
 END TYPE
+
+' The window, as DRAW's: our screen is scrW x scrH, drawn uiK times bigger
+' (a whole number: square pixels) to fill it. Drag the window and, once
+' it's let go, the screen is made again at the window's size / uiK and
+' everything laid out again on it - the 3D view takes the room. The size
+' and uiK are remembered in bu1ld0r.cfg (window=WxH, ui_scale=). winsize.h
+' sets the window's size: QB64PE can't.
+DECLARE LIBRARY "winsize"
+    SUB winsize_set (BYVAL w AS LONG, BYVAL h AS LONG)
+    FUNCTION winsize_w& ()
+    FUNCTION winsize_h& ()
+END DECLARE
+DIM SHARED scrW, scrH, scrImg&, uiK ' (our screen, and how many times bigger the window shows it)
+DIM SHARED winW, winH ' (the window's size, as we last set it)
+DIM SHARED cfgWinW, cfgWinH, cfgUiK ' (bu1ld0r.cfg's window= and ui_scale=)
+DIM SHARED preFullW, preFullH ' (our screen's size before full screen)
 
 DIM SHARED appDir$ ' (where the program is: models/, export/ and bu1ld0r.cfg are beside it)
 DIM SHARED neonDir$ ' (NEON-CASTER's asset folder, neon-caster/neon-caster: its export goes there - bu1ld0r.cfg's neon_dir=)

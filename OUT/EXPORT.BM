@@ -5,6 +5,8 @@
 SUB ExportAll
     DIM g, n$, ex$, nd$, ok, f, img&, big&, made$
     IF pN = 0 THEN Msg "Nothing to export: put some shapes down first": EXIT SUB
+    n$ = ModelMissing$
+    IF LEN(n$) THEN Msg "Not exported: prefab " + n$ + " isn't in prefabs/ (the red box)": EXIT SUB
     g = ghostOn: ghostOn = 0: MeshBuild ' (the model alone, not the shape being put down)
     n$ = SafeName$(mdlName$): mdlName$ = n$
     ExColours

@@ -12,6 +12,8 @@ can use it.
 ## What it makes
 
 - `models/NAME.bld` - the model as built (text, below): what you open and edit.
+- `prefabs/[FOLDER/]NAME.bld` - a model saved as a prefab (the same text):
+  what the bin shows, and what a model's `use` lines point to.
 - `export/NAME.obj` + `NAME.mtl` + `NAME_tex.png` - for any 3D program.
 - NEON-CASTER export (`neon_dir=` in `bu1ld0r.cfg`, the game's asset folder
   `neon-caster/neon-caster`): `models/NAME.obj` (with its `# frame` line),
@@ -38,33 +40,59 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
 - amount: a cone's top (0 a point, 1 a cylinder), a tube's hole (0-0.95),
   a sphere's share from the top (1 whole, 0.5 a dome).
 - Turns are degrees, applied Z, then X, then Y.
-- Later stages add lines after a part (`face`, `paint`, `prefab`).
+- A prefab used whole: `use NAME  x y z  turnX turnY turnZ  scaleX scaleY scaleZ`
+  (NAME its path in prefabs/ without .bld: `panels/toggle`). Its parts
+  come from the prefab's file, so it's linked; prefabs can use prefabs.
+- Later stages add lines after a part (`face`, `paint`).
 
 ## Stages
 
-1. **Shapes and building** (now): the 3D view (software-drawn: depth and
+1. **Shapes and building** (done, 0.1.0): the 3D view (software-drawn: depth and
    which-part-is-where buffers, so picking and painting are exact), orbit /
    pan / zoom, the six shapes, select (Shift adds), drag to move (Shift: up
    and down), the panel's fields (position, turn, size, slices, amount,
    colour - typed, or the wheel), a palette, snap, duplicate, delete,
    undo/redo, NEW / OPEN / SAVE, EXPORT (OBJ, and NEON-CASTER's).
-2. **The bin**: shapes and prefabs as thumbnails, in folders; drag one onto
-   the model and it lands on the face under the pointer, turned to stand
-   out from it (a toggle stands up on a panel), snapped; Shift: free.
+2. **The bin** (done, 0.2.0): shapes and prefabs as thumbnails, in folders
+   (+ FOLDER, `..`); click or drag one onto the model and it lands on the
+   face under the pointer, turned to stand out from it (a toggle stands up
+   on a panel), snapped; Alt: free. SAVE AS PREFAB (PREFAB, Ctrl+Shift+S),
+   and uses linked from the start (brought forward from stage 5);
+   right-click a prefab in the bin to change it. Missing ones are red
+   boxes, and EXPORT waits for them. Also: the window any size (as DRAW:
+   laid out again to fill it, the UI at a whole-number scale - Ctrl+ /
+   Ctrl-, F11 full screen).
 3. **Pictures on faces**: any PNG on a part's face, with wrap, slide,
    stretch, turn and tint (as NEON-CASTER's level faces).
 4. **Painting**: brushes straight onto the model, in 3D (every texel within
    the brush's reach, so strokes cross from part to part), on a layer of
    their own over the pictures. Export bakes it all into the one texture.
-5. **Prefabs**: SAVE AS PREFAB; a prefab is a shape in the bin; uses are
-   linked (change `toggle`, every toggle changes) until unlinked;
-   flattened on export.
+5. **Prefabs**: what's left after stage 2 - unlink a use (its parts into
+   the model as parts: needs turns combined into one Z-X-Y set), a use's
+   tint, renaming or moving a prefab (and its uses) from the bin.
 6. **Divide and push/pull**: divide a face across or down (H / V, as the
    level editor's faces in pieces), push a piece out or in; on round shapes
    rings along the length. Faces stay flat four-sided pieces. The triangle
    count on screen, against NEON-CASTER's ~200 a prop.
-7. **Starter prefabs**: toggle, button, knob, dial, screen, vent, handle,
-   pipe (straight, elbow, T), lamp, antenna.
+7. **Booleans**: each part ADD (as now), CUT (its shape taken out of the
+   parts it overlaps: a hole, a slot, a recess) or KEEP (only where it
+   overlaps them: an intersection); a prefab use can cut too (a vent's
+   slots into a wall). Live, not destructive: a mode in the panel (and a
+   word on the part's line), worked out when the mesh is made (BSP CSG on
+   the triangles, as csg.js), so a cut part can still be moved and sized;
+   the cutters shown as see-through outlines. Flattened on export. The
+   new faces take the colour of the part they're cut into.
+8. **Retopology**: the mesh tidied for the game, as the last step before
+   export (and shown: the count before and after): corners welded, faces
+   hidden inside other parts or pressed flat against them taken away,
+   flat neighbours of one colour merged into fewer triangles, slivers
+   from booleans cleaned up - and, if it's still over a budget
+   (NEON-CASTER's ~200 a prop, set in the panel), simplified (edge
+   collapse, keeping the outline, colour borders and the 8 pictures'
+   look). The .bld keeps the parts as built; only the export is reduced.
+9. **Starter prefabs**: toggle, button, knob, dial, screen, vent, handle,
+   pipe (straight, elbow, T), lamp, antenna (vents and dials use stage 7's
+   cuts).
 
 And on NEON-CASTER's side (its own work, later): a thing to place any
 exported model in a sector (a `prop NAME` thing), the level editor's picker

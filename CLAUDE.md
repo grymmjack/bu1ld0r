@@ -6,11 +6,12 @@ props). PLAN.md has the stages; README.md the keys and files.
 ## Layout
 
 `bu1ld0r.bas` (the loop) includes `_ALL.BI` / `_ALL.BM`; folders CORE (window,
-input, helpers), MODEL (PARTS: the part list, .bld text, undo; MESH: each
-shape as triangles), VIEW (camera, the rasterizer, picking, outlines), UI
-(bin, panel, keys, mouse, putting down, dragging), OUT (OBJ + NEON-CASTER
-export). As NEON-CASTER: `.BI` declarations, `.BM` routines, no GOSUB/GOTO,
-DIM every local.
+input, helpers), MODEL (PARTS: the part list, .bld text, undo; PREFAB: the
+prefab library, save as / edit a prefab; MESH: each shape as triangles),
+VIEW (camera, the rasterizer, picking, outlines), UI (UI: panel, keys,
+mouse, putting down, dragging; BIN: the bin - shapes, prefab folders,
+thumbnails), OUT (OBJ + NEON-CASTER export). As NEON-CASTER: `.BI`
+declarations, `.BM` routines, no GOSUB/GOTO, DIM every local.
 
 ## Gotchas met so far
 
@@ -25,6 +26,18 @@ DIM every local.
   (`qCtrl`...: they come as 100305/-100305...), so a quick Ctrl+S from xdotool
   still counts; `CtrlIs` also takes the control code (Ctrl+S = 19).
 - No DATA in SUBs: lists are built in code (`Words`, `HelpAdd`).
+- `base` is a reserved word (OPTION BASE): not a parameter name.
+- **The window** (as DRAW): our screen is `scrW x scrH` (no CONST size),
+  shown `uiK` times bigger with `_RESIZE ON , _STRETCH` - QB64PE maps the
+  mouse back to our pixels. A settled drag remakes the SCREEN (`ScreenSet`,
+  `Layout`) and sets the window with `CORE/winsize.h`. A new SCREEN snaps
+  the window to its own size first: WindowFrame sees that echo (a resize to
+  `scrW x scrH`) and sets it back. `rZ`/`rId` grow as needed (`RCap`). Test
+  on a 3840x2160 Xvfb to see 2x (Rick's display).
+- `pkill -f 'Xvfb :99'` kills the shell running it (its own command line
+  matches): `pgrep -x Xvfb | xargs -r kill`.
+- `_FILES$` is one iterator: list a folder's names first, then recurse
+  (`PfLoadAll`). Folders come back with a trailing `/`, plus `./` `../`.
 
 ## How it draws
 
@@ -39,6 +52,21 @@ Shapes are 1 x 1 x 1 on their own foot (x, z -0.5..0.5, y 0..1), sized
 (the box they fill), turned Z then X then Y (`XformRot`), placed. `MkTri`
 takes an outward hint and winds each triangle anticlockwise from outside
 (OBJ's way - checked against the game's crate.obj).
+
+## Prefabs
+
+A prefab is `prefabs/[FOLDER/]NAME.bld`; a model uses one as a part of kind
+`K_USE` (`pRef$` its name, its size its scale; `.bld`: `use NAME x y z
+turns scales`). Linked: the library (`PfLoadAll`, at start and after any
+prefab save) reads every prefab's parts into the same part arrays after the
+model's (`PF_BASE + 1` on); `PfFind` maps a name to it (or to the one
+prefab of that base name, if it moved). `MeshItem` makes a use's parts with
+the use's place/turn/scale pushed on a stack (`usN`, up to 8: XformPt and
+XformHint apply it), all counted as the use's part, so picking, outlines,
+drag, undo and export work unchanged. `mdlPf$` = the prefab open (Ctrl+S
+saves there); `PfLoops` / `ModelUses` stop a prefab going in itself.
+Prefab thumbnails are made in `BinIconsDue` at the end of UiFrame (before
+the view is drawn: RenderIcon uses part 0 and rId).
 
 ## Export (NEON-CASTER)
 
@@ -71,5 +99,5 @@ Clean up after: `ps -eo pid,etime,args | grep -E 'bu1ld0r|Xvfb'`.
 
 ## Git
 
-Commit or push only when Rick asks. As of 2026-10-30 nothing is committed
-and there's no GitHub remote yet.
+Commit or push only when Rick asks. Remote: github.com/grymmjack/bu1ld0r
+(private), branch main - first commit 2026-10-30 (stage 1).

@@ -14,3 +14,10 @@ DIM SHARED meshDirty, ghostOn
 ' The part being made into triangles: its size, turns and place
 DIM SHARED mkPart, mkFace, mkCol AS _UNSIGNED LONG
 DIM SHARED mkSX, mkSY, mkSZ, mkCX, mkSXr, mkCY, mkSYr, mkCZ, mkSZr, mkPX, mkPY, mkPZ
+
+' A prefab's parts are made inside its use's place, turns and size: one
+' level each (a prefab in a prefab is two), the innermost last
+CONST MAX_USE_DEPTH = 8
+DIM SHARED usN
+DIM SHARED usSX(MAX_USE_DEPTH), usSY(MAX_USE_DEPTH), usSZ(MAX_USE_DEPTH), usPX(MAX_USE_DEPTH), usPY(MAX_USE_DEPTH), usPZ(MAX_USE_DEPTH)
+DIM SHARED usCX(MAX_USE_DEPTH), usSXr(MAX_USE_DEPTH), usCY(MAX_USE_DEPTH), usSYr(MAX_USE_DEPTH), usCZ(MAX_USE_DEPTH), usSZr(MAX_USE_DEPTH)

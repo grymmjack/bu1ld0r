@@ -6,9 +6,7 @@
 ' picking: which triangle, and where on it, a pixel shows.
 '
 
-SUB ViewSetup
-    viewImg& = _NEWIMAGE(vW, vH, 32)
-    ovImg& = _NEWIMAGE(vW, vH, 32)
+SUB ViewSetup ' (the view's pictures are made by Layout, CORE/APP.BM)
     camFov = 45
     ViewHome
 END SUB
@@ -43,9 +41,17 @@ SUB LightFromCamera (lo, k)
     rShadeLo = lo: rShadeK = k
 END SUB
 
+' Room in the depth and triangle buffers for a picture of n pixels
+SUB RCap (n AS LONG)
+    IF n <= rCapN THEN EXIT SUB
+    rCapN = n
+    REDIM rZ(n) AS SINGLE, rId(n) AS LONG, rPart(n) AS INTEGER
+END SUB
+
 ' Start drawing into img& (w x h): nothing's there yet
 SUB RenderBegin (img&, w, h)
     DIM m AS _MEM
+    RCap w * h
     rImg& = img&: rW = w: rH = h
     rMem = _MEMIMAGE(img&)
     m = _MEM(rZ()): _MEMFILL m, m.OFFSET, w * h * 4, 0 AS LONG: _MEMFREE m

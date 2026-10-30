@@ -24,6 +24,7 @@ DO
     IF viewDirty THEN ViewRender
     UiDraw
     _DISPLAY
+    WindowFrame
     UiAfterFrame
     _LIMIT 60
 LOOP UNTIL quitWant

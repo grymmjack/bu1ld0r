@@ -1,0 +1,169 @@
+''
+' bu1ld0r - MODEL/PREFAB.BM
+' =============================================================================
+' The prefab library read in; a use's prefab found by name; the model saved
+' as a prefab, or a prefab opened to change it.
+'
+
+FUNCTION PfDir$
+    PfDir$ = appDir$ + "prefabs/"
+END FUNCTION
+
+' "panels/toggle" -> "panels/" (its folder in prefabs/, "" at the top)
+FUNCTION PfFolder$ (r$)
+    PfFolder$ = LEFT$(r$, _INSTRREV(r$, "/"))
+END FUNCTION
+
+' "panels/toggle" -> "toggle"
+FUNCTION PfBase$ (r$)
+    PfBase$ = MID$(r$, _INSTRREV(r$, "/") + 1)
+END FUNCTION
+
+' Every .bld under prefabs/ read in again (folders and all)
+SUB PfLoadAll
+    DIM i, q, qN, f$, d$, nN, dq$(200), nm$(MAX_PF)
+    FOR i = 1 TO pfN
+        IF pfIcon&(i) < -1 THEN _FREEIMAGE pfIcon&(i)
+        pfIcon&(i) = 0
+    NEXT
+    pfN = 0: pfTop = 0
+    ' (the names first: _FILES$ can't be asked about two folders at once)
+    qN = 1: dq$(1) = "": q = 0
+    DO WHILE q < qN
+        q = q + 1: d$ = dq$(q)
+        f$ = _FILES$(PfDir$ + d$)
+        DO WHILE LEN(f$)
+            IF INSTR(f$, " ") = 0 THEN ' (a name with a space can't be in a use line)
+                IF RIGHT$(f$, 1) = "/" THEN
+                    IF f$ <> "./" AND f$ <> "../" AND qN < 200 THEN qN = qN + 1: dq$(qN) = d$ + f$
+                ELSEIF LCASE$(RIGHT$(f$, 4)) = ".bld" AND nN < MAX_PF THEN
+                    nN = nN + 1: nm$(nN) = d$ + LEFT$(f$, LEN(f$) - 4)
+                END IF
+            END IF
+            f$ = _FILES$
+        LOOP
+    LOOP
+    FOR i = 1 TO nN: PfLoad nm$(i): NEXT
+    meshDirty = -1
+END SUB
+
+' One prefab's parts read in after the rest
+SUB PfLoad (r$)
+    DIM fh, t$, n AS LONG
+    IF pfN >= MAX_PF THEN EXIT SUB
+    IF NOT _FILEEXISTS(PfDir$ + r$ + ".bld") THEN EXIT SUB
+    fh = FREEFILE: OPEN PfDir$ + r$ + ".bld" FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    n = PartsFromText&(t$, PF_BASE + pfTop, MAX_PFP - pfTop)
+    pfN = pfN + 1: pfName$(pfN) = r$: pfFirst(pfN) = PF_BASE + pfTop: pfCnt(pfN) = n: pfIcon&(pfN) = 0
+    pfTop = pfTop + n
+    IF pfTop >= MAX_PFP THEN Msg "The prefabs fill the room for them (" + LTRIM$(STR$(MAX_PFP)) + " parts): some are left out"
+END SUB
+
+' Which prefab a use means (0: none). Moved to another folder, it's still
+' found if it's the only one of its name.
+FUNCTION PfFind (r$)
+    DIM i, b$, n, hit
+    FOR i = 1 TO pfN
+        IF pfName$(i) = r$ THEN PfFind = i: EXIT FUNCTION
+    NEXT
+    b$ = PfBase$(r$)
+    FOR i = 1 TO pfN
+        IF PfBase$(pfName$(i)) = b$ THEN n = n + 1: hit = i
+    NEXT
+    IF n = 1 THEN PfFind = hit
+END FUNCTION
+
+' Does prefab pf use prefab r$, in it or deeper?
+FUNCTION PfHas (pf, r$, depth)
+    DIM j AS LONG, q
+    IF pf = 0 OR depth > MAX_USE_DEPTH THEN EXIT FUNCTION
+    FOR j = pfFirst(pf) + 1 TO pfFirst(pf) + pfCnt(pf)
+        IF pKind(j) = K_USE THEN
+            q = PfFind(pRef$(j))
+            IF q > 0 THEN
+                IF pfName$(q) = r$ THEN PfHas = -1: EXIT FUNCTION
+                IF PfHas(q, r$, depth + 1) THEN PfHas = -1: EXIT FUNCTION
+            END IF
+        END IF
+    NEXT
+END FUNCTION
+
+' Would putting prefab r$ in the model put a prefab in itself?
+FUNCTION PfLoops (r$)
+    DIM pf
+    IF mdlPf$ = "" THEN EXIT FUNCTION
+    pf = PfFind(r$)
+    IF r$ = mdlPf$ OR pfName$(pf) = mdlPf$ THEN PfLoops = -1: EXIT FUNCTION
+    PfLoops = PfHas(pf, mdlPf$, 0)
+END FUNCTION
+
+' Does the model use prefab r$ (in it or deeper)?
+FUNCTION ModelUses (r$)
+    DIM i, q
+    FOR i = 1 TO pN
+        IF pKind(i) = K_USE THEN
+            q = PfFind(pRef$(i))
+            IF q > 0 THEN
+                IF pfName$(q) = r$ THEN ModelUses = -1: EXIT FUNCTION
+                IF PfHas(q, r$, 0) THEN ModelUses = -1: EXIT FUNCTION
+            END IF
+        END IF
+    NEXT
+END FUNCTION
+
+' SAVE AS PREFAB: the model into the bin's open folder, as prefabs/FOLDER/NAME.bld
+SUB PrefabSave
+    DIM r$
+    IF pN = 0 THEN Msg "Nothing to save as a prefab: put some shapes down first": EXIT SUB
+    mdlName$ = SafeName$(mdlName$)
+    r$ = binDir$ + mdlName$
+    IF _FILEEXISTS(PfDir$ + r$ + ".bld") AND r$ <> mdlPf$ AND askRef$ <> r$ THEN
+        askRef$ = r$
+        Msg "prefabs/" + r$ + ".bld is there already: PREFAB again to replace it (every use of it changes)"
+        EXIT SUB
+    END IF
+    PrefabWrite r$
+END SUB
+
+' The model written as prefab r$; from now on it's that prefab (Ctrl+S saves it there)
+SUB PrefabWrite (r$)
+    DIM fh
+    askRef$ = ""
+    IF ModelUses(r$) THEN Msg "This model uses " + r$ + ": it can't be saved as that prefab (a prefab in itself)": EXIT SUB
+    fh = FREEFILE: OPEN PfDir$ + r$ + ".bld" FOR OUTPUT AS #fh: PRINT #fh, ModelText$;: CLOSE #fh
+    mdlPf$ = r$: mdlDirty = 0
+    PfLoadAll: BinList
+    Msg "Saved as prefab prefabs/" + r$ + ".bld - it's in the bin. Ctrl+S saves it there; every use of it changes"
+END SUB
+
+' A prefab opened to change it (right-click it in the bin)
+SUB PfEdit (r$)
+    IF NOT _FILEEXISTS(PfDir$ + r$ + ".bld") THEN Msg "No such prefab: " + r$: EXIT SUB
+    IF mdlDirty AND (mdlAsk <> 3 OR askRef$ <> r$) THEN
+        mdlAsk = 3: askRef$ = r$
+        Msg "Not saved: right-click " + PfBase$(r$) + " again to open it anyway (Ctrl+S saves)"
+        EXIT SUB
+    END IF
+    PlaceStop
+    ModelLoad PfDir$ + r$ + ".bld"
+    mdlPf$ = r$
+    Msg "Prefab " + r$ + " open: Ctrl+S saves it, and every model that uses it changes"
+END SUB
+
+' The first prefab the model uses (in it or deeper) that isn't there ("" if none)
+FUNCTION ModelMissing$
+    DIM i, m$
+    FOR i = 1 TO pN
+        IF pKind(i) = K_USE THEN m$ = UseMissing$(i, 0): IF LEN(m$) THEN ModelMissing$ = m$: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+FUNCTION UseMissing$ (j AS LONG, depth)
+    DIM pf, q AS LONG, m$
+    pf = PfFind(pRef$(j))
+    IF pf = 0 THEN UseMissing$ = pRef$(j): EXIT FUNCTION
+    IF depth >= MAX_USE_DEPTH THEN UseMissing$ = pRef$(j) + " (in itself)": EXIT FUNCTION
+    FOR q = pfFirst(pf) + 1 TO pfFirst(pf) + pfCnt(pf)
+        IF pKind(q) = K_USE THEN m$ = UseMissing$(q, depth + 1): IF LEN(m$) THEN UseMissing$ = m$: EXIT FUNCTION
+    NEXT
+END FUNCTION

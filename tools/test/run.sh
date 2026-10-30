@@ -10,5 +10,6 @@ xdpyinfo -display :99 >/dev/null 2>&1 || { echo ":99 is down"; exit 9; }
 pactl list short sinks | grep -q claude_mute || pactl load-module module-null-sink sink_name=claude_mute >/dev/null
 cp "$R/bu1ld0r.run" $BT/app/
 [ -d $BT/app/models ] || cp -r "$R/models" $BT/app/
+[ -d $BT/app/prefabs ] || [ ! -d "$R/prefabs" ] || cp -r "$R/prefabs" $BT/app/
 PULSE_SINK=claude_mute LP_NUM_THREADS=2 nice -n 19 timeout -k 5 ${T:-40} $BT/app/bu1ld0r.run "$@"
 echo "exit $?"
