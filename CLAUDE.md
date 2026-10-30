@@ -100,4 +100,4 @@ Clean up after: `ps -eo pid,etime,args | grep -E 'bu1ld0r|Xvfb'`.
 ## Git
 
 Commit or push only when Rick asks. Remote: github.com/grymmjack/bu1ld0r
-(private), branch main - first commit 2026-10-30 (stage 1).
+(public), branch main - first commit 2026-10-30 (stage 1).
