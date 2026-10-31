@@ -1,0 +1,222 @@
+''
+' bu1ld0r - UI/SMART.BM
+' =============================================================================
+' SMART GUIDES: a dragged selection's box lined up with the other parts'.
+
+' [SG] in the top bar
+SUB SgToggle
+    sgOn = NOT sgOn: sgGN = 0
+    CfgSet "smart_guides", IIFS$(sgOn, "1", "0")
+    Msg IIFS$(sgOn, "Smart guides ON: a dragged part's sides and middle snap to other parts' (and to the middle of the world) - a dashed line shows it. Alt: free", "Smart guides OFF")
+END SUB
+
+' The drag begins: the selection's box, and every other part's (from the triangles drawn)
+SUB SgBegin
+    DIM t AS LONG, p AS LONG, k, a, v AS V3, n AS LONG, seenM
+    sgBN = 0: sgGN = 0
+    REDIM sgLo(pN, 3) AS DOUBLE, sgHi(pN, 3) AS DOUBLE
+    FOR p = 0 TO pN
+        FOR a = 1 TO 3: sgLo(p, a) = 1E+30: sgHi(p, a) = -1E+30: NEXT
+    NEXT
+    FOR a = 1 TO 3: sgML#(a) = 1E+30: sgMH#(a) = -1E+30: sgD#(a) = 0: NEXT
+    FOR t = 1 TO holeTN
+        p = tPart(t)
+        IF p >= 1 AND p <= pN THEN
+            FOR k = 0 TO 2
+                SELECT CASE k
+                    CASE 0: v = tA(t)
+                    CASE 1: v = tB(t)
+                    CASE ELSE: v = tC(t)
+                END SELECT
+                IF pSel(p) THEN
+                    seenM = -1
+                    IF v.x < sgML#(1) THEN sgML#(1) = v.x
+                    IF v.y < sgML#(2) THEN sgML#(2) = v.y
+                    IF v.z < sgML#(3) THEN sgML#(3) = v.z
+                    IF v.x > sgMH#(1) THEN sgMH#(1) = v.x
+                    IF v.y > sgMH#(2) THEN sgMH#(2) = v.y
+                    IF v.z > sgMH#(3) THEN sgMH#(3) = v.z
+                ELSE
+                    IF v.x < sgLo(p, 1) THEN sgLo(p, 1) = v.x
+                    IF v.y < sgLo(p, 2) THEN sgLo(p, 2) = v.y
+                    IF v.z < sgLo(p, 3) THEN sgLo(p, 3) = v.z
+                    IF v.x > sgHi(p, 1) THEN sgHi(p, 1) = v.x
+                    IF v.y > sgHi(p, 2) THEN sgHi(p, 2) = v.y
+                    IF v.z > sgHi(p, 3) THEN sgHi(p, 3) = v.z
+                END IF
+            NEXT
+        END IF
+    NEXT
+    IF NOT seenM THEN EXIT SUB ' (nothing of the selection drawn: no guides)
+    ' (the parts with a box kept, packed down; box 0 the world's zero)
+    FOR p = 1 TO pN
+        IF sgHi(p, 1) >= sgLo(p, 1) THEN
+            n = n + 1
+            FOR a = 1 TO 3: sgLo(n, a) = sgLo(p, a): sgHi(n, a) = sgHi(p, a): NEXT
+        END IF
+    NEXT
+    FOR a = 1 TO 3: sgLo(0, a) = 0: sgHi(0, a) = 0: NEXT
+    sgBN = n
+END SUB
+
+' Box b's low (j 0), middle (1) or high (2) on axis a
+FUNCTION SgSide# (b AS LONG, a, j)
+    SELECT CASE j
+        CASE 0: SgSide# = sgLo(b, a)
+        CASE 1: SgSide# = (sgLo(b, a) + sgHi(b, a)) / 2
+        CASE ELSE: SgSide# = sgHi(b, a)
+    END SELECT
+END FUNCTION
+
+' The moving box's side j on axis a, moved d
+FUNCTION SgMove# (a, j, d#)
+    SELECT CASE j
+        CASE 0: SgMove# = sgML#(a) + d#
+        CASE 1: SgMove# = (sgML#(a) + sgMH#(a)) / 2 + d#
+        CASE ELSE: SgMove# = sgMH#(a) + d#
+    END SELECT
+END FUNCTION
+
+' Which of its sides (i) may line up with which of another's (j): low with
+' low or high (sitting on / beside it), high with high or low, middle with middle
+FUNCTION SgPair (i, j)
+    SgPair = (i = 1 AND j = 1) OR (i <> 1 AND j <> 1)
+END FUNCTION
+
+' How far in the world SG_PX pixels are, where the selection is
+FUNCTION SgTol# (dx, dy, dz)
+    DIM vx, vy, vz
+    CamSpace (sgML#(1) + sgMH#(1)) / 2 + dx, (sgML#(2) + sgMH#(2)) / 2 + dy, (sgML#(3) + sgMH#(3)) / 2 + dz, vx, vy, vz
+    IF vz < .05 THEN vz = .05
+    SgTol# = SG_PX * vz / cFoc
+END FUNCTION
+
+' The move (dx, dy, dz) pulled onto the nearest line-up on each axis free
+' (gx, gy, gz nonzero); each comes back -1 if it snapped, else 0
+SUB SgFit (dx, dy, dz, gx, gy, gz)
+    DIM a, b AS LONG, i, j, d#, e#, best#, c#, tol#, fr, hit
+    IF sgBN < 0 OR sgML#(1) > sgMH#(1) THEN gx = 0: gy = 0: gz = 0: EXIT SUB
+    tol# = SgTol#(dx, dy, dz)
+    FOR a = 1 TO 3
+        SELECT CASE a
+            CASE 1: fr = gx: d# = dx
+            CASE 2: fr = gy: d# = dy
+            CASE ELSE: fr = gz: d# = dz
+        END SELECT
+        hit = 0
+        IF fr THEN
+            best# = tol#
+            FOR b = 0 TO sgBN
+                FOR i = 0 TO 2
+                    FOR j = 0 TO 2
+                        IF SgPair(i, j) OR b = 0 THEN
+                            e# = SgSide#(b, a, j) - SgMove#(a, i, d#)
+                            IF ABS(e#) <= best# THEN best# = ABS(e#): c# = e#: hit = -1
+                        END IF
+                    NEXT
+                NEXT
+            NEXT
+            IF hit THEN d# = d# + c#
+        END IF
+        SELECT CASE a
+            CASE 1: gx = hit: dx = d#
+            CASE 2: gy = hit: dy = d#
+            CASE ELSE: gz = hit: dz = d#
+        END SELECT
+    NEXT
+END SUB
+
+' The guides to show for the move (dx, dy, dz): each free axis's sides that
+' now line up with another box's - for each spot, the box nearest the selection
+SUB SgCollect (dx, dy, dz, fx, fy, fz)
+    DIM a, b AS LONG, i, j, d#, e#, v#, g, k, fr, dn#, dk#, eps#
+    sgGN = 0: sgD#(1) = dx: sgD#(2) = dy: sgD#(3) = dz
+    IF sgML#(1) > sgMH#(1) THEN EXIT SUB
+    eps# = SgTol#(dx, dy, dz) * .02: IF eps# < .000002 THEN eps# = .000002
+    FOR a = 1 TO 3
+        SELECT CASE a
+            CASE 1: fr = fx
+            CASE 2: fr = fy
+            CASE ELSE: fr = fz
+        END SELECT
+        d# = sgD#(a)
+        IF fr THEN
+            FOR b = 0 TO sgBN
+                FOR i = 0 TO 2
+                    FOR j = 0 TO 2
+                        IF SgPair(i, j) OR b = 0 THEN
+                            v# = SgSide#(b, a, j)
+                            e# = v# - SgMove#(a, i, d#)
+                            IF ABS(e#) <= eps# THEN
+                                g = 0
+                                FOR k = 1 TO sgGN
+                                    IF sgGA(k) = a AND ABS(sgGV#(k) - v#) <= eps# THEN g = k
+                                NEXT
+                                IF g = 0 AND sgGN < SG_MAXG THEN sgGN = sgGN + 1: g = sgGN: sgGA(g) = a: sgGV#(g) = v#: sgGB(g) = b
+                                IF g THEN ' (a part beats the world's zero; then the nearer part)
+                                    IF sgGB(g) = 0 AND b > 0 THEN
+                                        sgGB(g) = b
+                                    ELSEIF b > 0 THEN
+                                        dn# = SgDist#(b, a): dk# = SgDist#(sgGB(g), a)
+                                        IF dn# < dk# THEN sgGB(g) = b
+                                    END IF
+                                END IF
+                            END IF
+                        END IF
+                    NEXT
+                NEXT
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+' How far box b's middle is from the moving box's, leaving out axis a
+FUNCTION SgDist# (b AS LONG, a)
+    DIM k, s#, w#
+    FOR k = 1 TO 3
+        IF k <> a THEN w# = SgSide#(b, k, 1) - SgMove#(k, 1, sgD#(k)): s# = s# + w# * w#
+    NEXT
+    SgDist# = s#
+END FUNCTION
+
+' Drawn over the view while dragging: each guide's two faces on its plane (the
+' other part's and the selection's) dashed, and a dashed line between them
+SUB SgDraw
+    DIM g, a, b AS LONG, v#, p#(3), q#(3), lo1#, hi1#, lo2#, hi2#, a1, a2, k
+    IF NOT (dragOn AND sgOn) OR sgGN = 0 THEN EXIT SUB
+    VIEW SCREEN (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
+    FOR g = 1 TO sgGN
+        a = sgGA(g): b = sgGB(g): v# = sgGV#(g)
+        a1 = 1 + (a MOD 3): a2 = 1 + (a1 MOD 3) ' (the plane's two ways)
+        FOR k = 1 TO 3: p#(k) = SgMove#(k, 1, sgD#(k)): q#(k) = SgSide#(b, k, 1): NEXT
+        p#(a) = v#: q#(a) = v#
+        IF b > 0 THEN SgRect a, v#, a1, sgLo(b, a1), sgHi(b, a1), a2, sgLo(b, a2), sgHi(b, a2)
+        SgRect a, v#, a1, SgMove#(a1, 0, sgD#(a1)), SgMove#(a1, 2, sgD#(a1)), a2, SgMove#(a2, 0, sgD#(a2)), SgMove#(a2, 2, sgD#(a2))
+        SgLine p#(1), p#(2), p#(3), q#(1), q#(2), q#(3)
+    NEXT
+    VIEW
+END SUB
+
+' The rectangle on the plane axis a = v, a1 from lo1 to hi1, a2 from lo2 to hi2
+SUB SgRect (a, v#, a1, lo1#, hi1#, a2, lo2#, hi2#)
+    DIM c#(4, 3), k, n
+    FOR k = 0 TO 4
+        c#(k, a) = v#
+        n = k MOD 4
+        c#(k, a1) = IIF(n = 1 OR n = 2, hi1#, lo1#)
+        c#(k, a2) = IIF(n >= 2, hi2#, lo2#)
+    NEXT
+    FOR k = 0 TO 3
+        SgLine c#(k, 1), c#(k, 2), c#(k, 3), c#(k + 1, 1), c#(k + 1, 2), c#(k + 1, 3)
+    NEXT
+END SUB
+
+' A guide's line between two world points: dark under, dashed magenta over
+SUB SgLine (x1#, y1#, z1#, x2#, y2#, z2#)
+    DIM sx0, sy0, sx1, sy1, ok, ok2
+    ScrPt x1#, y1#, z1#, sx0, sy0, ok
+    ScrPt x2#, y2#, z2#, sx1, sy1, ok2
+    IF ok = 0 OR ok2 = 0 THEN EXIT SUB
+    LINE (sx0 + 1, sy0 + 1)-(sx1 + 1, sy1 + 1), _RGBA32(0, 0, 0, 150), , &HF0F0
+    LINE (sx0, sy0)-(sx1, sy1), _RGB32(255, 70, 255), , &HF0F0
+END SUB

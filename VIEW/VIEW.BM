@@ -8,7 +8,7 @@
 
 SUB ViewSetup ' (the view's pictures are made by Layout, CORE/APP.BM)
     DIM d
-    camFov = 45
+    camFov = 45: rNear = .01
     d = _DEVICES ' (the keyboard as a device: NumpadPoll)
     ViewHome
 END SUB
@@ -97,7 +97,7 @@ SUB ViewRender
     ELSE
         IF texOp < 100 THEN bg& = _COPYIMAGE(viewImg&) ' (the backdrop and grid: the faces faded towards it)
         FOR t = 1 TO sceneTN
-            IF pWire(tPart(t)) = 0 THEN RasterTri t
+            IF pWire(tPart(t)) = 0 AND FpIsBody(t) = 0 THEN RasterTri t ' (WALK's body: not drawn round the eye)
         NEXT
         rHole = -1
         FOR t = sceneTN + 1 TO holeTN
@@ -163,7 +163,7 @@ SUB LineZ (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, kSeen, kHid)
     DIM avx, avy, avz, bvx, bvy, bvz, t, nz, sx0, sy0, sx1, sy1, qa, qb, n, k, x, y, f, q, a
     DIM i AS LONG, old AS _UNSIGNED LONG, r, g, b, x2 AS _UNSIGNED LONG
     IF kSeen <= 0 AND kHid <= 0 THEN EXIT SUB
-    nz = .01
+    nz = rNear
     CamSpace ax, ay, az, avx, avy, avz
     CamSpace bx, by, bz, bvx, bvy, bvz
     IF avz < nz AND bvz < nz THEN EXIT SUB
@@ -344,7 +344,7 @@ END FUNCTION
 ' A line in the world, drawn on rImg& (cut where it goes behind the eye)
 SUB Line3D (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG)
     DIM avx, avy, avz, bvx, bvy, bvz, t, nz
-    nz = .01
+    nz = rNear
     CamSpace ax, ay, az, avx, avy, avz
     CamSpace bx, by, bz, bvx, bvy, bvz
     IF avz < nz AND bvz < nz THEN EXIT SUB
@@ -356,7 +356,7 @@ END SUB
 ' A line in the world as two points on the view (cut where it goes behind the eye): ok 0 if none of it's ahead
 SUB LineView (ax, ay, az, bx, by, bz, sx0, sy0, sx1, sy1, ok)
     DIM avx, avy, avz, bvx, bvy, bvz, t, nz
-    nz = .01: ok = 0
+    nz = rNear: ok = 0
     CamSpace ax, ay, az, avx, avy, avz
     CamSpace bx, by, bz, bvx, bvy, bvz
     IF avz < nz AND bvz < nz THEN EXIT SUB
@@ -454,7 +454,7 @@ SUB RasterTri (t AS LONG)
         EXIT SUB
     END IF
     ' In the camera's terms, cut at the near plane (a polygon of up to 4 corners)
-    nz = .01
+    nz = rNear
     FOR k = 0 TO 2: CamSpace wx(k), wy(k), wz(k), cx(k), cy(k), cz(k): NEXT
     IF cz(0) < nz AND cz(1) < nz AND cz(2) < nz THEN EXIT SUB
     cnt = 0

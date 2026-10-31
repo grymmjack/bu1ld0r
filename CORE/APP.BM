@@ -21,6 +21,8 @@ SUB AppStart
     IF NOT _DIREXISTS(appDir$ + "prefabs") THEN MKDIR appDir$ + "prefabs"
     listOn = -1 ' (the parts list, unless bu1ld0r.cfg says parts_list=0)
     gridWalls = -1 ' (the grid up the walls: grid_walls=0 turns it off)
+    sgOn = -1 ' (smart guides: smart_guides=0 turns them off)
+    fpH# = .5: fpJN = 16: fpSpd# = 1 ' (WALK's eye height and jump, FLY's speed: walk_eye= walk_jump= fly_speed=)
     gridBright = 35: texOp = 100: wireOp = 100: BIN_W = BIN_MIN: PANEL_W = PANEL_MIN: picTS = 64
     ReadCfg
 
@@ -92,6 +94,10 @@ SUB ReadCfg
                 CASE "ui_scale": cfgUiK = INT(Clamp(VAL(v$), 0, 4))
                 CASE "parts_list": listOn = (VAL(v$) <> 0)
                 CASE "grid_walls": gridWalls = (VAL(v$) <> 0)
+                CASE "smart_guides": sgOn = (VAL(v$) <> 0)
+                CASE "walk_eye": fpH# = VAL(v$): IF fpH# < 1 / 512 OR fpH# > 16 THEN fpH# = .5
+                CASE "walk_jump": fpJN = INT(Clamp(VAL(v$), 1, 256))
+                CASE "fly_speed": fpSpd# = VAL(v$): IF fpSpd# < .005 OR fpSpd# > 100 THEN fpSpd# = 1
                 CASE "bin_w": BIN_W = INT(VAL(v$)): IF BIN_W < BIN_MIN THEN BIN_W = BIN_MIN
                 CASE "tex_on": viewWire = (VAL(v$) = 0)
                 CASE "wire_on": wireOn = (VAL(v$) <> 0)

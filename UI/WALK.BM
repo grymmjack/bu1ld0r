@@ -1,0 +1,396 @@
+''
+' bu1ld0r - UI/WALK.BM
+' =============================================================================
+' WALK and FLY: the camera taken through the model, first person.
+
+' Into WALK (1) or FLY (2) - from orbiting, or from the other one
+SUB FpStart (mode)
+    DIM ex#, ey#, ez#
+    IF penOn OR txOn OR pntOn THEN Msg "Finish the pen / text first": EXIT SUB
+    IF fpOn = 0 THEN
+        fpDist0 = camDist
+        CamBasis vW, vH
+        ex# = cEX: ey# = cEY: ez# = cEZ
+        IF camOrtho THEN camOrtho = 0
+    ELSE
+        ex# = fpX#: ey# = fpY#: ez# = fpZ#
+        IF fpOn = 1 THEN ey# = fpY# + fpH#
+    END IF
+    IF fpOn = 0 AND mode = 1 THEN FpBodyFind
+    IF mode = 2 THEN
+        fpX# = ex#: fpY# = ey#: fpZ# = ez#
+    ELSEIF fpOn = 0 AND fpBodyN > 0 THEN ' (as the body: where it stands, looking level)
+        camPitch = 0
+    ELSE ' (down onto whatever is under the eye - the ground at least)
+        fpX# = ex#: fpZ# = ez#: fpY# = FpFloor#(ex#, ez#, ey#)
+        IF fpOn = 0 THEN camPitch = 0
+    END IF
+    IF fpBodyN = 0 THEN fpR# = fpH# * .25
+    ERASE fpKd
+    fpOn = mode: fpVY# = 0: fpGround = 0: fpJump = 0: fpT# = TIMER(.001)
+    FpRecentre
+    orbitOn = 0: panOn = 0: dragArm = 0: dragOn = 0
+    _MOUSEHIDE
+    IF mode = 1 AND fpBodyN > 0 THEN
+        Msg "WALK as " + FpBodyName$ + ": mouse looks, WASD moves (Shift: run), Space jumps, [ ]: the jump. Tab: FLY, Esc: back"
+    ELSEIF mode = 1 THEN
+        Msg "WALK: mouse looks, WASD moves (Shift: run), Space jumps. Wheel: taller / shorter, [ ]: the jump. Tab: FLY, Esc: back"
+    ELSE
+        Msg "FLY: mouse looks, WASD moves (Shift: fast), E / Space up, Q / C down, wheel: speed. Tab: WALK, Esc: back"
+    END IF
+    FpCamera
+END SUB
+
+' Back to orbiting: round a point in front of you, as far off as before
+SUB FpStop
+    fpOn = 0: rNear = .01: fpBodyN = 0
+    _MOUSESHOW "DEFAULT": dockCur = 0
+    camDist = fpDist0: FpCamera ' (the eye stays where it is)
+    CfgSet "walk_eye", Fmt$(fpH#): CfgSet "walk_jump", LTRIM$(STR$(fpJN)): CfgSet "fly_speed", Fmt$(fpSpd#)
+    Msg "Orbiting again (V: walk, Shift+V: fly)"
+END SUB
+
+' The camera put at the eye, looking where camYaw / camPitch say (its orbit point camDist ahead)
+SUB FpCamera
+    DIM ex#, ey#, ez#, fx#, fy#, fz#
+    ex# = fpX#: ey# = fpY#: ez# = fpZ#
+    IF fpOn = 1 THEN ey# = fpY# + fpH#
+    fx# = -DCos(camPitch) * DSin(camYaw): fy# = -DSin(camPitch): fz# = DCos(camPitch) * DCos(camYaw)
+    camTX = ex# + fx# * camDist: camTY = ey# + fy# * camDist: camTZ = ez# + fz# * camDist
+    viewDirty = -1
+END SUB
+
+' A key while walking / flying (moving is by the keys held: FpFrame)
+SUB FpKey (k&)
+    IF k& > 0 AND k& < 256 THEN fpKd(FpFold(k&)) = -1
+    SELECT CASE k&
+        CASE 27, 118, 86: FpStop ' (Esc, V)
+        CASE 9: FpStart 3 - fpOn ' (Tab: the other one)
+        CASE 32: fpJump = -1 ' (Space)
+        CASE 91: IF fpJN > 1 THEN fpJN = fpJN - 1 ' ([ ])
+        CASE 93: IF fpJN < 256 THEN fpJN = fpJN + 1
+        CASE 49 TO 53: SnapSet SnapOf(k& - 49) ' (1-5: the grid - the jump's steps)
+    END SELECT
+END SUB
+
+' The pointer put in the window's middle (looking waits till it's there)
+SUB FpRecentre
+    _MOUSEMOVE winW \ 2, winH \ 2: fpWarp = -1: fpWX = -99999
+END SUB
+
+' A key let go while walking / flying
+SUB FpKeyUp (k&)
+    IF k& > 0 AND k& < 256 THEN fpKd(FpFold(k&)) = 0
+END SUB
+
+' A letter's code, small (A-Z as a-z)
+FUNCTION FpFold (k&)
+    IF k& >= 65 AND k& <= 90 THEN FpFold = k& + 32 ELSE FpFold = k&
+END FUNCTION
+
+' Is the letter (a small one's code, a) or the key c (an arrow, Space: no case) held?
+' (a letter: pressed and not let go by our count, and _KEYDOWN agrees in either case)
+FUNCTION FpHeld (a&, b&, c&)
+    DIM h
+    IF a& > 0 THEN IF fpKd(a&) THEN h = _KEYDOWN(a&) OR _KEYDOWN(a& - 32)
+    IF c& <> 0 THEN IF _KEYDOWN(c&) THEN h = -1
+    FpHeld = h
+END FUNCTION
+
+' The jump's step: the grid's (OFF: 1/64)
+FUNCTION FpUnit#
+    IF snapStep > 0 THEN FpUnit# = snapStep ELSE FpUnit# = 1 / 64
+END FUNCTION
+
+' Each frame while walking / flying
+SUB FpFrame
+    DIM dt#, t#, cx, cy, dx, dy, fw, rt, up, sp#, fx#, fy#, fz#, rx#, rz#, mx#, mz#, l#, g#, j#, ny#, fl#, c#, stp#
+    t# = TIMER(.001): dt# = t# - fpT#: fpT# = t#
+    IF dt# < 0 OR dt# > .1 THEN dt# = .1
+    IF mP2 THEN FpStop: EXIT SUB ' (a right click: back)
+    ' The mouse looks: how far it went since last frame; near the window's
+    ' edge it's put back in the middle (readings ignored till it's there)
+    ' (a recentring's reading can be in other terms than the moves after it -
+    ' a window drawn scaled - so the first real move after one starts afresh)
+    IF _WINDOWHASFOCUS THEN
+        IF fpWarp THEN
+            IF fpWX = -99999 THEN
+                fpWX = _MOUSEX: fpWY = _MOUSEY
+            ELSEIF _MOUSEX <> fpWX OR _MOUSEY <> fpWY THEN
+                fpLX = _MOUSEX: fpLY = _MOUSEY: fpCX = fpLX: fpCY = fpLY: fpWarp = 0
+            END IF
+        ELSE
+            dx = _MOUSEX - fpLX: dy = _MOUSEY - fpLY: fpLX = _MOUSEX: fpLY = _MOUSEY
+            camYaw = camYaw + dx * .25: camPitch = Clamp(camPitch + dy * .25, -89, 89)
+            IF ABS(fpLX - fpCX) > winW \ 4 OR ABS(fpLY - fpCY) > winH \ 4 THEN FpRecentre
+        END IF
+    END IF
+    IF mWheel <> 0 THEN
+        IF fpOn = 1 THEN
+            fpH# = fpH# * 1.2 ^ (-mWheel): IF fpH# < 1 / 512 THEN fpH# = 1 / 512
+            IF fpH# > 16 THEN fpH# = 16
+        ELSE
+            fpSpd# = fpSpd# * 1.25 ^ (-mWheel): IF fpSpd# < .005 THEN fpSpd# = .005
+            IF fpSpd# > 100 THEN fpSpd# = 100
+        END IF
+    END IF
+    IF NOT _WINDOWHASFOCUS THEN ERASE fpKd ' (away: nothing's held)
+    fw = FpHeld(119, 87, 18432) - FpHeld(115, 83, 20480) ' (W / up, S / down)
+    rt = FpHeld(100, 68, 19712) - FpHeld(97, 65, 19200) ' (D / right, A / left)
+    fw = -fw: rt = -rt ' (_KEYDOWN's -1: held)
+    IF fpOn = 2 THEN
+        up = -(FpHeld(101, 69, 32) - FpHeld(113, 81, 0) - FpHeld(99, 67, 0)) ' (E / Space up, Q / C down)
+        sp# = fpSpd# * dt#: IF kShift THEN sp# = sp# * 3
+        fx# = -DCos(camPitch) * DSin(camYaw): fy# = -DSin(camPitch): fz# = DCos(camPitch) * DCos(camYaw)
+        rx# = -DCos(camYaw): rz# = -DSin(camYaw)
+        fpX# = fpX# + (fx# * fw + rx# * rt) * sp#
+        fpY# = fpY# + (fy# * fw + up) * sp#
+        fpZ# = fpZ# + (fz# * fw + rz# * rt) * sp#
+        rNear = .01
+        FpCamera
+        EXIT SUB
+    END IF
+    ' WALK: along the ground, walls stopping you
+    mx# = -DSin(camYaw) * fw - DCos(camYaw) * rt: mz# = DCos(camYaw) * fw - DSin(camYaw) * rt
+    l# = SQR(mx# * mx# + mz# * mz#)
+    IF l# > 0 THEN
+        sp# = 1.4 * fpH# * dt#: IF kShift THEN sp# = sp# * 2.5
+        FpMoveH mx# / l# * sp#, mz# / l# * sp#
+    END IF
+    ' Up and down: a jump fpJN steps high, gravity, landing on what's under you
+    j# = fpJN * FpUnit#
+    g# = 16.3 * j#: IF g# < 8 * fpH# THEN g# = 8 * fpH#
+    IF fpJump AND fpGround THEN fpVY# = SQR(2 * g# * j#): fpGround = 0
+    fpJump = 0
+    fpVY# = fpVY# - g# * dt#
+    ny# = fpY# + fpVY# * dt#
+    IF fpVY# > 0 THEN ' (a ceiling over your head)
+        c# = FpCeil#(fpX#, fpZ#, fpY# + fpH#)
+        IF ny# + fpH# > c# THEN ny# = c# - fpH# - .0001: IF ny# < fpY# THEN ny# = fpY#
+        IF ny# + fpH# >= c# - .0002 THEN fpVY# = 0
+    END IF
+    stp# = fpH# * .2
+    IF fpGround THEN fl# = FpFloor#(fpX#, fpZ#, fpY# + stp#) ELSE fl# = FpFloor#(fpX#, fpZ#, fpY# + .0001)
+    IF fpGround AND fl# < fpY# AND fpY# - fl# <= stp# THEN ny# = fl# ' (down a step: kept on it)
+    IF ny# <= fl# THEN
+        ny# = fl#: fpVY# = 0: fpGround = -1
+    ELSE
+        fpGround = 0
+    END IF
+    fpY# = ny#
+    rNear = fpH# * .05: IF rNear > .01 THEN rNear = .01
+    IF rNear < .0002 THEN rNear = .0002
+    FpCamera
+END SUB
+
+' A walk's step (dx, dz): taken if nothing's in the way, else slid along what is
+SUB FpMoveH (dx#, dz#)
+    IF NOT FpWall(fpX#, fpZ#, fpX# + dx#, fpZ# + dz#) THEN
+        fpX# = fpX# + dx#: fpZ# = fpZ# + dz#
+    ELSEIF NOT FpWall(fpX#, fpZ#, fpX# + dx#, fpZ#) THEN
+        fpX# = fpX# + dx#
+    ELSEIF NOT FpWall(fpX#, fpZ#, fpX#, fpZ# + dz#) THEN
+        fpZ# = fpZ# + dz#
+    END IF
+END SUB
+
+' Is a wall (any face not lying flat) between (x0, z0) and (x1, z1) - a
+' step's height over your feet, your middle, or your eye - or nearer than
+' a quarter of your height past it?
+FUNCTION FpWall (x0#, z0#, x1#, z1#)
+    DIM t AS LONG, k, h#(2), dx#, dz#, l#, r#, lo#, hi#, bx0#, bx1#, bz0#, bz1#, n AS V3
+    DIM ax#, ay#, az#, e1x#, e1y#, e1z#, e2x#, e2y#, e2z#, px#, py#, pz#, det#, inv#, sx#, sy#, sz#, u#, v#, qx#, qy#, qz#, tt#
+    dx# = x1# - x0#: dz# = z1# - z0#: l# = SQR(dx# * dx# + dz# * dz#)
+    IF l# < 1E-12 THEN EXIT FUNCTION
+    dx# = dx# / l#: dz# = dz# / l#
+    r# = fpR#
+    h#(0) = fpY# + fpH# * .2 + .0005: h#(1) = fpY# + fpH# * .6: h#(2) = fpY# + fpH# * 1.05
+    lo# = h#(0): hi# = h#(2)
+    bx0# = x0#: bx1# = x1#: IF bx1# < bx0# THEN SWAP bx0#, bx1#
+    bz0# = z0#: bz1# = z1#: IF bz1# < bz0# THEN SWAP bz0#, bz1#
+    bx0# = bx0# - r#: bx1# = bx1# + r#: bz0# = bz0# - r#: bz1# = bz1# + r#
+    FOR t = 1 TO sceneTN
+        n = tNrm(t)
+        IF ABS(n.y) < .7 AND FpIsBody(t) = 0 THEN ' (lying flat: a floor or a roof, not a wall)
+            IF FpTriOut(t, bx0#, bx1#, bz0#, bz1#, lo#, hi#) = 0 THEN
+                ax# = tA(t).x: ay# = tA(t).y: az# = tA(t).z
+                e1x# = tB(t).x - ax#: e1y# = tB(t).y - ay#: e1z# = tB(t).z - az#
+                e2x# = tC(t).x - ax#: e2y# = tC(t).y - ay#: e2z# = tC(t).z - az#
+                ' (the ray (dx, 0, dz) across it: Moller-Trumbore, both sides)
+                px# = -dz# * e2y#: py# = dz# * e2x# - dx# * e2z#: pz# = dx# * e2y#
+                det# = e1x# * px# + e1y# * py# + e1z# * pz#
+                IF ABS(det#) > 1E-14 THEN
+                    inv# = 1 / det#
+                    FOR k = 0 TO 2
+                        sx# = x0# - ax#: sy# = h#(k) - ay#: sz# = z0# - az#
+                        u# = (sx# * px# + sy# * py# + sz# * pz#) * inv#
+                        IF u# >= 0 AND u# <= 1 THEN
+                            qx# = sy# * e1z# - sz# * e1y#: qy# = sz# * e1x# - sx# * e1z#: qz# = sx# * e1y# - sy# * e1x#
+                            v# = (dx# * qx# + dz# * qz#) * inv#
+                            IF v# >= 0 AND u# + v# <= 1 THEN
+                                tt# = (e2x# * qx# + e2y# * qy# + e2z# * qz#) * inv#
+                                IF tt# >= 0 AND tt# < l# + r# THEN FpWall = -1: EXIT FUNCTION
+                            END IF
+                        END IF
+                    NEXT
+                END IF
+            END IF
+        END IF
+    NEXT
+END FUNCTION
+
+' Is triangle t wholly outside x0..x1, z0..z1 (or y0..y1)?
+FUNCTION FpTriOut (t AS LONG, x0#, x1#, z0#, z1#, y0#, y1#)
+    IF tA(t).x < x0# AND tB(t).x < x0# AND tC(t).x < x0# THEN FpTriOut = -1: EXIT FUNCTION
+    IF tA(t).x > x1# AND tB(t).x > x1# AND tC(t).x > x1# THEN FpTriOut = -1: EXIT FUNCTION
+    IF tA(t).z < z0# AND tB(t).z < z0# AND tC(t).z < z0# THEN FpTriOut = -1: EXIT FUNCTION
+    IF tA(t).z > z1# AND tB(t).z > z1# AND tC(t).z > z1# THEN FpTriOut = -1: EXIT FUNCTION
+    IF tA(t).y < y0# AND tB(t).y < y0# AND tC(t).y < y0# THEN FpTriOut = -1: EXIT FUNCTION
+    IF tA(t).y > y1# AND tB(t).y > y1# AND tC(t).y > y1# THEN FpTriOut = -1: EXIT FUNCTION
+END FUNCTION
+
+' Triangle t's height over (x, z), if it's over it (ok)
+SUB FpTriY (t AS LONG, x#, z#, y#, ok)
+    DIM d#, w0#, w1#, w2#
+    ok = 0
+    d# = (tB(t).z - tC(t).z) * (tA(t).x - tC(t).x) + (tC(t).x - tB(t).x) * (tA(t).z - tC(t).z)
+    IF ABS(d#) < 1E-14 THEN EXIT SUB ' (standing up: no top)
+    w0# = ((tB(t).z - tC(t).z) * (x# - tC(t).x) + (tC(t).x - tB(t).x) * (z# - tC(t).z)) / d#
+    w1# = ((tC(t).z - tA(t).z) * (x# - tC(t).x) + (tA(t).x - tC(t).x) * (z# - tC(t).z)) / d#
+    w2# = 1 - w0# - w1#
+    IF w0# < -1E-7 OR w1# < -1E-7 OR w2# < -1E-7 THEN EXIT SUB
+    y# = w0# * tA(t).y + w1# * tB(t).y + w2# * tC(t).y: ok = -1
+END SUB
+
+' The highest surface under (x, z) no higher than lim - the ground at least
+FUNCTION FpFloor# (x#, z#, lim#)
+    DIM t AS LONG, y#, ok, best#
+    best# = 0: IF lim# < 0 THEN best# = lim# ' (under the ground: no floor there)
+    FOR t = 1 TO sceneTN
+        IF FpTriOut(t, x#, x#, z#, z#, -1E+30, lim#) = 0 AND FpIsBody(t) = 0 THEN
+            FpTriY t, x#, z#, y#, ok
+            IF ok THEN IF y# <= lim# + 1E-9 AND y# > best# THEN best# = y#
+        END IF
+    NEXT
+    FpFloor# = best#
+END FUNCTION
+
+' The lowest surface over (x, z) at lim or higher (none: far up)
+FUNCTION FpCeil# (x#, z#, lim#)
+    DIM t AS LONG, y#, ok, best#
+    best# = 1E+30
+    FOR t = 1 TO sceneTN
+        IF FpTriOut(t, x#, x#, z#, z#, lim#, 1E+30) = 0 AND FpIsBody(t) = 0 THEN
+            FpTriY t, x#, z#, y#, ok
+            IF ok THEN IF y# >= lim# - 1E-9 AND y# < best# THEN best# = y#
+        END IF
+    NEXT
+    FpCeil# = best#
+END FUNCTION
+
+' WALK / FLY's buttons, at the view's bottom left
+SUB FpBtn (k, x, y, w, h)
+    y = vY0 + vH - 28: h = 20
+    IF k = 1 THEN x = vX0 + 8: w = 52 ELSE x = vX0 + 64: w = 44
+END SUB
+
+FUNCTION FpBtnAt (mx, my)
+    DIM k, x, y, w, h
+    FOR k = 1 TO 2
+        FpBtn k, x, y, w, h
+        IF InRect(mx, my, x, y, w, h) THEN FpBtnAt = k
+    NEXT
+END FUNCTION
+
+' Drawn over the view: the buttons, or (walking / flying) a cross in the middle and how it's set
+SUB FpDraw
+    DIM k, x, y, w, h, cx, cy, t$, u$
+    IF fpOn = 0 THEN
+        FOR k = 1 TO 2
+            FpBtn k, x, y, w, h: Btn x, y, w, h, IIFS$(k = 1, "WALK", "FLY"), 0
+        NEXT
+        EXIT SUB
+    END IF
+    cx = vX0 + vW \ 2: cy = vY0 + vH \ 2
+    LINE (cx - 7, cy)-(cx + 7, cy), _RGBA32(0, 0, 0, 160): LINE (cx, cy - 7)-(cx, cy + 7), _RGBA32(0, 0, 0, 160)
+    LINE (cx - 6, cy - 1)-(cx + 6, cy - 1), cHi: LINE (cx - 1, cy - 6)-(cx - 1, cy + 6), cHi
+    IF fpOn = 1 THEN
+        u$ = SnapName$(SnapIdx(snapStep)): IF snapStep <= 0 THEN u$ = "1/64"
+        t$ = "WALK   eye " + Fmt$(fpH#) + "   jump" + STR$(fpJN) + " x " + u$ + " = " + Fmt$(fpJN * FpUnit#) + "   at " + FpN$(fpX#) + ", " + FpN$(fpY#) + ", " + FpN$(fpZ#) + IIFS$(fpGround, "", "   (in the air)")
+        Txt vX0 + 8, vY0 + vH - 46, t$, cHi
+        Txt vX0 + 8, vY0 + vH - 26, "WASD move  Shift run  Space jump  wheel: taller/shorter  [ ]: jump  1-5: grid  Tab: fly  Esc: back", cDim
+    ELSE
+        Txt vX0 + 8, vY0 + vH - 46, "FLY   speed " + Fmt$(fpSpd#) + " a second   at " + FpN$(fpX#) + ", " + FpN$(fpY#) + ", " + FpN$(fpZ#), cHi
+        Txt vX0 + 8, vY0 + vH - 26, "WASD move  E/Space up  Q/C down  Shift fast  wheel: speed  Tab: walk  Esc: back", cDim
+    END IF
+END SUB
+
+' A place for the read-out: to a thousandth
+FUNCTION FpN$ (v#)
+    FpN$ = Fmt$(INT(v# * 1000 + .5) / 1000)
+END FUNCTION
+
+' WALK's body: the selected parts, else the part named "player" - you stand
+' where it stands, as tall as it (your eyes at 92% up: its head), as wide
+FUNCTION FpBodyPick
+    DIM i, n
+    FOR i = 1 TO pN
+        IF pSel(i) THEN n = n + 1
+    NEXT
+    IF n THEN FpBodyPick = -1: EXIT FUNCTION
+    FOR i = 1 TO pN
+        IF LCASE$(pName$(i)) = "player" THEN FpBodyPick = i: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+SUB FpBodyFind
+    DIM pk, i, t AS LONG, k, v AS V3, lo AS V3, hi AS V3, seen
+    fpBodyN = 0
+    pk = FpBodyPick: IF pk = 0 THEN EXIT SUB
+    REDIM fpBody(pN) AS _BYTE
+    FOR i = 1 TO pN
+        IF (pk = -1 AND pSel(i) <> 0) OR pk = i THEN fpBody(i) = -1: fpBodyN = fpBodyN + 1
+    NEXT
+    lo.x = 1E+30: lo.y = 1E+30: lo.z = 1E+30: hi.x = -1E+30: hi.y = -1E+30: hi.z = -1E+30
+    FOR t = 1 TO sceneTN
+        IF FpIsBody(t) THEN
+            seen = -1
+            FOR k = 0 TO 2
+                SELECT CASE k
+                    CASE 0: v = tA(t)
+                    CASE 1: v = tB(t)
+                    CASE ELSE: v = tC(t)
+                END SELECT
+                IF v.x < lo.x THEN lo.x = v.x
+                IF v.y < lo.y THEN lo.y = v.y
+                IF v.z < lo.z THEN lo.z = v.z
+                IF v.x > hi.x THEN hi.x = v.x
+                IF v.y > hi.y THEN hi.y = v.y
+                IF v.z > hi.z THEN hi.z = v.z
+            NEXT
+        END IF
+    NEXT
+    IF NOT seen OR hi.y - lo.y < 1 / 512 THEN fpBodyN = 0: EXIT SUB ' (hidden, or flat: not a body)
+    fpX# = (lo.x + hi.x) / 2: fpZ# = (lo.z + hi.z) / 2: fpY# = lo.y
+    fpH# = (hi.y - lo.y) * .92
+    fpR# = hi.x - lo.x: IF hi.z - lo.z < fpR# THEN fpR# = hi.z - lo.z
+    fpR# = fpR# / 2: IF fpR# < fpH# * .05 THEN fpR# = fpH# * .05
+END SUB
+
+' Is triangle t part of WALK's body?
+FUNCTION FpIsBody (t AS LONG)
+    DIM p
+    IF fpBodyN = 0 THEN EXIT FUNCTION
+    p = tPart(t)
+    IF p >= 1 AND p <= UBOUND(fpBody) THEN FpIsBody = fpBody(p)
+END FUNCTION
+
+' What the body is called, for the messages
+FUNCTION FpBodyName$
+    DIM i, n, t$
+    FOR i = 1 TO UBOUND(fpBody)
+        IF fpBody(i) THEN n = n + 1: t$ = pName$(i): IF t$ = "" THEN t$ = "part" + STR$(i)
+    NEXT
+    IF n > 1 THEN t$ = LTRIM$(STR$(n)) + " parts"
+    FpBodyName$ = t$
+END FUNCTION

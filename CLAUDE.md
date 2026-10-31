@@ -35,6 +35,9 @@ declarations, `.BM` routines, no GOSUB/GOTO, DIM every local.
 - **Keys**: Ctrl/Shift/Alt are followed through `_KEYHIT`'s own queue
   (`qCtrl`...: they come as 100305/-100305...), so a quick Ctrl+S from xdotool
   still counts; `CtrlIs` also takes the control code (Ctrl+S = 19).
+- **A held letter with Shift**: Shift+W comes as 87; let Shift go first and W's
+  release comes as -119, so `_KEYDOWN(87)` stays held (walking never stopped). WALK
+  counts letters itself from the key queue, either case (`fpKd`, `FpHeld`).
 - No DATA in SUBs: lists are built in code (`Words`, `HelpAdd`).
 - `base`, `list`, `out`, `common`, `any`, `on`, `key` are reserved words
   (or clash with QB64's): not names. Nor `sgn#` (SGN).
@@ -159,7 +162,7 @@ parts together). Several selected parts turn as one (`SelTurnBy`: round
 their triangles' box middle). GRID (`gridWalls`): walls drawn in DrawGrid
 (`GridWallsDraw`, the far side from the eye), the selection's box shadowed on
 them in the overlay (`GridShadows`, `LineBehind`: only where rId is 0). TEX / WIRE / GRID at the top (buttons 8-10, sliders `SliderRect` 1-3): `viewWire` is TEX off; `wireOn` draws `WireTriZ` (`LineZ`: blended, depth-tested - the hidden part at the faces' see-through); `texOp` < 100 fades the faces towards a copy of the backdrop (`TexFade`). EXPORT's repeat cut (`ExSplitRepeats`) cuts a face's triangles as one outline (`ExLoop`: only if flat and evenly mapped, else a triangle at a time), pieces ear-clipped (`ExEars`, on the face itself if the picture's squashed). EdCommit spreads a squashed picture (`PicUnsquash`: extrude's sides). Panel FLIP / GROW / TURN (UI/ALIGN `ShDraw` / `ShClick` at 684: `SelFlip` mirrors a mesh's points and rewinds its polygons, `SelSizeBy`). Typing: `TypeStart`, cursor `typeCur` / `typeAnc` (picked between), `typeScroll`. Divide on any polygon: `EdDivideAny` (`EdCutOf&`, `EdAlong#` for the neighbours' spots). `BIN_W` is a variable (dragged: `DockFrame`, `DockAt`, `DockClamp` in Layout; at least `BIN_MIN`); `PANEL_W` stays `PANEL_MIN` (Rick didn't want the panel dragged). The bin's tiles go `BinCols` across, `BinTS` big (prefabs 64; PICTURES `picTS`, Shift+wheel `PicTileWheel`, `pic_size=`, at most BIN_W - 14; thumbs remade at that size, 8 a frame). HELP is
-paged: `HelpTopic NAME` then `HelpAdd "KEYS|text"` / `"#HEADING"`; `draw` is
+paged: `HelpTopic NAME` then `HelpAdd "KEYS|text"` / `"#HEADING"` (a long page scrolls: `helpScr`, HelpLay draws only between `helpCT`/`helpCB`); `draw` is
 reserved (DRAW), as is `helpPage` vs a SUB `HelpPage`.
 
 ## Bevel (UI/BEVEL)
@@ -329,6 +332,30 @@ twins). INSIDE (top bar panel button 17, Ctrl+B, `viewBacks`): ViewRender
 turns rCull off and RasterTri draws back faces red (`rBacks`; bin icons and
 export set it 0). Without it a moved plane
 cracked open, and points left mid-edge by a cut stuck out.
+WALK / FLY (UI/WALK, `fpOn` 1 / 2; V, Shift+V, `FpBtn` at the view's bottom left):
+UiFrame hands over (`FpFrame`) after the key loop, UiKey to `FpKey`. The camera stays
+the orbit one: `FpCamera` puts camT camDist ahead of the eye along camYaw/camPitch, so
+leaving (`FpStop`, camDist back to `fpDist0`) is pixel-identical. Mouse look by deltas
+between readings; `FpRecentre` near the edge, then the first reading that changes is
+the new start (`fpWX`): on a scaled window (Xvfb) a warp's reading and the next move's
+are in different terms - a fixed centre turned the view 20 degrees. WALK: `FpMoveH`
+(slides), `FpWall` (rays at step / middle / eye height + fpH/4 against triangles
+1..sceneTN not lying flat, Moller-Trumbore both sides), `FpFloor#` / `FpCeil#`
+(`FpTriY` barycentric in x/z), jump `fpJN` x `FpUnit#` (the snap), g = 16.3 x jump
+(each jump ~.35 s up; at least 8 x eye). The body (`FpBodyFind`, WALK from orbiting):
+the selected parts, else the part named `player` - feet on its box's bottom, `fpH#` 92%
+of its height, `fpR#` half its narrower side; `FpIsBody` keeps it out of ViewRender and
+the collisions. `rNear` (VIEW: the near cut) shrinks with a
+small eye. Test with real XTEST keys (`xdotool keydown w` after windowfocus) and
+`mousemove_relative`.
+SMART GUIDES (UI/SMART, [SG] top bar = PanelBtn 18, `sgOn`, `smart_guides=`): as
+DRAW's. `SgBegin` (DragStart, MOVE only) boxes the selection (`sgML#/sgMH#`) and every
+other part (`sgLo/sgHi`, 1..`sgBN`; box 0 the world's zero) from triangles 1..holeTN.
+DragUpdate's three branches hand the raw move to `DragFit`: `SgFit` pulls each free
+axis onto the nearest side within SG_PX screen pixels (`SgTol#`; pairs `SgPair`: low /
+high with low / high, middle with middle), the grid snaps the rest, `SgCollect` lists
+what lines up; `SgDraw` (UiDraw, after GzDraw) dashes both faces on the plane and a
+line between. `sgN` would be SGN: `sgBN`.
 SNAP TO GRID (UI/ALIGN `SnDraw`/`SnClick`, `snAx` its X Y Z; at 880 under
 SAME, in E at EdSameY + 90): `SnapDo` moves each selected part (a group as
 one) by its triangles' box low corner; in E `EdSnap` puts the picked

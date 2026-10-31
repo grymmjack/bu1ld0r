@@ -36,6 +36,7 @@ DIM SHARED quitAsk
 DIM SHARED qCtrl, qShift, qAlt ' (the modifier keys as the key queue has them)
 DIM SHARED helpLine$(320), helpPg(320), helpN ' (HELP: its lines - "KEYS|what they do", "#HEADING" - and which page each is on)
 DIM SHARED hpName$(16), hpN, helpPage ' (its pages, and the one shown)
+DIM SHARED helpScr, helpScrPg, helpCT, helpCB ' (rows a long page is scrolled down, for which page; the lines drawn only between helpCT and helpCB)
 CONST NP_N = 16 ' (the numpad's keys: NumpadHeld)
 DIM SHARED npHeld(NP_N), npT#(NP_N) ' (each numpad key held last frame; when it was pressed: -1 once it's been used)
 DIM SHARED guidesOn ' (GUIDES, Ctrl+H: the view's guides shown)

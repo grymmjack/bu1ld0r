@@ -491,6 +491,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Keys | What it does |
 |---|---|
 | GRID | shadows of what's selected on the floor and walls |
+| SG | (top bar) smart guides: a dragged part's sides and middle snap to other parts' - lined up, or sitting on / beside them - a dashed line shows it. Alt: free |
 
 #### WHERE IT GROWS AND TURNS FROM
 
@@ -549,7 +550,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | J or CONNECT | a new edge across a face: between the middles of two of its picked edges (3), or two of its picked corners (1) |
 | O or LOOP | a ring of new edges round the part, across the picked edge, through each four-sided face in turn: POSITION slides it (near an edge: a thin face along it), CUTS makes more. Enter / APPLY: made; Esc: as it was |
 | H / V | divide faces across / down |
-| M | faces joined into one (angled ones laid flat); points or an edge made one point |
+| M | picked faces joined into one face (angled ones laid flat); picked points or an edge made one point. Not the parts' MERGE |
 | Shift+M / N | each face drawn to a point (a cone, a pyramid);  N: flip faces |
 | MEND | cracks and holes closed, every face turned to face out, points on a face's edge joined into it (E does that to an old merge) |
 | Shift+F / FLATTEN | each picked face laid flat (a bent one shows two shades): its corners moved onto the plane that fits them best (within 3 degrees of level or upright: exactly). Points / edges: all onto one plane |
@@ -794,6 +795,46 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 |---|---|
 | Ctrl+E / EXPORT | export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg |
 | TIDIED | (the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so |
+
+</details>
+
+<details>
+<summary><b>WALK, FLY</b></summary>
+
+#### GOING THROUGH THE MODEL (the buttons at the view's bottom left)
+
+| Keys | What it does |
+|---|---|
+| V / WALK | on your feet, looking level: the ground and the model's tops hold you up, walls stop you, a ledge under a fifth of your height is stepped up |
+| Your body | the selected part, else the part named player (in the parts list): you start where it stands, as tall (your eyes 92% up it) and as wide, and it isn't drawn or bumped into. Neither: from under where the camera was, as tall as last time |
+| Shift+V / FLY | from where the camera is, straight through anything |
+| Mouse | look round (the pointer is hidden) |
+| W A S D / arrows | forward, left, back, right (Shift: run / fast) |
+| Tab | WALK to FLY and back |
+| Esc / V / right click | back to orbiting - round a point in front of you, the view as it was |
+
+#### WALK
+
+| Keys | What it does |
+|---|---|
+| Space | jump |
+| Wheel | taller / shorter (your eye's height): tall enough to see over a box, short enough to walk under a table |
+| [ / ] | the jump: a grid step lower / higher (it says how high - a jump that high gets you onto a top that high) |
+| 1-5 | the grid (1/8 1/16 1/32 1/64 OFF) - the jump's steps; OFF: 1/64 |
+
+#### FLY
+
+| Keys | What it does |
+|---|---|
+| E / Space | up |
+| Q / C | down |
+| Wheel | faster / slower |
+
+#### REMEMBERED
+
+| Keys | What it does |
+|---|---|
+| bu1ld0r.cfg | walk_eye=, walk_jump= (grid steps) and fly_speed= - kept when you leave |
 
 </details>
 <!-- keys:end -->

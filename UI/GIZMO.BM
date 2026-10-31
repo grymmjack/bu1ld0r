@@ -25,7 +25,7 @@ FUNCTION AxisCol~& (a, bright)
 END FUNCTION
 
 FUNCTION GzShown
-    IF placeKind OR LEN(pmRef$) > 0 OR orbitOn OR panOn THEN EXIT FUNCTION
+    IF placeKind OR LEN(pmRef$) > 0 OR orbitOn OR panOn OR fpOn THEN EXIT FUNCTION
     IF edPart THEN
         EdBox: GzShown = (edCnt > 0)
     ELSE

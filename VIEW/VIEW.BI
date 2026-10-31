@@ -23,6 +23,7 @@ DIM SHARED rOrtho, rSpan ' (rOrtho: a model's picture - flat, rSpan cells across
 DIM SHARED rLX, rLY, rLZ ' (the light: which way it comes from)
 DIM SHARED rShadeLo, rShadeK ' (shade = lo + k x lit)
 DIM SHARED rCull ' (faces turned away left out)
+DIM SHARED rNear ' (the near cut, in front of the eye: .01, less walking small)
 DIM SHARED rBacks, viewBacks ' (INSIDE / Ctrl+B: faces seen from behind drawn red instead of left out)
 DIM SHARED rTexSh ' (the shade on the triangle a picture's being drawn on)
 DIM SHARED rGhost ' (drawing the ghost: see-through, and not in rId)

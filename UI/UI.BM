@@ -241,6 +241,7 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 11 TO 15: SliderRect 3, x, w: x = x + w + 14 + (k - 11) * 42: y = 3: w = 40 ' (the snap: in the top bar, after GRID's slider)
         CASE 16: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6: y = 3: w = 64 ' (GUIDES, after it)
         CASE 17: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 70: y = 3: w = 64 ' (INSIDE, after that)
+        CASE 18: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 140: y = 3: w = 34 ' (SG: smart guides)
         CASE 21: x = PX0 + 100: y = 58: w = 24
         CASE 22: x = PX0 + 206: y = 58: w = 24
         CASE 23: x = PX0 + 158: y = 32: w = 72
@@ -271,6 +272,7 @@ FUNCTION PanelBtnName$ (k)
         CASE 31 TO 37: PanelBtnName$ = LTRIM$(STR$(dieN(k - 30)))
         CASE 16: PanelBtnName$ = "GUIDES"
         CASE 17: PanelBtnName$ = "INSIDE"
+        CASE 18: PanelBtnName$ = "SG"
     END SELECT
 END FUNCTION
 
@@ -471,12 +473,14 @@ SUB UiFrame
             CASE -100303, -100304: qShift = 0
             CASE 100307, 100308: qAlt = -1
             CASE -100307, -100308: qAlt = 0
+            CASE IS < 0
+                IF fpOn THEN FpKeyUp -k& ' (walking: letters let go, either case)
             CASE IS > 0
                 kCtrl = qCtrl: kShift = qShift: kAlt = qAlt
                 IF k& >= 100000 THEN ' (Num Lock, Caps Lock...: nothing to do)
                 ELSE
                     f = NumpadSent(k&) ' (the numpad's: a view key - unless typing, painting, a list or HELP is up: then the key it is)
-                    IF f > 0 AND typeField = 0 AND pntOn = 0 AND openOn = 0 AND helpOn = 0 AND askOn = 0 AND txOn = 0 AND kCtrl = 0 AND kAlt = 0 THEN
+                    IF f > 0 AND typeField = 0 AND pntOn = 0 AND openOn = 0 AND helpOn = 0 AND askOn = 0 AND txOn = 0 AND fpOn = 0 AND kCtrl = 0 AND kAlt = 0 THEN
                         NumpadKey f: npT#(f) = -1
                     ELSE
                         UiKey k&: f = 0
@@ -489,6 +493,7 @@ SUB UiFrame
     kCtrl = _KEYDOWN(100306) OR _KEYDOWN(100305)
     kAlt = _KEYDOWN(100308) OR _KEYDOWN(100307)
     IF NOT kCtrl THEN qCtrl = 0
+    IF fpOn THEN FpFrame: EXIT SUB ' (walking / flying: the mouse and keys are its)
     IF pntOn THEN PntFrame: EXIT SUB ' (painting: the window's the painter's)
     IF askOn THEN AskFrame: EXIT SUB
     IF openOn THEN OpenFrame: EXIT SUB
@@ -508,6 +513,7 @@ SUB UiFrame
     lx = mX - vX0: ly = mY - vY0
     inView = InRect(mX, mY, vX0, vY0, vW, vH)
     onRef = 0: IF inView THEN onRef = RefAt(mX, mY) ' (REF's controls, in the view's top right)
+    IF mP1 AND inView THEN k = FpBtnAt(mX, mY): IF k THEN FpStart k: EXIT SUB ' (WALK / FLY)
     GzUpdate
 
     ' The camera: right drag turns round, middle (or Shift + right) drag pans, the wheel zooms
@@ -608,6 +614,8 @@ SUB UiFrame
             IF InRect(mX, mY, x, y, w, h) THEN GuidesToggle
             PanelBtn 17, x, y, w, h
             IF InRect(mX, mY, x, y, w, h) THEN BacksToggle
+            PanelBtn 18, x, y, w, h
+            IF InRect(mX, mY, x, y, w, h) THEN SgToggle
             topSlide = SliderAt(mX, mY)
         ELSEIF mX < BIN_W THEN
             BinClick
@@ -727,6 +735,7 @@ END FUNCTION
 SUB UiKey (k&)
     DIM p, st, ax, i
     IF pntOn THEN PntKey k&: EXIT SUB
+    IF fpOn THEN FpKey k&: EXIT SUB
     IF typeField THEN TypeKey k&: EXIT SUB
     IF askOn THEN
         IF k& = 27 THEN AskAnswer 3
@@ -743,6 +752,8 @@ SUB UiKey (k&)
             CASE 19200, 18432: helpPage = helpPage - 1: IF helpPage < 1 THEN helpPage = hpN
             CASE 19712, 20480, 9: helpPage = helpPage + 1: IF helpPage > hpN THEN helpPage = 1
             CASE 49 TO 57: IF k& - 48 <= hpN THEN helpPage = k& - 48
+            CASE 18688: HelpScrFix: helpScr = Clamp(helpScr - 10, 0, HelpScrMax) ' (PgUp / PgDn: a long page up and down)
+            CASE 20736: HelpScrFix: helpScr = Clamp(helpScr + 10, 0, HelpScrMax)
         END SELECT
         EXIT SUB
     END IF
@@ -834,6 +845,8 @@ SUB UiKey (k&)
         CASE 117, 85: UseUnlink ' (U)
         CASE 109, 77: SelMerge ' (M: the selected parts made one)
         CASE 116, 84: TidyToggle ' (T)
+        CASE 118: FpStart 1 ' (V: walk)
+        CASE 86: FpStart 2 ' (Shift+V: fly)
         CASE 18176: ViewHome ' (Home)
         CASE 9 ' (Tab: the next part)
             IF pN > 0 THEN
@@ -1656,6 +1669,7 @@ SUB DragStart
         dragSX0(i) = pSX(i): dragSY0(i) = pSY(i): dragSZ0(i) = pSZ(i): dragRX0(i) = pRX(i): dragRY0(i) = pRY(i): dragRZ0(i) = pRZ(i)
     NEXT
     IF tfMode = 1 THEN TfNatAll ' (SCALE: each scaled part's own size, so its size can land on the grid)
+    sgGN = 0: IF tfMode = 0 THEN SgBegin ' (MOVE: the boxes smart guides line up)
     dragC = gzC: MeshBounds dragLo, dragHi, -1 ' (SCALE / TURN: round the widget's middle)
     IF NOT gzOk THEN dragC.x = (dragLo.x + dragHi.x) / 2: dragC.y = (dragLo.y + dragHi.y) / 2: dragC.z = (dragLo.z + dragHi.z) / 2
     IF dragVert THEN ' (a wall facing you, through the grab: only its up and down is used)
@@ -1677,14 +1691,11 @@ SUB DragUpdate (lx, ly)
         AxisVec offA, dragN.x, dragN.y, dragN.z
         RayPlane lx, ly, dragG, dragN, hit, ok
         IF ok = 0 THEN EXIT SUB
-        tx = dragX0(dragFirst) + (hit.x - dragG.x): ty = dragY0(dragFirst) + (hit.y - dragG.y): tz = dragZ0(dragFirst) + (hit.z - dragG.z)
-        IF snapStep > 0 AND NOT kAlt THEN
-            tx = INT(tx / snapStep + .5) * snapStep: ty = INT(ty / snapStep + .5) * snapStep: tz = INT(tz / snapStep + .5) * snapStep
-        END IF
-        dx = tx - dragX0(dragFirst): dy = ty - dragY0(dragFirst): dz = tz - dragZ0(dragFirst)
+        dx = hit.x - dragG.x: dy = hit.y - dragG.y: dz = hit.z - dragG.z
         IF offA = 1 THEN dx = 0
         IF offA = 2 THEN dy = 0
         IF offA = 3 THEN dz = 0
+        DragFit dx, dy, dz, offA <> 1, offA <> 2, offA <> 3
         FOR i = 1 TO pN
             IF pSel(i) THEN pX(i) = dragX0(i) + dx: pY(i) = dragY0(i) + dy: pZ(i) = dragZ0(i) + dz
         NEXT
@@ -1695,10 +1706,10 @@ SUB DragUpdate (lx, ly)
     IF a THEN ' (along one axis: the grabbed part's place on it snaps)
         AxisVec a, ax, ay, az
         d# = AxisAt#(lx, ly, dragG, a) - AxisAt#(dragLX0, dragLY0, dragG, a)
-        t0 = dragX0(dragFirst) * ax + dragY0(dragFirst) * ay + dragZ0(dragFirst) * az
-        IF snapStep > 0 AND NOT kAlt THEN d# = INT((t0 + d#) / snapStep + .5) * snapStep - t0
+        dx = ax * d#: dy = ay * d#: dz = az * d#
+        DragFit dx, dy, dz, a = 1, a = 2, a = 3
         FOR i = 1 TO pN
-            IF pSel(i) THEN pX(i) = dragX0(i) + ax * d#: pY(i) = dragY0(i) + ay * d#: pZ(i) = dragZ0(i) + az * d#
+            IF pSel(i) THEN pX(i) = dragX0(i) + dx: pY(i) = dragY0(i) + dy: pZ(i) = dragZ0(i) + dz
         NEXT
         ModelChanged
         EXIT SUB
@@ -1707,17 +1718,26 @@ SUB DragUpdate (lx, ly)
     IF ok = 0 THEN EXIT SUB
     dx = hit.x - dragG.x: dy = hit.y - dragG.y: dz = hit.z - dragG.z
     IF dragVert THEN dx = 0: dz = 0 ELSE dy = 0
-    ' The part grabbed lands on the grid; the rest move with it
-    tx = dragX0(dragFirst) + dx: ty = dragY0(dragFirst) + dy: tz = dragZ0(dragFirst) + dz
-    IF snapStep > 0 AND NOT kAlt THEN
-        tx = INT(tx / snapStep + .5) * snapStep: ty = INT(ty / snapStep + .5) * snapStep: tz = INT(tz / snapStep + .5) * snapStep
-    END IF
-    dx = tx - dragX0(dragFirst): dy = ty - dragY0(dragFirst): dz = tz - dragZ0(dragFirst)
-    IF dragVert THEN dx = 0: dz = 0 ELSE dy = 0
+    ' The part grabbed lands on a smart guide or the grid; the rest move with it
+    DragFit dx, dy, dz, NOT dragVert, dragVert, NOT dragVert
     FOR i = 1 TO pN
         IF pSel(i) THEN pX(i) = dragX0(i) + dx: pY(i) = dragY0(i) + dy: pZ(i) = dragZ0(i) + dz
     NEXT
     ModelChanged
+END SUB
+
+' A drag's move (dx, dy, dz) on the ways free (fx, fy, fz): onto a smart
+' guide where one's near, else the part grabbed onto the grid (Alt: neither)
+SUB DragFit (dx, dy, dz, fx, fy, fz)
+    DIM gx, gy, gz, t
+    gx = fx: gy = fy: gz = fz
+    IF sgOn AND NOT kAlt THEN SgFit dx, dy, dz, gx, gy, gz ELSE gx = 0: gy = 0: gz = 0
+    IF snapStep > 0 AND NOT kAlt THEN
+        IF fx <> 0 AND gx = 0 THEN t = dragX0(dragFirst) + dx: dx = INT(t / snapStep + .5) * snapStep - dragX0(dragFirst)
+        IF fy <> 0 AND gy = 0 THEN t = dragY0(dragFirst) + dy: dy = INT(t / snapStep + .5) * snapStep - dragY0(dragFirst)
+        IF fz <> 0 AND gz = 0 THEN t = dragZ0(dragFirst) + dz: dz = INT(t / snapStep + .5) * snapStep - dragZ0(dragFirst)
+    END IF
+    IF sgOn AND NOT kAlt THEN SgCollect dx, dy, dz, fx, fy, fz ELSE sgGN = 0
 END SUB
 
 SUB DragCancel
@@ -1782,15 +1802,17 @@ SUB UiDraw
     ' The view
     IF ovDirty THEN ViewOverlay
     _PUTIMAGE (vX0, vY0), viewImg&
-    IF guidesOn THEN ' (GUIDES / Ctrl+H off: just the model)
+    IF guidesOn AND fpOn = 0 THEN ' (GUIDES / Ctrl+H off, or walking / flying: just the model)
         _PUTIMAGE (vX0, vY0), ovImg&
         GzDraw
+        SgDraw
         PivDraw
         IF edRect THEN LINE (vX0 + edRX0, vY0 + edRY0)-(mX, mY), cHi, B
     END IF
     IF penOn THEN PenDraw
     IF txOn THEN TxDraw
     RefDraw
+    FpDraw
     IF selRect AND (ABS(mX - vX0 - selRX0) > 2 OR ABS(mY - vY0 - selRY0) > 2) THEN LINE (vX0 + selRX0, vY0 + selRY0)-(mX, mY), cHi, B
     LINE (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1), cLine, B
     IF TidyOn THEN
@@ -1823,6 +1845,7 @@ SUB UiDraw
     NEXT
     PanelBtn 16, x, y, w, h: Btn x, y, w, h, PanelBtnName$(16), guidesOn
     PanelBtn 17, x, y, w, h: Btn x, y, w, h, PanelBtnName$(17), viewBacks
+    PanelBtn 18, x, y, w, h: Btn x, y, w, h, PanelBtnName$(18), sgOn
     t$ = APP_NAME$ + " " + APP_VERSION$
     IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
     IF mdlDirty THEN t$ = "* not saved   " + t$
@@ -2004,7 +2027,7 @@ SUB HelpLay (ink, x0, y0, w, pg, rows)
             l$ = helpLine$(i): y = y0 + rows * 19
             IF LEFT$(l$, 1) = "#" THEN
                 IF rows > 0 THEN rows = rows + 1: y = y + 19 * .5: rows = rows - .5 ' (a little room above a heading)
-                IF ink THEN
+                IF ink AND y >= helpCT AND y + 22 <= helpCB THEN
                     Txt x0, y + 4, MID$(l$, 2), cHi
                     LINE (x0, y + 21)-(x0 + w - 200, y + 21), _RGB32(60, 50, 96)
                 END IF
@@ -2012,7 +2035,7 @@ SUB HelpLay (ink, x0, y0, w, pg, rows)
             ELSE
                 p = INSTR(l$, "|")
                 IF p THEN k$ = LEFT$(l$, p - 1): t$ = MID$(l$, p + 1) ELSE k$ = "": t$ = l$
-                IF ink AND LEN(k$) THEN Txt x0 + 4, y, k$, _RGB32(120, 225, 255)
+                IF ink AND LEN(k$) > 0 AND y >= helpCT AND y + 16 <= helpCB THEN Txt x0 + 4, y, k$, _RGB32(120, 225, 255)
                 tw = (w - 168 - 24 - IIF(p > 0, kw * 8 + 12, 0)) \ 8: IF tw < 20 THEN tw = 20 ' (a line with keys: beside them; without: the whole width)
                 first = -1
                 DO
@@ -2022,7 +2045,7 @@ SUB HelpLay (ink, x0, y0, w, pg, rows)
                         cut = _INSTRREV(LEFT$(t$, tw + 1), " "): IF cut < 2 THEN cut = tw + 1
                         piece$ = LEFT$(t$, cut - 1): t$ = LTRIM$(MID$(t$, cut))
                     END IF
-                    IF ink THEN Txt x0 + 4 + IIF(p > 0, kw * 8 + 12, 0), y0 + rows * 19, piece$, IIFC~&(p > 0, cText, cDim)
+                    IF ink AND y0 + rows * 19 >= helpCT AND y0 + rows * 19 + 16 <= helpCB THEN Txt x0 + 4 + IIF(p > 0, kw * 8 + 12, 0), y0 + rows * 19, piece$, IIFC~&(p > 0, cText, cDim)
                     rows = rows + 1: first = 0
                 LOOP WHILE LEN(t$)
             END IF
@@ -2058,17 +2081,46 @@ SUB HelpDraw
         END IF
         Txt x + 18, ty + 5, LTRIM$(STR$(i)) + " " + hpName$(i), c
     NEXT
-    HelpLay -1, x + 168, y + 44, w, helpPage, rows
+    HelpScrFix
+    helpCT = y + 40: helpCB = y + h - 26
+    HelpLay -1, x + 168, y + 44 - helpScr * 19, w, helpPage, rows
+    IF HelpScrMax > 0 THEN ' (a long page: where in it, and how to see the rest)
+        i = h - 48: ty = y + 40 + i * helpScr / (HelpScrMax + (h - 64) \ 19)
+        LINE (x + w - 8, y + 40)-(x + w - 5, y + h - 8), _RGB32(40, 32, 64), BF
+        LINE (x + w - 8, ty)-(x + w - 5, ty + i * ((h - 64) \ 19) / (HelpScrMax + (h - 64) \ 19)), cHi, BF
+        t$ = IIFS$(helpScr < HelpScrMax, "wheel / PgDn: more", "wheel: next topic")
+        LINE (x + w - 24 - 8 * LEN(t$), y + h - 22)-(x + w - 12, y + h - 4), _RGBA32(14, 12, 26, 250), BF
+        Txt x + w - 18 - 8 * LEN(t$), y + h - 19, t$, cDim
+    END IF
 END SUB
+
+' A new page shown: from its top
+SUB HelpScrFix
+    IF helpScrPg <> helpPage THEN helpScr = 0: helpScrPg = helpPage
+END SUB
+
+' How far the page shown can scroll (rows)
+FUNCTION HelpScrMax
+    DIM x, y, w, h, rows, m
+    HelpRect x, y, w, h
+    HelpLay 0, 0, 0, w, helpPage, rows
+    m = rows - (h - 64) \ 19: IF m < 0 THEN m = 0
+    HelpScrMax = m
+END FUNCTION
 
 ' While help is open: a click on a topic shows it; a click outside closes it
 SUB HelpFrame
     DIM x, y, w, h, i
     HelpRect x, y, w, h
-    IF mWheel <> 0 AND InRect(mX, mY, x, y, w, h) THEN
-        helpPage = helpPage + SGN(mWheel)
-        IF helpPage < 1 THEN helpPage = hpN
-        IF helpPage > hpN THEN helpPage = 1
+    HelpScrFix
+    IF mWheel <> 0 AND InRect(mX, mY, x, y, w, h) THEN ' (a long page scrolls first; past its end, the next page)
+        IF (mWheel > 0 AND helpScr < HelpScrMax) OR (mWheel < 0 AND helpScr > 0) THEN
+            helpScr = Clamp(helpScr + SGN(mWheel) * 3, 0, HelpScrMax)
+        ELSE
+            helpPage = helpPage + SGN(mWheel)
+            IF helpPage < 1 THEN helpPage = hpN
+            IF helpPage > hpN THEN helpPage = 1
+        END IF
     END IF
     IF NOT mP1 THEN EXIT SUB
     IF NOT InRect(mX, mY, x, y, w, h) THEN helpOn = 0: EXIT SUB
@@ -2182,6 +2234,7 @@ SUB HelpSetup
     HelpAdd "Ctrl+A C X V|all, copy, cut, paste. Backspace / Delete (Ctrl: a word)"
     HelpAdd "#SEEING WHERE"
     HelpAdd "GRID|shadows of what's selected on the floor and walls"
+    HelpAdd "SG|(top bar) smart guides: a dragged part's sides and middle snap to other parts' - lined up, or sitting on / beside them - a dashed line shows it. Alt: free"
     HelpAdd "#WHERE IT GROWS AND TURNS FROM"
     HelpAdd "Ctrl+Alt|shows the selection box's points: the middle, each side's middle, each corner"
     HelpAdd "Ctrl+Alt+click|one of them (or a spot on the shape) - the widget sits there: SCALE grows from it (that side stays put), TURN goes round it. It follows a MOVE; the middle, or another selection: back to usual"
@@ -2358,6 +2411,26 @@ SUB HelpSetup
     HelpAdd "#EXPORT"
     HelpAdd "Ctrl+E  EXPORT|export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg"
     HelpAdd "TIDIED|(the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so"
+    HelpTopic "WALK, FLY"
+    HelpAdd "#GOING THROUGH THE MODEL (the buttons at the view's bottom left)"
+    HelpAdd "V  WALK|on your feet, looking level: the ground and the model's tops hold you up, walls stop you, a ledge under a fifth of your height is stepped up"
+    HelpAdd "Your body|the selected part, else the part named player (in the parts list): you start where it stands, as tall (your eyes 92% up it) and as wide, and it isn't drawn or bumped into. Neither: from under where the camera was, as tall as last time"
+    HelpAdd "Shift+V  FLY|from where the camera is, straight through anything"
+    HelpAdd "Mouse|look round (the pointer is hidden)"
+    HelpAdd "W A S D  arrows|forward, left, back, right (Shift: run / fast)"
+    HelpAdd "Tab|WALK to FLY and back"
+    HelpAdd "Esc  V  right click|back to orbiting - round a point in front of you, the view as it was"
+    HelpAdd "#WALK"
+    HelpAdd "Space|jump"
+    HelpAdd "Wheel|taller / shorter (your eye's height): tall enough to see over a box, short enough to walk under a table"
+    HelpAdd "[  ]|the jump: a grid step lower / higher (it says how high - a jump that high gets you onto a top that high)"
+    HelpAdd "1-5|the grid (1/8 1/16 1/32 1/64 OFF) - the jump's steps; OFF: 1/64"
+    HelpAdd "#FLY"
+    HelpAdd "E  Space|up"
+    HelpAdd "Q  C|down"
+    HelpAdd "Wheel|faster / slower"
+    HelpAdd "#REMEMBERED"
+    HelpAdd "bu1ld0r.cfg|walk_eye=, walk_jump= (grid steps) and fly_speed= - kept when you leave"
     helpPage = 1
 END SUB
 
