@@ -37,6 +37,7 @@ DIM SHARED tdStamp AS LONG
 REDIM SHARED tdQ(0) AS DOUBLE ' (each point's quadric - the planes round it, how far from them: 10 numbers, then their weight)
 REDIM SHARED tdOrd(0) AS LONG, tdUse(0) AS LONG, tdLin(0) AS LONG ' (points by x; how many polygons use each, and how many on a straight edge)
 CONST TD_TJ = 256
+DIM SHARED tdTol# ' (how near an edge a point counts as on it: 0 the usual .00004 - MEND sets its own)
 DIM SHARED tjW(TD_TJ) AS LONG, tjS(TD_TJ) AS DOUBLE ' (the points on an edge, from its start)
 
 ' A point's neighbours: each edge out, how many triangles have it, its colours

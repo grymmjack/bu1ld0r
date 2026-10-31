@@ -10,12 +10,29 @@ SUB PenToggle
     IF placeKind THEN PlaceStop
     IF txOn THEN TxStop
     SelNone: ovDirty = -1
-    penOn = -1: penN = 0: penDown = 0
-    Msg "PEN: click corners on the ground, click + drag for a curve (Ctrl: one side). Click the first point or Enter: made. Backspace: back a point. Esc / P: stop"
+    penOn = -1: penN = 0: penDown = 0: pdOn = 0
+    IF penWid# <= 0 THEN penWid# = .125: penFill = -1
+    IF penSides < 6 THEN penSides = 32
+    PenToolMsg
+END SUB
+
+SUB PenToolMsg
+    SELECT CASE penTool
+        CASE 0: Msg "PEN: click corners on the ground, click + drag for a curve (Ctrl: one side). Click the first point or Enter: made. Backspace: back a point. R E L: the other tools. Esc / P: stop"
+        CASE 1: Msg "RECT: drag on the ground (Shift: square, Ctrl: from the middle). F: filled / an outline, [ ]: its width. Esc: stop"
+        CASE 2: Msg "ELLIPSE: drag on the ground (Shift: a circle, Ctrl: from the middle). F: filled / an outline, [ ]: its width, < >: sides. Esc: stop"
+        CASE 3: Msg "LINE: drag on the ground (Shift: at 45 degrees). [ ]: how wide. Esc: stop"
+    END SELECT
+END SUB
+
+SUB PenToolSet (t)
+    IF t = penTool THEN EXIT SUB
+    IF penN > 0 THEN Msg "Finish the outline first (Enter), or Esc lets it go": EXIT SUB
+    penTool = t: pdOn = 0: PenToolMsg
 END SUB
 
 SUB PenStop
-    penOn = 0: penN = 0: penDown = 0
+    penOn = 0: penN = 0: penDown = 0: pdOn = 0
     Msg "Pen put away"
 END SUB
 
@@ -34,7 +51,9 @@ END FUNCTION
 ' A press in the view: a new point, or the first one again (closing)
 SUB PenPress (lx, ly)
     DIM x#, z#
+    IF PenBarAt(mX, mY) THEN PenBar PenBarAt(mX, mY): EXIT SUB
     IF PenGround(lx, ly, x#, z#) = 0 THEN Msg "Point at the ground (turn the view to look down at it)": EXIT SUB
+    IF penTool > 0 THEN pdOn = -1: pdX0# = x#: pdZ0# = z#: pdX1# = x#: pdZ1# = z#: pdCtr = kCtrl: EXIT SUB
     penPX = mX: penPY = mY
     IF penN >= 3 AND penHot THEN penDown = 2: EXIT SUB
     IF penN >= PEN_MAX THEN Msg "That's as many points as a shape takes: Enter makes it": EXIT SUB
@@ -52,6 +71,11 @@ SUB PenFrame (lx, ly)
     DIM x#, z#, sx, sy, ok, i
     penHOk = PenGround(lx, ly, x#, z#)
     IF penHOk THEN penHX# = x#: penHZ# = z#
+    IF penTool > 0 THEN
+        IF pdOn AND mB1 AND penHOk THEN PenDragTo x#, z#
+        IF pdOn AND NOT mB1 THEN pdOn = 0: PenShapeMake
+        EXIT SUB
+    END IF
     penHot = 0
     IF penN >= 3 AND penDown <> 1 THEN
         ScrPt penAX#(1), 0, penAZ#(1), sx, sy, ok
@@ -75,6 +99,28 @@ END SUB
 
 ' Keys while the pen's out: -1 if it took the key
 FUNCTION PenKey (k&)
+    DIM st#
+    st# = snapStep: IF st# <= 0 THEN st# = 1 / 32
+    IF kShift THEN st# = st# * 4
+    SELECT CASE k&
+        CASE 114, 82: PenToolSet 1: PenKey = -1: EXIT FUNCTION
+        CASE 101, 69: PenToolSet 2: PenKey = -1: EXIT FUNCTION
+        CASE 108, 76: PenToolSet 3: PenKey = -1: EXIT FUNCTION
+        CASE 9: PenToolSet (penTool + 1) MOD 4: PenKey = -1: EXIT FUNCTION
+        CASE 112, 80: IF penTool > 0 THEN PenToolSet 0: PenKey = -1: EXIT FUNCTION
+        CASE 102, 70: PenBar 5: PenKey = -1: EXIT FUNCTION
+        CASE 91, 123: PenWidBy -st#: PenKey = -1: EXIT FUNCTION
+        CASE 93, 125: PenWidBy st#: PenKey = -1: EXIT FUNCTION
+        CASE 44, 60: PenBar 8: PenKey = -1: EXIT FUNCTION
+        CASE 46, 62: PenBar 9: PenKey = -1: EXIT FUNCTION
+    END SELECT
+    IF penTool > 0 THEN
+        IF k& = 27 THEN
+            IF pdOn THEN pdOn = 0: Msg "Let go (Esc again: put it away)" ELSE PenStop
+            PenKey = -1
+        END IF
+        EXIT FUNCTION
+    END IF
     SELECT CASE k&
         CASE 13
             IF penN >= 3 THEN PenMake ELSE Msg "A shape needs 3 points at least"
@@ -117,6 +163,8 @@ END SUB
 
 SUB PenDraw
     DIM i, sx, sy, ok, hx, hy, hok, c AS _UNSIGNED LONG, cH AS _UNSIGNED LONG, x#, z#, k, px, py, pok
+    PenBarDraw
+    IF penTool > 0 THEN PenShapeDraw: EXIT SUB
     VIEW SCREEN (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
     cH = _RGB32(60, 180, 255)
     FOR i = 1 TO penN - 1
@@ -218,3 +266,209 @@ SUB PenTurn (p AS V3)
     DIM y#
     y# = p.y: p.y = p.z: p.z = -y#
 END SUB
+
+' ---------------------------------------------------------------- RECT, ELLIPSE, LINE
+
+' The strip in the view: 1-4 the tools, 5 FILL / OUTLINE, 6-7 width - +, 8-9 sides - +
+SUB PenBarBtn (b, x, y, w, h)
+    y = vY0 + 44: h = 20
+    SELECT CASE b
+        CASE 1: x = 0: w = 40
+        CASE 2: x = 44: w = 48
+        CASE 3: x = 96: w = 72
+        CASE 4: x = 172: w = 48
+        CASE 5: x = 236: w = 72
+        CASE 6: x = 368: w = 20
+        CASE 7: x = 436: w = 20
+        CASE 8: x = 512: w = 20
+        CASE 9: x = 560: w = 20
+    END SELECT
+    x = vX0 + 8 + x
+END SUB
+
+FUNCTION PenBarAt (mx, my)
+    DIM b, x, y, w, h
+    FOR b = 1 TO 9
+        PenBarBtn b, x, y, w, h
+        IF InRect(mx, my, x, y, w, h) THEN PenBarAt = b: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+SUB PenBar (b)
+    DIM st#
+    st# = snapStep: IF st# <= 0 THEN st# = 1 / 32
+    IF kShift THEN st# = st# * 4
+    SELECT CASE b
+        CASE 1 TO 4: PenToolSet b - 1
+        CASE 5
+            penFill = NOT penFill
+            Msg IIFS$(penFill, "RECT / ELLIPSE: filled", "RECT / ELLIPSE: an outline" + STR$(VAL(Fmt$(penWid#))) + " wide ([ ]: wider / narrower)")
+        CASE 6: PenWidBy -st#
+        CASE 7: PenWidBy st#
+        CASE 8, 9
+            penSides = penSides + IIF(b = 9, 1, -1) * IIF(kShift, 16, 4)
+            IF penSides < 6 THEN penSides = 6
+            IF penSides > 128 THEN penSides = 128
+            Msg "ELLIPSE:" + STR$(penSides) + " sides"
+    END SELECT
+END SUB
+
+SUB PenWidBy (d#)
+    DIM m#
+    m# = snapStep: IF m# <= 0 THEN m# = 1 / 64
+    penWid# = VAL(Fmt$(penWid# + d#))
+    IF penWid# < m# THEN penWid# = m#
+    IF penWid# > 16 THEN penWid# = 16
+    Msg "Width" + STR$(penWid#) + " (a line, or a RECT / ELLIPSE outline) - [ ]: narrower / wider, Shift: 4 steps"
+END SUB
+
+SUB PenBarDraw
+    DIM b, x, y, w, h
+    FOR b = 1 TO 9
+        PenBarBtn b, x, y, w, h
+        SELECT CASE b
+            CASE 1 TO 4: Btn x, y, w, h, PenToolName$(b - 1), (penTool = b - 1)
+            CASE 5: Btn x, y, w, h, IIFS$(penFill, "FILLED", "OUTLINE"), 0
+            CASE 6: Btn x, y, w, h, "-", 0: Txt x - 56, y + 2, "WIDTH", cDim: Txt x + 24, y + 2, LEFT$(Fmt$(penWid#), 5), cText
+            CASE 7: Btn x, y, w, h, "+", 0
+            CASE 8: Btn x, y, w, h, "-", 0: Txt x - 48, y + 2, "SIDES", cDim: Txt x + 24, y + 2, LTRIM$(STR$(penSides)), cText
+            CASE 9: Btn x, y, w, h, "+", 0
+        END SELECT
+    NEXT
+END SUB
+
+' A drag's far end, kept square / round (Shift) or at 45 degrees (a line)
+SUB PenDragTo (x#, z#)
+    DIM dx#, dz#, m#, l#, a#
+    dx# = x# - pdX0#: dz# = z# - pdZ0#: pdCtr = kCtrl
+    IF kShift THEN
+        IF penTool = 3 THEN
+            l# = SQR(dx# * dx# + dz# * dz#): a# = _ATAN2(dz#, dx#)
+            a# = INT(a# / (_PI / 4) + .5) * (_PI / 4)
+            dx# = l# * COS(a#): dz# = l# * SIN(a#)
+            m# = snapStep: IF kAlt THEN m# = m# / 10
+            IF m# > 0 THEN dx# = INT(dx# / m# + .5) * m#: dz# = INT(dz# / m# + .5) * m#
+        ELSE
+            m# = ABS(dx#): IF ABS(dz#) > m# THEN m# = ABS(dz#)
+            dx# = m# * IIF(dx# < 0, -1, 1): dz# = m# * IIF(dz# < 0, -1, 1)
+        END IF
+    END IF
+    pdX1# = pdX0# + dx#: pdZ1# = pdZ0# + dz#
+END SUB
+
+' The drag as rings (SVG's: x, y = -z), ring 2 the outline's hole; 0 if it has no size
+FUNCTION PenShapeRings
+    DIM lx#, hx#, lz#, hz#, cx#, cz#, rx#, rz#, w#, i, a#, dx#, dz#, l#, nx#, nz#
+    REDIM svPX(300) AS DOUBLE, svPY(300) AS DOUBLE
+    REDIM svR0(4) AS LONG, svRN(4) AS LONG, svRE(4) AS LONG
+    svPN = 0: svRC = 0: svFull = 0: txRk$ = "" ' (the text's rings are gone: made again when wanted)
+    w# = penWid#
+    IF penTool = 3 THEN
+        dx# = pdX1# - pdX0#: dz# = pdZ1# - pdZ0#: l# = SQR(dx# * dx# + dz# * dz#)
+        IF l# < 1E-6 THEN EXIT FUNCTION
+        nx# = -dz# / l# * w# / 2: nz# = dx# / l# * w# / 2
+        PenRingNew
+        PenRingPt pdX0# + nx#, pdZ0# + nz#: PenRingPt pdX1# + nx#, pdZ1# + nz#
+        PenRingPt pdX1# - nx#, pdZ1# - nz#: PenRingPt pdX0# - nx#, pdZ0# - nz#
+        PenShapeRings = -1: EXIT FUNCTION
+    END IF
+    IF pdCtr THEN
+        dx# = ABS(pdX1# - pdX0#): dz# = ABS(pdZ1# - pdZ0#)
+        lx# = pdX0# - dx#: hx# = pdX0# + dx#: lz# = pdZ0# - dz#: hz# = pdZ0# + dz#
+    ELSE
+        lx# = pdX0#: hx# = pdX1#: IF hx# < lx# THEN SWAP lx#, hx#
+        lz# = pdZ0#: hz# = pdZ1#: IF hz# < lz# THEN SWAP lz#, hz#
+    END IF
+    IF hx# - lx# < 1E-6 OR hz# - lz# < 1E-6 THEN EXIT FUNCTION
+    IF penTool = 1 THEN
+        PenRingNew: PenRingPt lx#, lz#: PenRingPt hx#, lz#: PenRingPt hx#, hz#: PenRingPt lx#, hz#
+        IF penFill = 0 AND 2 * w# < hx# - lx# AND 2 * w# < hz# - lz# THEN
+            PenRingNew: PenRingPt lx# + w#, lz# + w#: PenRingPt hx# - w#, lz# + w#: PenRingPt hx# - w#, hz# - w#: PenRingPt lx# + w#, hz# - w#
+        END IF
+    ELSE
+        cx# = (lx# + hx#) / 2: cz# = (lz# + hz#) / 2: rx# = (hx# - lx#) / 2: rz# = (hz# - lz#) / 2
+        PenRingNew
+        FOR i = 0 TO penSides - 1
+            a# = i * 2 * _PI / penSides: PenRingPt cx# + rx# * COS(a#), cz# + rz# * SIN(a#)
+        NEXT
+        IF penFill = 0 AND w# < rx# AND w# < rz# THEN
+            PenRingNew
+            FOR i = 0 TO penSides - 1
+                a# = i * 2 * _PI / penSides: PenRingPt cx# + (rx# - w#) * COS(a#), cz# + (rz# - w#) * SIN(a#)
+            NEXT
+        END IF
+    END IF
+    PenShapeRings = -1
+END FUNCTION
+
+SUB PenRingNew
+    svRC = svRC + 1: svR0(svRC) = svPN + 1: svRN(svRC) = 0: svRE(svRC) = 1
+END SUB
+
+SUB PenRingPt (x#, z#)
+    svPN = svPN + 1: svPX(svPN) = x#: svPY(svPN) = -z#: svRN(svRC) = svRN(svRC) + 1
+END SUB
+
+' Let go: the shape made a flat mesh part a snap step thick, selected; the tool stays out
+SUB PenShapeMake
+    DIM r AS LONG, th#, t0 AS LONG, t AS LONG, p, id AS LONG, lo AS V3, hi AS V3
+    IF PenShapeRings = 0 THEN EXIT SUB
+    SvPrep 1E-7
+    th# = snapStep: IF th# <= 0 THEN th# = 1 / 32
+    p = pN + 1: IF p >= MAX_PARTS - 2 THEN Msg "No room for another part": EXIT SUB
+    t0 = tN
+    FOR r = 1 TO svRC
+        IF svRN(r) >= 3 AND (svRD(r) MOD 2) = 0 THEN SvSolid r, curCol, 0, th#
+    NEXT
+    IF tN <= t0 THEN tN = t0: Msg "Nothing came of that": EXIT SUB
+    FOR t = t0 + 1 TO tN ' (as the pen's: x, y, thickness -> x, height, z)
+        PenTurn tA(t): PenTurn tB(t): PenTurn tC(t)
+    NEXT
+    UndoPush
+    TriBounds t0 + 1, tN, lo, hi
+    PartFresh p, K_MESH, (lo.x + hi.x) / 2, lo.y, (lo.z + hi.z) / 2
+    pSX(p) = hi.x - lo.x: pSY(p) = hi.y - lo.y: pSZ(p) = hi.z - lo.z
+    IF pSX(p) < .001 THEN pSX(p) = .001
+    IF pSY(p) < .001 THEN pSY(p) = .001
+    IF pSZ(p) < .001 THEN pSZ(p) = .001
+    id = EmFromTris&(t0 + 1, tN, p, 0)
+    tN = t0
+    pN = p: MakeMeshPart p, id
+    SelNone: pSel(p) = -1
+    ModelChanged
+    Msg "Made: a flat " + LCASE$(PenToolName$(penTool)) + STR$(th#) + " thick (Y size / SCALE: thicker; E: extrude, bevel). Draw another, or Esc. Ctrl+Z: gone"
+END SUB
+
+' The drag as it'd be made, and where the pointer is
+SUB PenShapeDraw
+    DIM r AS LONG, j AS LONG, v AS LONG, sx, sy, ok, px, py, pok, fx, fy, fok
+    VIEW SCREEN (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
+    IF pdOn THEN
+        IF PenShapeRings THEN
+            FOR r = 1 TO svRC
+                pok = 0
+                FOR j = 0 TO svRN(r)
+                    v = svR0(r) + (j MOD svRN(r))
+                    ScrPt svPX(v), 0, -svPY(v), sx, sy, ok
+                    IF ok AND pok THEN LINE (px, py)-(sx, sy), cHi
+                    px = sx: py = sy: pok = ok
+                NEXT
+            NEXT
+        END IF
+    END IF
+    IF penHOk THEN
+        ScrPt penHX#, 0, penHZ#, sx, sy, ok
+        IF ok THEN LINE (sx - 5, sy)-(sx + 5, sy), cHi: LINE (sx, sy - 5)-(sx, sy + 5), cHi
+    END IF
+    VIEW
+    Txt vX0 + 8, vY0 + 24, PenToolName$(penTool) + " - drag on the ground (Shift: " + IIFS$(penTool = 3, "45 degrees", "square / round, Ctrl: from the middle") + "). R E L P: tools. Esc: stop", cHi
+END SUB
+
+FUNCTION PenToolName$ (t)
+    SELECT CASE t
+        CASE 0: PenToolName$ = "PEN"
+        CASE 1: PenToolName$ = "RECT"
+        CASE 2: PenToolName$ = "ELLIPSE"
+        CASE ELSE: PenToolName$ = "LINE"
+    END SELECT
+END FUNCTION

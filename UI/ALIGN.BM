@@ -473,6 +473,7 @@ END FUNCTION
 
 SUB SameDo (k)
     DIM r, i, a, n, w, best, v#, e#, er#, b#, m(8), vx, vy, vz, nm$
+    IF edPart THEN EdSame k: EXIT SUB ' (in E: the picked points / edges / faces)
     IF SelCount < 2 THEN Msg "Select two parts or more: the others are made like the first one you picked": EXIT SUB
     r = SameRef
     IF meshDirty THEN MeshBuild
@@ -526,4 +527,103 @@ SUB SameDo (k)
     END IF
     ModelChanged
     Msg "SAME " + nm$ + ":" + STR$(n) + IIFS$(n = 1, " part", " parts") + " made like part" + STR$(r) + IIFS$(LEN(pName$(r)) > 0, " (" + pName$(r) + ")", "") + " - Ctrl+Z: as they were"
+END SUB
+
+' ---------------------------------------------------------------- SNAP TO GRID
+
+' k 1 SNAP TO GRID, 2-4 its X Y Z (toggles: SAME's own are apart)
+SUB SnBtn (k, y0, x, y, w, h)
+    y = y0: h = 22
+    IF k = 1 THEN x = PX0: w = 147 ELSE x = PX0 + 152 + (k - 2) * 27: w = 25
+END SUB
+
+SUB SnDraw (y0)
+    DIM k, x, y, w, h, lit
+    IF y0 + 22 > scrH - BAR_H THEN EXIT SUB
+    FOR k = 1 TO 4
+        SnBtn k, y0, x, y, w, h: lit = 0
+        IF k > 1 THEN lit = snAx(k - 1)
+        Btn x, y, w, h, IIFS$(k = 1, "SNAP TO GRID", MID$("XYZ", k - 1, 1)), lit
+    NEXT
+END SUB
+
+FUNCTION SnClick (y0)
+    DIM k, x, y, w, h
+    IF y0 + 22 > scrH - BAR_H THEN EXIT FUNCTION
+    FOR k = 1 TO 4
+        SnBtn k, y0, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN
+            IF k = 1 THEN
+                SnapDo
+            ELSE
+                snAx(k - 1) = NOT snAx(k - 1)
+                Msg "SNAP TO GRID puts " + IIFS$(snAx(1), "X ", "") + IIFS$(snAx(2), "Y ", "") + IIFS$(snAx(3), "Z ", "") + "on the grid" + IIFS$(snAx(1) OR snAx(2) OR snAx(3), "", " - none on: it does nothing")
+            END IF
+            SnClick = -1: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
+
+' The step SNAP TO GRID goes to: the snap's (OFF: 1/32)
+FUNCTION SnapGridStep#
+    SnapGridStep# = snapStep: IF snapStep <= 0 THEN SnapGridStep# = 1 / 32
+END FUNCTION
+
+FUNCTION SnapRound# (v#, st#)
+    SnapRound# = INT(v# / st# + .5) * st#
+END FUNCTION
+
+FUNCTION SnapStepName$
+    DIM st#
+    st# = SnapGridStep#
+    IF st# >= 1 THEN SnapStepName$ = LTRIM$(STR$(st#)) ELSE SnapStepName$ = "1/" + LTRIM$(STR$(CINT(1 / st#)))
+END FUNCTION
+
+' SNAP TO GRID: in E the picked points (edges' / faces' corners; none picked: all of them)
+' each to the nearest grid line; else each selected part (a group as one) moved so its box's
+' low corner is on it - only the X Y Z lit
+SUB SnapDo
+    DIM i, j, t AS LONG, a, n, gk, st#, lo AS DOUBLE, hi AS DOUBLE, d#, most#
+    IF NOT (snAx(1) OR snAx(2) OR snAx(3)) THEN Msg "SNAP TO GRID: light X, Y or Z first": EXIT SUB
+    IF edPart THEN EdSnap: EXIT SUB
+    IF SelCount = 0 THEN Msg "Select parts to snap to the grid (or pick points in E)": EXIT SUB
+    st# = SnapGridStep#
+    IF meshDirty THEN MeshBuild
+    REDIM sd#(pN, 3), snIn(pN) AS _BYTE, snDn(pN) AS _BYTE
+    FOR i = 1 TO pN
+        IF pSel(i) AND snDn(i) = 0 THEN
+            gk = i: IF pGrp(i) THEN gk = -pGrp(i)
+            FOR j = 1 TO pN
+                snIn(j) = 0
+                IF pSel(j) THEN
+                    IF j = i OR (gk < 0 AND pGrp(j) = -gk) THEN snIn(j) = -1: snDn(j) = -1
+                END IF
+            NEXT
+            FOR a = 1 TO 3
+                IF snAx(a) THEN
+                    lo = 1E+30: hi = -1E+30
+                    FOR t = 1 TO holeTN
+                        IF tPart(t) >= 1 AND tPart(t) <= pN THEN
+                            IF snIn(tPart(t)) THEN TfGrowAxis lo, hi, tA(t), a: TfGrowAxis lo, hi, tB(t), a: TfGrowAxis lo, hi, tC(t), a
+                        END IF
+                    NEXT
+                    IF hi >= lo THEN
+                        d# = SnapRound#(lo, st#) - lo
+                        IF ABS(d#) > most# THEN most# = ABS(d#)
+                        FOR j = 1 TO pN
+                            IF snIn(j) THEN sd#(j, a) = d#
+                        NEXT
+                    END IF
+                END IF
+            NEXT
+            n = n + 1
+        END IF
+    NEXT
+    IF most# < 1E-9 THEN Msg "Already on the grid (" + SnapStepName$ + ")": EXIT SUB
+    UndoPush
+    FOR i = 1 TO pN
+        IF snDn(i) THEN pX(i) = pX(i) + sd#(i, 1): pY(i) = pY(i) + sd#(i, 2): pZ(i) = pZ(i) + sd#(i, 3)
+    NEXT
+    ModelChanged
+    Msg "Snapped" + STR$(n) + IIFS$(n = 1, " part", " parts") + " to the " + SnapStepName$ + " grid by the box's low corner (moved up to" + STR$(VAL(Fmt$(most#))) + "; E: snap its points). Ctrl+Z: back"
 END SUB

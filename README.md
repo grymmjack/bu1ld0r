@@ -95,6 +95,14 @@ E turns any of them into a mesh part, to edit like any other.
   the far side staying put, and TURN goes round it.
 - SAME gives every selected part the first one's place, size or turn on
   the axes you pick; AS SEEN matches width, height or depth on screen.
+  In E it works on the picked points, edges and faces: each one (or each
+  connected run) made like the one you clicked first - TURN turns faces
+  to face the same way.
+- SNAP TO GRID (under SAME, with its own X Y Z) moves each selected part
+  so its box's low corner sits on the grid (the snap step's; OFF: 1/32).
+  In E it puts the picked points - or the picked edges' and faces'
+  corners, or every point when none are picked - on the nearest grid
+  lines; points that land together become one.
 
 ### Prefabs
 
@@ -127,14 +135,41 @@ E turns any of them into a mesh part, to edit like any other.
 
 1. Select one part and press E: it becomes a mesh part and its faces show.
 2. Press 1 for points, 3 for edges, 2 for faces (Tab goes round them).
+   4 is PLANES: faces picked a whole flat run at a time - a wall made of
+   two triangles, a cap made of many - with the lines inside it hidden,
+   so you see the plane's outline. Every face tool works on them.
+   Ctrl+click a plane picks the band of planes round it (click one of a
+   round thing's outside walls: all of them); Ctrl+Shift+click adds it.
    Click picks, Shift adds, drag a box round several. In edges,
    Ctrl+click picks an edge's whole loop (Shift+Ctrl adds another).
 3. Drag what's picked to move it, or use the panel: CENTRE, TURN BY,
    SIZE, PUSH OUT.
 4. The tools: EXTRUDE (E), INSET (I), BEVEL (B), DIVIDE across / down
    (H / V), MERGE (M), FLIP (N), DELETE, and for edges SPLIT (S),
-   CONNECT (J) and LOOP (O). The palette colours the picked faces. Esc
-   lets go, then leaves.
+   CONNECT (J) and LOOP (O). FLATTEN (Shift+F) lays a bent face flat
+   again (a face whose corners aren't on one plane shows two shades); a
+   face within 3 degrees of level or upright is made exactly so.
+   DELETE never leaves a hole: a point is taken out of its faces (they
+   keep their other corners, like a pen's point), an edge is taken out
+   (the faces either side become one), a face is drawn in to a point (the
+   faces round it close over). Shift+Delete takes the faces away instead.
+   With TEX off a box picks the points behind too.
+   MEND closes cracks and holes. A merge or a hole cut leaves pieces
+   that only touch - a corner of one sitting on another's edge without
+   being one of its points - so moving one opened a crack. Merges now
+   join them as they're made, E joins them in an older model when you
+   start editing it, and MEND does it on demand and fills any hole left.
+   MEND also turns every face to face out (a face is one-sided: from
+   behind it isn't drawn, so one facing in looks like a hole). INSIDE in
+   the top bar (Ctrl+B) shows any face you're seeing from behind in red.
+   MERGE, M and MEND are three different things. MERGE (parts selected,
+   not in E) makes several parts one solid, the overlap gone. M in E
+   works on what you picked: faces into one face, points into one point.
+   MEND in E repairs the whole part, nothing picked: points at the same
+   spot made one, cracks and holes closed (a ring-shaped gap gets a ring
+   of faces), faces turned out. A point with no face can't exist: it's
+   dropped whenever the part is saved back.
+   The palette colours the picked faces. Esc lets go, then leaves.
 
 The recess on the front here is an INSET face pushed in with PUSH OUT.
 
@@ -272,6 +307,10 @@ Ctrl+S saves it as a model.
 - **The pen (P):** click corners on the ground (click and drag for a
   curve); click the first point again and the outline becomes a flat part,
   ready to thicken, extrude and bevel.
+- **Rect, ellipse, line:** with the pen out, R, E or L (or the strip in
+  the view) and drag on the ground: Shift for a square, circle or 45
+  degrees, Ctrl from the middle. F switches rects and ellipses between
+  filled and an outline; [ ] sets the outline's or the line's width.
 - **Text (X):** type, pick a font from the list in the view (fonts in
   `fonts/`, DRAW's fonts, and the system's), click where it starts, Enter.
   Each letter is a flat mesh part, all one group: Alt+click one letter to
@@ -339,6 +378,7 @@ This list is the in-program HELP. Click a topic to open it.
 | TEX / Shift+W | the faces on / off - the slider beside it: how solid (less shows the grid and the edges behind) |
 | W or WIRE | each part's edges drawn over it, each pixel the opposite of what's under it (so they show on white or dark) - the slider: how strong |
 | GRID | the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines. The ground's grid never ends: it thins and fades out with distance |
+| Ctrl+B / INSIDE | a face seen from behind drawn red (else left out: it looks like a hole). On a good solid there's none - red: E, then MEND turns it to face out |
 | Ctrl+H / GUIDES | hide every guide (edges, points, picked colours, outlines, the widget) to see just the model; again: back |
 | The bin's edge | drag it: wider or narrower (no narrower than at first; remembered) |
 | The sliders | drag one, or the wheel over it. TEX, WIRE, GRID and their sliders are remembered |
@@ -466,6 +506,13 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | PLACE SIZE TURN | each selected part given the first one's place / size / turn - on the X Y Z beside them |
 | WIDTH HEIGHT DEPTH | (AS SEEN) each part's reach across / up / into the screen made the first one's |
 
+#### SNAP TO GRID (the panel, under SAME)
+
+| Keys | What it does |
+|---|---|
+| Parts | each moved so its box's low corner is on the grid (a group as one) - on the X Y Z lit, the snap step's grid (OFF: 1/32) |
+| In E | the picked points (edges' / faces' corners; none picked: all) each to the nearest grid line; points meeting made one |
+
 #### GROUPS
 
 | Keys | What it does |
@@ -483,13 +530,12 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Keys | What it does |
 |---|---|
 | E | edit the selected part (it becomes a mesh part) |
-| 1 / 3 / 2 | points, edges, faces (Tab: the next) |
+| 1 / 3 / 2 / 4 | points, edges, faces, PLANES - a whole flat run of faces at a time, its lines inside hidden; Ctrl+click: the band of planes round (a round thing's outside). Tab: the next |
 | Click | pick one (Shift adds) - an edge: click its line |
 | Ctrl+click | an edge: its whole loop - on across four-sided corners till it comes round or stops (Shift+Ctrl: adds it) |
-| Drag a box | pick all in it;  Ctrl+A: all |
+| Drag a box | pick all in it (TEX off: the ones behind too);  Ctrl+A: all |
 | Drag a picked one | move it (Shift: up and down; X / Y / Z held: one axis). An edge moves its two points: the faces on it follow |
-| Arrows PgUp PgDn | nudge |
-| = / - / R | size, turn |
+| Arrows PgUp PgDn | nudge  (= -: size, R: turn) |
 | The panel | CENTRE, TURN BY, SIZE (0: flat), PUSH OUT |
 
 #### TOOLS
@@ -504,10 +550,13 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | O or LOOP | a ring of new edges round the part, across the picked edge, through each four-sided face in turn: POSITION slides it (near an edge: a thin face along it), CUTS makes more. Enter / APPLY: made; Esc: as it was |
 | H / V | divide faces across / down |
 | M | faces joined into one (angled ones laid flat); points or an edge made one point |
-| Shift+M | each face drawn to a point (a cone, a pyramid) |
-| N | flip faces |
-| Delete | take away (an edge: the faces along it) |
+| Shift+M / N | each face drawn to a point (a cone, a pyramid);  N: flip faces |
+| MEND | cracks and holes closed, every face turned to face out, points on a face's edge joined into it (E does that to an old merge) |
+| Shift+F / FLATTEN | each picked face laid flat (a bent one shows two shades): its corners moved onto the plane that fits them best (within 3 degrees of level or upright: exactly). Points / edges: all onto one plane |
+| Delete | never leaves a hole: points taken out of their faces (each face keeps its other corners, as a pen's point); edges taken out (the faces either side made one); faces drawn in to a point (the faces round close over) |
+| Shift+Delete | the faces go instead, leaving a hole |
 | Palette | colour the picked faces |
+| SAME | (the panel) each picked point / piece made like the one clicked first: PLACE its middle, SIZE its reach (on the X Y Z lit), TURN (faces) facing the same way, AS SEEN its width / height / depth on screen |
 | Esc | let go of the picked ones, then done |
 
 </details>
@@ -638,6 +687,16 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | The first point | click it (or Enter) to close: a flat part a snap step thick, selected |
 | Then | thicker: TRANSFORM SCALE with only Y on (or its Y size); E to extrude, bevel... |
 | Backspace / Esc | back a point; let the outline go (Esc again or P: put the pen away) |
+
+#### RECT, ELLIPSE, LINE (with the pen out)
+
+| Keys | What it does |
+|---|---|
+| R / E / L / P | rect, ellipse, line, back to the pen - or the strip in the view; Tab: the next |
+| Drag | on the ground: made when you let go, a snap step thick, selected; the tool stays out for the next |
+| Shift / Ctrl | square / circle (a line: at 45 degrees);  from the middle |
+| F / FILLED | filled, or an outline WIDTH wide (a hole in the middle) |
+| [ / ] | WIDTH: a line's, or the outline's (Shift: 4 steps).  < >: an ellipse's SIDES |
 
 #### LETTERS IN A FONT
 

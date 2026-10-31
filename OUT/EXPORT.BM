@@ -585,7 +585,7 @@ SUB RenderPicture (f, big&, img&)
     l = SQR(rLX * rLX + rLY * rLY + rLZ * rLZ): rLX = rLX / l: rLY = rLY / l: rLZ = rLZ / l
     rShadeLo = .72: rShadeK = .45
     S = PIC_SIZE * PIC_SS
-    rOrtho = -1: rSpan = exFrame: rCull = 0: rGhost = 0
+    rOrtho = -1: rSpan = exFrame: rCull = 0: rBacks = 0: rGhost = 0
     RenderBegin big&, S, S
     d = _DEST: _DEST big&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
     FOR t = 1 TO sceneTN: RasterTri t: NEXT

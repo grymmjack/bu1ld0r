@@ -66,7 +66,7 @@ SUB RenderIcon (k, r$, img&)
         LightFromCamera .45, .6
         RenderBegin img&, 64, 64
         d = _DEST: _DEST img&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
-        rOrtho = 0: rCull = -1: rGhost = 0
+        rOrtho = 0: rCull = -1: rBacks = 0: rGhost = 0
         FOR t = t0 + 1 TO tN: RasterTri t: NEXT
         RenderEnd
         IF k > NUM_KINDS THEN EXIT FOR
@@ -595,7 +595,7 @@ SUB BinDraw
         IF k <= 6 THEN Txt x + 3, y + 1, LTRIM$(STR$(k)), cDim ' (its key)
     NEXT
     BinTile NUM_KINDS + 1, x, y, w, h ' (the pen: a curve through three points)
-    c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover: t$ = "PEN (P): DRAW A SHAPE"
+    c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover: t$ = "PEN (P): DRAW A SHAPE - RECT, ELLIPSE, LINE TOO"
     IF penOn THEN c = _RGB32(90, 30, 110)
     LINE (x, y)-(x + w - 1, y + h - 1), c, BF
     LINE (x, y)-(x + w - 1, y + h - 1), cLine, B

@@ -8,4 +8,5 @@
 ' with its part, a part with the model.
 '
 CONST AL_LEFT = 1, AL_CENTRE = 2, AL_RIGHT = 3, AL_TOP = 4, AL_MIDDLE = 5, AL_BOTTOM = 6
+DIM SHARED snAx(3) ' (SNAP TO GRID's X Y Z toggles)
 DIM SHARED samFirst, smAx(3) ' (SAME: the part picked first - the one the others are made like; its X Y Z toggles)

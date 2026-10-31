@@ -265,7 +265,11 @@ fonts/, ~/git/DRAW/ASSETS/FONTS/, ~/.local/share/fonts, ~/.fonts,
 even-depth rings, turned lying (ax+x, z, az-y) or standing (ax-x, y,
 az-z), `EmFromTris&(.., 0)`, all one group (GroupNew), named by the
 letter. SvBuild's ring prep is `SvPrep (tol#)` (dedup, SvStraighten,
-areas, depth, parents), shared by SVG / PEN / TEXT.
+areas, depth, parents), shared by SVG / PEN / TEXT. RECT / ELLIPSE / LINE are pen
+tools (`penTool` 1-3, the strip `PenBarBtn` at vY0+44, R E L P / Tab in
+PenKey): a drag (`pdOn`, `PenDragTo`) -> `PenShapeRings` (an outline's
+hole as ring 2, SvPrep finds it) -> `PenShapeMake` on let go; the tool
+stays out. PenShapeRings clears `txRk$` (svPX is shared with the text).
 
 MERGE (M, panel slot 25 = APPLY / UNLINK / MERGE by what's picked):
 `SelMerge` (MODEL/BAKE) folds the selected solid parts with `CsgBool&`
@@ -280,8 +284,57 @@ side middles, 7-14 corners) of the selection box (`gzLo/gzHi`);
 `PivPick` sets `tfPivOn`/`tfPiv` (a ghost, else the picked surface point
 snapped); `GzUpdate` drops it when `PivKey$` (the selection) changes and
 moves it with a MOVE; SCALE grows from it (`TfPivMove`), TURN goes round it.
-SAME (UI/ALIGN `SmDraw`/`SmClick`, `samFirst` = the part clicked first);
+SAME (UI/ALIGN `SmDraw`/`SmClick`, `samFirst` = the part clicked first;
+in E `EdSame` (UI/EDIT): pieces as EdAlign's, the first clicked
+`edFirst`/`edFirst2` (EdPress; renumbered in EdCommit), panel at
+`EdSameY` - 682, or 890 under the picture's buttons in faces mode);
+FLATTEN (Shift+F, E's button 17 - five button rows from 480, 24 apart):
+`EdFlatten` projects each picked face's corners onto `EdPlaneFit`'s plane
+(covariance, least way by power steps from each axis), 24 passes so
+touching faces agree; points / edges: all onto one plane.
+Delete in E never opens the mesh (Rick: "I never want a point with no
+face"); Shift+Delete is the old take-away. Points: `EdDissolve` - each
+point out of its faces (EmAddF& without it, the edge across flagged 1);
+a face under 3 corners goes; three faces or more round it: the gap closed
+by a face through its neighbours (each face's after-corner to its
+before-corner, `pa`/`pb`). Edges: `EdDissolveEdges` - the faces with a->b
+and b->a made one (f1 from b round to a, then f2 after a to before b).
+Faces: `EdCollapseFaces` - each touching patch to a point at its middle
+(EmRemap tidies the faces round). Unused points never reach the mesh
+(EdCommit's swMap).
 SCALE snaps meshes / uses by their own size (`TfNatAll`).
+PLANES (4 in E, `edPlane` with edMode still ED_FACES, so every face tool
+works): `EdPlanesMake` (cached on the mesh id) joins polygons sharing an edge on
+one plane (`edPlId` the root; per corner `edPlIn` inside a plane, `edPlNb`/`edPlNk`
+the polygon / corner across); EdPress / EdRectEnd grow picks to whole planes;
+EdOverlay and WireTri/WireTriZ (`EdPlTriMask`) skip lines inside a plane.
+Ctrl+click (`EdPlaneRing`): for each plane B bordering the clicked one, walk B's
+outline loop (`EdPlaneRingOf&`) keeping planes meeting B at the clicked one's
+angle; the longest run wins (a round thing's outside walls).
+Mending (MODEL/EMESH): `EmTJoin&` puts each point lying on a twinless edge
+into that polygon (TIDY's `TdSortX`/`TdOnEdge&`, spots carried), `EmMerge 2`
+joins exactly coplanar neighbours across real edges too (`EmCoplanar`),
+`EmStraighten&` drops points straight in every polygon (edge flags OR'd),
+`EmFillHoles&` closes open loops (in `emLp`): a loop with a smaller one inside it
+(near-parallel, near its plane, `EmLoopHas`) is a ring-shaped gap, zipped by
+`EmZipLoops` (the inner reversed, shorter diagonal each step) - filling each
+loop alone made two overlapping discs (Rick's red disc). MEND first welds
+points within `EmSize#` x .0002 (`EmWeldNear&`; x .001 made a wrong wedge) and
+T-joins at that `tdTol#`. EmFromTris& does T-join, merge 2, straighten
+(so merges / APPLY come out joined); EdToggle does it to a mesh with T-junctions
+(an old merge); MEND (E button 19, `EdMend`) all four plus `EmOrient&` (each
+joined piece wound consistently across shared edges by `EmFlipF`, then turned
+whole if its volume is negative; run before EmFillHoles: a wrong-way face has no
+twins). INSIDE (top bar panel button 17, Ctrl+B, `viewBacks`): ViewRender
+turns rCull off and RasterTri draws back faces red (`rBacks`; bin icons and
+export set it 0). Without it a moved plane
+cracked open, and points left mid-edge by a cut stuck out.
+SNAP TO GRID (UI/ALIGN `SnDraw`/`SnClick`, `snAx` its X Y Z; at 880 under
+SAME, in E at EdSameY + 90): `SnapDo` moves each selected part (a group as
+one) by its triangles' box low corner; in E `EdSnap` puts the picked
+points (EdMoving&; none: all) on `SnapGridStep#` in the world, welds any
+that meet (rm + EmRemap). FLATTEN works in the world too and
+`EdSquareN` makes a fit plane within 3 degrees of an axis exactly it.
 
 The numpad (UI/UI): `_KEYHIT` folds keypad keys into plain ones, so a key
 the numpad could send (`NumpadOf`: digits . + - * / Enter, or with Num

@@ -27,6 +27,7 @@ SUB PartsSetup
     FOR k = 1 TO NUM_KINDS: kindB(k) = .25: NEXT
     snapStep = 1 / 32: guidesOn = -1
     smAx(1) = -1: smAx(2) = -1: smAx(3) = -1
+    snAx(1) = -1: snAx(2) = -1: snAx(3) = -1
     tfAx(1) = -1: tfAx(2) = -1: tfAx(3) = -1 ' (TRANSFORM: MOVE, every axis)
     curCol = _RGB32(76, 255, 255) ' (ANSI32's cyan, 4CFFFF)
     defCol = curCol

@@ -41,6 +41,7 @@ REDIM SHARED scV(0) AS LONG, scE(0) AS _BYTE
 DIM SHARED scTop AS LONG, scCap AS LONG
 REDIM SHARED swMap(0) AS LONG, sfMap(0) AS LONG ' (EmWrite: where each work point and polygon went in the mesh made, -1 gone)
 REDIM SHARED seKey(0) AS _INTEGER64, seVal(0) AS LONG ' (the edges: u to v, the polygon and corner)
+REDIM SHARED emLp(0) AS LONG ' (EmFillHoles&: the holes' loops, their points one after another)
 CONST EM_MAXC = 4096 ' (a polygon's corners, at most)
 DIM SHARED emU(EM_MAXC) AS SINGLE, emW(EM_MAXC) AS SINGLE, emTex ' (its corners' spots, its picture: EmAddF takes them, then emTex is 0 again)
 DIM SHARED emL(EM_MAXC) AS LONG, emE(EM_MAXC) AS INTEGER ' (a polygon being put together)

@@ -325,6 +325,8 @@ FUNCTION EmFromTris& (t0 AS LONG, t1 AS LONG, i, allEdges)
         END IF
     NEXT
     EmMerge allEdges
+    IF EmTJoin& THEN EmMerge 2 ' (a cut's T-junctions joined - the faces share their points, so a move can't crack it - and flat pieces it kept apart joined)
+    r = EmStraighten& ' (then points left mid-edge taken out: a move would leave them sticking out)
     IF i > 0 THEN
         FOR v = 1 TO swN
             x# = swX(v): y# = swY(v): z# = swZ(v): PartInv i, x#, y#, z#: swX(v) = x#: swY(v) = y#: swZ(v) = z#
@@ -375,7 +377,8 @@ END FUNCTION
 
 ' Neighbours joined, pass after pass, until none will: flat, one colour,
 ' across an edge that isn't the shape's own (both sides), making one
-' polygon that doesn't go round a hole
+' polygon that doesn't go round a hole. allEdges -1: across the shape's own edges
+' too; 2: those too, but only where the two lie on one plane exactly (MEND, cuts)
 SUB EmMerge (allEdges)
     DIM pass, did, f AS LONG, k AS LONG, n AS LONG, u AS LONG, v AS LONG, q AS LONG, j AS LONG, m AS LONG, r AS LONG, ok
     DO
@@ -399,7 +402,8 @@ SUB EmMerge (allEdges)
                                 END IF
                             END IF
                             IF ok THEN
-                                IF sfNx(f) * sfNx(q) + sfNy(f) * sfNy(q) + sfNz(f) * sfNz(q) > .9995 THEN
+                                IF allEdges = 2 THEN ok = EmCoplanar(f, q)
+                                IF sfNx(f) * sfNx(q) + sfNy(f) * sfNy(q) + sfNz(f) * sfNz(q) > .9995 AND ok THEN
                                     j = EmCornerOf&(q, v, u)
                                     IF j >= 0 THEN
                                         IF scE(sfC0(q) + j) = 0 OR allEdges THEN
@@ -421,6 +425,22 @@ SUB EmMerge (allEdges)
         NEXT
     LOOP WHILE did AND pass < 64
 END SUB
+
+' Do polygons f and q lie on one plane (q's corners on f's, f's normal q's)?
+FUNCTION EmCoplanar (f AS LONG, q AS LONG)
+    DIM l#, nx#, ny#, nz#, d#, i AS LONG, w AS LONG, a AS LONG
+    l# = SQR(sfNx(f) * sfNx(f) + sfNy(f) * sfNy(f) + sfNz(f) * sfNz(f)): IF l# < 1E-20 THEN EXIT FUNCTION
+    nx# = sfNx(f) / l#: ny# = sfNy(f) / l#: nz# = sfNz(f) / l#
+    l# = SQR(sfNx(q) * sfNx(q) + sfNy(q) * sfNy(q) + sfNz(q) * sfNz(q)): IF l# < 1E-20 THEN EXIT FUNCTION
+    IF (nx# * sfNx(q) + ny# * sfNy(q) + nz# * sfNz(q)) / l# < .99999 THEN EXIT FUNCTION
+    a = scV(sfC0(f))
+    FOR i = 0 TO sfCN(q) - 1
+        w = scV(sfC0(q) + i)
+        d# = (swX(w) - swX(a)) * nx# + (swY(w) - swY(a)) * ny# + (swZ(w) - swZ(a)) * nz#
+        IF ABS(d#) > .00002 THEN EXIT FUNCTION
+    NEXT
+    EmCoplanar = -1
+END FUNCTION
 
 ' Does polygon q's picture carry on f's - each of q's corners where f's
 ' spots, carried on flat across f's plane, would put it?
@@ -673,3 +693,346 @@ END SUB
 SUB MeshGcDue
     IF mvTop > mbLive * 3 + 200000 THEN MeshGc
 END SUB
+
+' ---------------------------------------------------------------- mending
+
+' Each point lying along a polygon's edge that has no twin (a T-junction - what cuts and
+' merges leave: a corner of the faces across sitting on a longer edge) put into that
+' polygon's outline, in order, so the faces round share it: moving either then drags
+' the other along instead of opening a crack. How many polygons changed
+FUNCTION EmTJoin&
+    DIM f AS LONG, n AS LONG, k AS LONG, u AS LONG, v AS LONG, m AS LONG, nf AS LONG, cnt AS LONG, r AS LONG, i AS LONG, c0 AS LONG, added, tot AS LONG, s#
+    IF swN < 3 THEN EXIT FUNCTION
+    TdSortX
+    EmEdgeMap
+    nf = sfN
+    FOR f = 1 TO nf
+        IF sfLive(f) THEN
+            n = sfCN(f): m = 0: added = 0: c0 = sfC0(f)
+            FOR k = 0 TO n - 1
+                u = scV(c0 + k): v = scV(c0 + (k + 1) MOD n)
+                IF m < EM_MAXC THEN emL(m) = u: emE(m) = scE(c0 + k): emU(m) = scTU(c0 + k): emW(m) = scTV(c0 + k): m = m + 1
+                IF EmEdgeFind&(v, u) = 0 THEN
+                    cnt = TdOnEdge&(u, v)
+                    FOR i = 1 TO cnt
+                        IF m < EM_MAXC THEN
+                            s# = tjS(i) ' (its spot on the picture: along the edge's)
+                            emL(m) = tjW(i): emE(m) = scE(c0 + k)
+                            emU(m) = scTU(c0 + k) + (scTU(c0 + (k + 1) MOD n) - scTU(c0 + k)) * s#
+                            emW(m) = scTV(c0 + k) + (scTV(c0 + (k + 1) MOD n) - scTV(c0 + k)) * s#
+                            m = m + 1: added = -1
+                        END IF
+                    NEXT
+                END IF
+            NEXT
+            IF added THEN
+                emTex = sfTex(f): emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f): sfLive(f) = 0: tot = tot + 1
+            END IF
+        END IF
+    NEXT
+    EmTJoin& = tot
+END FUNCTION
+
+' Each hole in the surface (a loop of edges with no face on their other side - a crack a
+' move opened, or a missing cap) closed, in the colour of a face beside it: a loop on its
+' own by one polygon; a loop lying inside a bigger one on about the same plane (a ring's
+' missing top: its outer and inner rims) by a ring of triangles between them. How many
+' holes. The new faces' way round is left to EmOrient&
+FUNCTION EmFillHoles&
+    DIM f AS LONG, n AS LONG, k AS LONG, u AS LONG, v AS LONG, c0 AS LONG, nf AS LONG, m AS LONG, r AS LONG, tot AS LONG, st AS LONG, w AS LONG, ok
+    DIM nl AS LONG, np AS LONG, a AS LONG, b AS LONG, best AS LONG, ba#, d#, l#, sz#
+    EmEdgeMap
+    nf = sfN
+    REDIM hn(swN) AS LONG, hf(swN) AS LONG ' (a hole's edge out of each point - the face beside's way reversed - and that face)
+    FOR f = 1 TO nf
+        IF sfLive(f) THEN
+            n = sfCN(f): c0 = sfC0(f)
+            FOR k = 0 TO n - 1
+                u = scV(c0 + k): v = scV(c0 + (k + 1) MOD n)
+                IF EmEdgeFind&(v, u) = 0 THEN hn(v) = u: hf(v) = f
+            NEXT
+        END IF
+    NEXT
+    REDIM emLp(swN + 1) AS LONG: REDIM lp0(swN + 1) AS LONG, lpN(swN + 1) AS LONG, lpC(swN + 1) AS _UNSIGNED LONG ' (the loops: their points one after another)
+    REDIM lnx#(swN + 1), lny#(swN + 1), lnz#(swN + 1), lcx#(swN + 1), lcy#(swN + 1), lcz#(swN + 1), lar#(swN + 1), lpair(swN + 1) AS LONG, lin(swN + 1) AS _BYTE
+    FOR st = 1 TO swN
+        IF hn(st) THEN
+            m = 0: w = st: ok = 0: lp0(nl + 1) = np
+            DO
+                emLp(np + m) = w: m = m + 1
+                u = hn(w): hn(w) = 0: w = u
+                IF w = st THEN ok = -1: EXIT DO
+                IF w = 0 OR np + m > swN THEN EXIT DO
+                IF hn(w) = 0 THEN EXIT DO
+            LOOP
+            IF ok AND m >= 3 THEN
+                nl = nl + 1: lpN(nl) = m: lpC(nl) = sfCol(hf(st)): np = np + m
+                FOR k = 0 TO m - 1 ' (its plane: Newell's normal, its middle, its area)
+                    a = emLp(lp0(nl) + k): b = emLp(lp0(nl) + (k + 1) MOD m)
+                    lnx#(nl) = lnx#(nl) + (swY(a) - swY(b)) * (swZ(a) + swZ(b))
+                    lny#(nl) = lny#(nl) + (swZ(a) - swZ(b)) * (swX(a) + swX(b))
+                    lnz#(nl) = lnz#(nl) + (swX(a) - swX(b)) * (swY(a) + swY(b))
+                    lcx#(nl) = lcx#(nl) + swX(a) / m: lcy#(nl) = lcy#(nl) + swY(a) / m: lcz#(nl) = lcz#(nl) + swZ(a) / m
+                NEXT
+                l# = SQR(lnx#(nl) ^ 2 + lny#(nl) ^ 2 + lnz#(nl) ^ 2): lar#(nl) = l# / 2
+                IF l# > 1E-20 THEN lnx#(nl) = lnx#(nl) / l#: lny#(nl) = lny#(nl) / l#: lnz#(nl) = lnz#(nl) / l#
+            END IF
+        END IF
+    NEXT
+    FOR a = 1 TO nl ' (each loop's biggest loop inside it, on about its plane: the two a ring's cap)
+        IF lpair(a) = 0 AND lin(a) = 0 THEN
+            best = 0: ba# = 0: sz# = SQR(lar#(a))
+            FOR b = 1 TO nl
+                IF b <> a AND lpair(b) = 0 AND lin(b) = 0 AND lar#(b) < lar#(a) AND lar#(b) > ba# THEN
+                    IF ABS(lnx#(a) * lnx#(b) + lny#(a) * lny#(b) + lnz#(a) * lnz#(b)) > .95 THEN
+                        d# = (lcx#(b) - lcx#(a)) * lnx#(a) + (lcy#(b) - lcy#(a)) * lny#(a) + (lcz#(b) - lcz#(a)) * lnz#(a)
+                        IF ABS(d#) < .08 * sz# THEN
+                            IF EmLoopHas(lp0(a), lpN(a), lnx#(a), lny#(a), lnz#(a), lcx#(b), lcy#(b), lcz#(b)) THEN best = b: ba# = lar#(b)
+                        END IF
+                    END IF
+                END IF
+            NEXT
+            IF best THEN lpair(a) = best: lin(best) = -1
+        END IF
+    NEXT
+    FOR a = 1 TO nl
+        IF lin(a) = 0 THEN
+            IF lpair(a) THEN
+                EmZipLoops lp0(a), lpN(a), lp0(lpair(a)), lpN(lpair(a)), lpC(a)
+            ELSE
+                FOR k = 0 TO lpN(a) - 1: emL(k) = emLp(lp0(a) + k): emE(k) = 1: NEXT
+                r = EmAddF&(lpN(a), lpC(a)): EmNormal r
+            END IF
+            tot = tot + 1
+        END IF
+    NEXT
+    EmFillHoles& = tot
+END FUNCTION
+
+' Is the point (px, py, pz) inside the loop of points emLp(p0..p0+n-1), seen along the way (nx, ny, nz)?
+FUNCTION EmLoopHas (p0 AS LONG, n AS LONG, nx#, ny#, nz#, px#, py#, pz#)
+    DIM ax, k AS LONG, a AS LONG, b AS LONG, au#, av#, bu#, bv#, pu#, pv#, ins
+    ax = 1: IF ABS(ny#) > ABS(nx#) THEN ax = 2
+    IF ABS(nz#) > ABS(IIF(ax = 1, nx#, ny#)) THEN ax = 3
+    SELECT CASE ax ' (dropped the axis it faces most along)
+        CASE 1: pu# = py#: pv# = pz#
+        CASE 2: pu# = pz#: pv# = px#
+        CASE ELSE: pu# = px#: pv# = py#
+    END SELECT
+    FOR k = 0 TO n - 1
+        a = emLp(p0 + k): b = emLp(p0 + (k + 1) MOD n)
+        SELECT CASE ax
+            CASE 1: au# = swY(a): av# = swZ(a): bu# = swY(b): bv# = swZ(b)
+            CASE 2: au# = swZ(a): av# = swX(a): bu# = swZ(b): bv# = swX(b)
+            CASE ELSE: au# = swX(a): av# = swY(a): bu# = swX(b): bv# = swY(b)
+        END SELECT
+        IF (av# > pv#) <> (bv# > pv#) THEN
+            IF pu# < au# + (pv# - av#) * (bu# - au#) / (bv# - av#) THEN ins = NOT ins
+        END IF
+    NEXT
+    EmLoopHas = ins
+END FUNCTION
+
+' The ring between loop o (outer) and loop i (inside it) filled with triangles: both
+' walked the same way round from their nearest points, each step the shorter diagonal
+SUB EmZipLoops (o0 AS LONG, onn AS LONG, i0 AS LONG, inn AS LONG, c AS _UNSIGNED LONG)
+    DIM k AS LONG, s AS LONG, a AS LONG, b AS LONG, oi AS LONG, ii AS LONG, r AS LONG, best#, d#, d1#, d2#
+    DIM ox#, oy#, oz#, sgn1#, nx#, ny#, nz#
+    REDIM ip(inn) AS LONG
+    ' (the inner loop runs the other way round its hole: reversed, so both go one way - checked by their normals)
+    FOR k = 0 TO inn - 1: ip(k) = emLp(i0 + inn - 1 - k): NEXT
+    a = emLp(o0): best# = 1E+30: s = 0
+    FOR k = 0 TO inn - 1
+        d# = EmDist2#(a, ip(k)): IF d# < best# THEN best# = d#: s = k
+    NEXT
+    oi = 0: ii = 0
+    DO WHILE oi < onn OR ii < inn
+        a = emLp(o0 + oi MOD onn): b = ip((s + ii) MOD inn)
+        IF oi >= onn THEN
+            d1# = 1E+30: d2# = 0
+        ELSEIF ii >= inn THEN
+            d1# = 0: d2# = 1E+30
+        ELSE
+            d1# = EmDist2#(emLp(o0 + (oi + 1) MOD onn), b): d2# = EmDist2#(a, ip((s + ii + 1) MOD inn))
+        END IF
+        IF d1# <= d2# THEN ' (onn along the outer)
+            emL(0) = a: emL(1) = emLp(o0 + (oi + 1) MOD onn): emL(2) = b: emE(0) = 1: emE(1) = 0: emE(2) = 0
+            oi = oi + 1
+        ELSE ' (onn along the inner)
+            emL(0) = a: emL(1) = ip((s + ii + 1) MOD inn): emL(2) = b: emE(0) = 0: emE(1) = 1: emE(2) = 0
+            ii = ii + 1
+        END IF
+        r = EmAddF&(3, c): EmNormal r
+        IF sfNx(r) = 0 AND sfNy(r) = 0 AND sfNz(r) = 0 THEN sfLive(r) = 0
+    LOOP
+END SUB
+
+FUNCTION EmDist2# (a AS LONG, b AS LONG)
+    EmDist2# = (swX(a) - swX(b)) ^ 2 + (swY(a) - swY(b)) ^ 2 + (swZ(a) - swZ(b)) ^ 2
+END FUNCTION
+
+' Each point lying in the middle of a straight edge in every polygon that has it (left by a cut:
+' it only marks where something once crossed) taken out of them all - else moving the ends
+' leaves it behind, sticking out. The edges either side made one. How many polygons changed
+FUNCTION EmStraighten&
+    DIM pass, did, f AS LONG, n AS LONG, k AS LONG, a AS LONG, w AS LONG, b AS LONG, m AS LONG, r AS LONG, nf AS LONG, c0 AS LONG, tot AS LONG
+    REDIM tdUse(swN) AS LONG, tdLin(swN) AS LONG
+    DO
+        pass = pass + 1: did = 0
+        FOR w = 1 TO swN: tdUse(w) = 0: tdLin(w) = 0: NEXT
+        FOR f = 1 TO sfN
+            IF sfLive(f) THEN
+                n = sfCN(f): c0 = sfC0(f)
+                FOR k = 0 TO n - 1
+                    a = scV(c0 + (k + n - 1) MOD n): w = scV(c0 + k): b = scV(c0 + (k + 1) MOD n)
+                    tdUse(w) = tdUse(w) + 1
+                    IF TdStraightAt(a, w, b) THEN tdLin(w) = tdLin(w) + 1
+                NEXT
+            END IF
+        NEXT
+        nf = sfN
+        FOR f = 1 TO nf
+            IF sfLive(f) THEN
+                n = sfCN(f): c0 = sfC0(f): m = 0
+                FOR k = 0 TO n - 1
+                    w = scV(c0 + k)
+                    IF tdUse(w) <> tdLin(w) THEN
+                        emL(m) = w: emE(m) = scE(c0 + k): emU(m) = scTU(c0 + k): emW(m) = scTV(c0 + k): m = m + 1
+                    ELSEIF m > 0 THEN
+                        IF scE(c0 + k) THEN emE(m - 1) = scE(c0 + k) ' (the edge on from the one before: a real edge if either was)
+                    END IF
+                NEXT
+                IF m < n AND m >= 3 THEN
+                    IF tdUse(scV(c0)) = tdLin(scV(c0)) THEN ' (the first corner went: its edge on belongs to the last kept)
+                        IF scE(c0) THEN emE(m - 1) = scE(c0)
+                    END IF
+                    did = -1: tot = tot + 1: sfLive(f) = 0
+                    emTex = sfTex(f): emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                    sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
+                END IF
+            END IF
+        NEXT
+    LOOP WHILE did AND pass < 8
+    EmStraighten& = tot
+END FUNCTION
+
+' Polygon f wound the other way round (it faces the other way): its spots and edge marks kept
+SUB EmFlipF (f AS LONG)
+    DIM k AS LONG, n AS LONG, c0 AS LONG
+    DIM tv(EM_MAXC) AS LONG, te(EM_MAXC), ku(EM_MAXC), kw(EM_MAXC)
+    n = sfCN(f): c0 = sfC0(f)
+    FOR k = 0 TO n - 1: tv(k) = scV(c0 + k): te(k) = scE(c0 + k): ku(k) = scTU(c0 + k): kw(k) = scTV(c0 + k): NEXT
+    FOR k = 0 TO n - 1
+        scV(c0 + k) = tv(n - 1 - k): scTU(c0 + k) = ku(n - 1 - k): scTV(c0 + k) = kw(n - 1 - k)
+        scE(c0 + k) = te((2 * n - 2 - k) MOD n)
+    NEXT
+    sfNx(f) = -sfNx(f): sfNy(f) = -sfNy(f): sfNz(f) = -sfNz(f)
+END SUB
+
+' Every face made to face out (Blender's "recalculate outside"): each joined piece's
+' polygons wound one way as their neighbours (across each shared edge, one runs it
+' a to b, the other b to a), then the whole piece turned if it holds negative volume
+' (inside out). A flat sheet (no volume) keeps its way. How many polygons turned
+FUNCTION EmOrient&
+    DIM f AS LONG, g AS LONG, k AS LONG, n AS LONG, a AS LONG, b AS LONG, i AS LONG, j AS LONG, n2 AS LONG, c0 AS LONG
+    DIM tot AS LONG, qh AS LONG, qt AS LONG, cid AS LONG, cnt AS LONG, same, vol#
+    DIM x0#, y0#, z0#, x1#, y1#, z1#, x2#, y2#, z2#
+    REDIM ps(swN + 1) AS LONG, pf(swN + 1) AS LONG
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN tot = tot + sfCN(f): FOR k = 0 TO sfCN(f) - 1: ps(scV(sfC0(f) + k) + 1) = ps(scV(sfC0(f) + k) + 1) + 1: NEXT
+    NEXT
+    FOR i = 1 TO swN + 1: ps(i) = ps(i) + ps(i - 1): NEXT
+    REDIM pl(tot + 1) AS LONG
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            FOR k = 0 TO sfCN(f) - 1
+                a = scV(sfC0(f) + k): pl(ps(a) + pf(a)) = f: pf(a) = pf(a) + 1
+            NEXT
+        END IF
+    NEXT
+    REDIM cmp(sfN) AS LONG, q(sfN + 1) AS LONG, fl(sfN) AS _BYTE
+    tot = 0
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND cmp(f) = 0 THEN
+            cid = cid + 1: cmp(f) = cid: qh = 0: qt = 1: q(1) = f
+            DO WHILE qh < qt ' (round the piece: each neighbour wound to match)
+                qh = qh + 1: g = q(qh)
+                n = sfCN(g): c0 = sfC0(g)
+                FOR k = 0 TO n - 1
+                    a = scV(c0 + k): b = scV(c0 + (k + 1) MOD n)
+                    FOR i = ps(a) TO ps(a) + pf(a) - 1
+                        j = pl(i)
+                        IF j <> g AND cmp(j) = 0 AND sfLive(j) THEN
+                            same = EmCornerOf&(j, a, b) >= 0 ' (it runs a to b too: the wrong way)
+                            IF same OR EmCornerOf&(j, b, a) >= 0 THEN
+                                IF same THEN EmFlipF j: fl(j) = NOT fl(j)
+                                cmp(j) = cid: qt = qt + 1: q(qt) = j
+                            END IF
+                        END IF
+                    NEXT
+                NEXT
+            LOOP
+            vol# = 0 ' (its volume: each polygon's fan against the origin)
+            FOR i = 1 TO qt
+                g = q(i): n = sfCN(g): c0 = sfC0(g)
+                x0# = swX(scV(c0)): y0# = swY(scV(c0)): z0# = swZ(scV(c0))
+                FOR k = 1 TO n - 2
+                    x1# = swX(scV(c0 + k)): y1# = swY(scV(c0 + k)): z1# = swZ(scV(c0 + k))
+                    x2# = swX(scV(c0 + k + 1)): y2# = swY(scV(c0 + k + 1)): z2# = swZ(scV(c0 + k + 1))
+                    vol# = vol# + x0# * (y1# * z2# - z1# * y2#) - y0# * (x1# * z2# - z1# * x2#) + z0# * (x1# * y2# - y1# * x2#)
+                NEXT
+            NEXT
+            IF vol# < -1E-12 THEN
+                FOR i = 1 TO qt: EmFlipF q(i): fl(q(i)) = NOT fl(q(i)): NEXT
+            END IF
+        END IF
+    NEXT
+    FOR f = 1 TO sfN
+        IF fl(f) THEN tot = tot + 1
+    NEXT
+    EmOrient& = tot
+END FUNCTION
+
+' Points nearer each other than tol made one (what a cut leaves: two points a hair apart, a
+' sliver of a crack between). How many went
+FUNCTION EmWeldNear& (tol#)
+    DIM i AS LONG, j AS LONG, a AS LONG, b AS LONG, ra AS LONG, rb AS LONG, n AS LONG
+    TdSortX
+    REDIM up(swN) AS LONG, rm(swN) AS LONG
+    FOR i = 1 TO swN: up(i) = i: NEXT
+    FOR i = 1 TO swN
+        a = tdOrd(i)
+        FOR j = i + 1 TO swN
+            b = tdOrd(j)
+            IF swX(b) - swX(a) > tol# THEN EXIT FOR
+            IF ABS(swY(b) - swY(a)) <= tol# AND ABS(swZ(b) - swZ(a)) <= tol# THEN
+                ra = AlRoot&(up(), a): rb = AlRoot&(up(), b)
+                IF ra <> rb THEN up(rb) = ra: n = n + 1
+            END IF
+        NEXT
+    NEXT
+    IF n THEN
+        FOR i = 1 TO swN: rm(i) = AlRoot&(up(), i): NEXT
+        EmRemap rm()
+    END IF
+    EmWeldNear& = n
+END FUNCTION
+
+' The work's size: its box's longest side
+FUNCTION EmSize#
+    DIM i AS LONG, lx#, ly#, lz#, hx#, hy#, hz#, s#
+    IF swN = 0 THEN EXIT FUNCTION
+    lx# = swX(1): hx# = lx#: ly# = swY(1): hy# = ly#: lz# = swZ(1): hz# = lz#
+    FOR i = 2 TO swN
+        IF swX(i) < lx# THEN lx# = swX(i)
+        IF swX(i) > hx# THEN hx# = swX(i)
+        IF swY(i) < ly# THEN ly# = swY(i)
+        IF swY(i) > hy# THEN hy# = swY(i)
+        IF swZ(i) < lz# THEN lz# = swZ(i)
+        IF swZ(i) > hz# THEN hz# = swZ(i)
+    NEXT
+    s# = hx# - lx#: IF hy# - ly# > s# THEN s# = hy# - ly#
+    IF hz# - lz# > s# THEN s# = hz# - lz#
+    EmSize# = s#
+END FUNCTION

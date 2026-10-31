@@ -89,7 +89,7 @@ SUB ViewRender
     NEXT
     RefRenderAll ' (reference pictures: on the ground and the far walls, under the grid)
     DrawGrid
-    rOrtho = 0: rCull = -1: rGhost = 0
+    rOrtho = 0: rCull = NOT viewBacks: rBacks = viewBacks: rGhost = 0
     IF viewWire THEN ' (TEX off: filled unseen, so a click still finds the part and the face)
         rNoInk = -1
         FOR t = 1 TO holeTN: RasterTri t: NEXT
@@ -139,7 +139,7 @@ END SUB
 ' Triangle t's own edges (not a quad's diagonal, nor a lid's spokes) as lines
 SUB WireTri (t AS LONG, c AS _UNSIGNED LONG)
     DIM e
-    e = tEdge(t)
+    e = tEdge(t): IF edPlane THEN IF tPart(t) = edPart THEN e = e AND EdPlTriMask(t) ' (PLANES: not inside a plane)
     IF e AND 1 THEN Line3D tA(t).x, tA(t).y, tA(t).z, tB(t).x, tB(t).y, tB(t).z, c
     IF e AND 2 THEN Line3D tB(t).x, tB(t).y, tB(t).z, tC(t).x, tC(t).y, tC(t).z, c
     IF e AND 4 THEN Line3D tC(t).x, tC(t).y, tC(t).z, tA(t).x, tA(t).y, tA(t).z, c
@@ -148,7 +148,7 @@ END SUB
 ' Triangle t's own edges blended in: kSeen strong where they're seen, kHid where a face is in front (0 to 255)
 SUB WireTriZ (t AS LONG, c AS _UNSIGNED LONG, kSeen, kHid)
     DIM e
-    e = tEdge(t)
+    e = tEdge(t): IF edPlane THEN IF tPart(t) = edPart THEN e = e AND EdPlTriMask(t) ' (PLANES: not inside a plane)
     IF e AND 1 THEN LineZ tA(t).x, tA(t).y, tA(t).z, tB(t).x, tB(t).y, tB(t).z, c, kSeen, kHid
     IF e AND 2 THEN LineZ tB(t).x, tB(t).y, tB(t).z, tC(t).x, tC(t).y, tC(t).z, c, kSeen, kHid
     IF e AND 4 THEN LineZ tC(t).x, tC(t).y, tC(t).z, tA(t).x, tA(t).y, tA(t).z, c, kSeen, kHid
@@ -409,7 +409,7 @@ END SUB
 
 ' Triangle t drawn: lit by the way it faces, cut at the eye, filled
 SUB RasterTri (t AS LONG)
-    DIM n AS V3, lit, sh, col AS _UNSIGNED LONG, k, j, nz, f, ink, inj, cnt, tx
+    DIM n AS V3, lit, sh, col AS _UNSIGNED LONG, k, j, nz, f, ink, inj, cnt, tx, bk
     DIM wx(2), wy(2), wz(2), vx(4), vy(4), vz(4), sx(4), sy(4), q(4), cx(2), cy(2), cz(2), ku(2), kw(2), vu(4), vw(4)
     n = tNrm(t)
     IF rOrtho THEN
@@ -420,15 +420,17 @@ SUB RasterTri (t AS LONG)
     IF f <= 0 THEN
         IF rCull THEN EXIT SUB
         n.x = -n.x: n.y = -n.y: n.z = -n.z ' (seen from inside: lit as its other side)
+        bk = rBacks AND rGhost = 0 AND rHole = 0 ' (INSIDE: its back - red)
     END IF
     lit = n.x * rLX + n.y * rLY + n.z * rLZ: IF lit < 0 THEN lit = 0
     sh = rShadeLo + rShadeK * lit
     col = Shade~&(tCol(t), sh)
     IF rGhost THEN col = Shade~&(IIFC~&(pHole(0), _RGB32(150, 160, 190), _RGB32(255, 255, 255)), .5 + .5 * lit)
     IF rHole THEN col = Shade~&(IIFC~&(pKeep(tPart(t)), _RGB32(120, 200, 150), _RGB32(150, 160, 190)), .55 + .45 * lit) ' (a KEEP: greenish)
+    IF bk THEN col = Shade~&(_RGB32(235, 40, 50), .55 + .45 * lit)
 
     tx = 0 ' (a picture on it: drawn from that, each pixel - not see-through ones, nor the wireframe's picking)
-    IF tTex(t) > 0 AND rGhost = 0 AND rHole = 0 AND rNoInk = 0 THEN
+    IF tTex(t) > 0 AND rGhost = 0 AND rHole = 0 AND rNoInk = 0 AND bk = 0 THEN
         IF picW(tTex(t)) > 0 THEN tx = tTex(t)
     END IF
     IF tx THEN

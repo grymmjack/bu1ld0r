@@ -134,20 +134,7 @@ END SUB
 ' lies on it) gets the points on it put in, in order
 SUB TdTJoin
     DIM i AS LONG, gap AS LONG, f AS LONG, n AS LONG, k AS LONG, u AS LONG, v AS LONG, m AS LONG, nf AS LONG, cnt AS LONG, r AS LONG, added, w AS LONG, j AS LONG
-    REDIM tdOrd(swN) AS LONG
-    FOR i = 1 TO swN: tdOrd(i) = i: NEXT
-    gap = swN \ 2 ' (a shell sort, by x)
-    DO WHILE gap > 0
-        FOR i = gap + 1 TO swN
-            w = tdOrd(i): j = i
-            DO WHILE j > gap
-                IF swX(tdOrd(j - gap)) <= swX(w) THEN EXIT DO
-                tdOrd(j) = tdOrd(j - gap): j = j - gap
-            LOOP
-            tdOrd(j) = w
-        NEXT
-        gap = gap \ 2
-    LOOP
+    TdSortX
     EmEdgeMap
     nf = sfN
     FOR f = 1 TO nf
@@ -172,11 +159,30 @@ SUB TdTJoin
     NEXT
 END SUB
 
+' The work's points by x, into tdOrd (for TdOnEdge&)
+SUB TdSortX
+    DIM i AS LONG, gap AS LONG, w AS LONG, j AS LONG
+    REDIM tdOrd(swN) AS LONG
+    FOR i = 1 TO swN: tdOrd(i) = i: NEXT
+    gap = swN \ 2 ' (a shell sort, by x)
+    DO WHILE gap > 0
+        FOR i = gap + 1 TO swN
+            w = tdOrd(i): j = i
+            DO WHILE j > gap
+                IF swX(tdOrd(j - gap)) <= swX(w) THEN EXIT DO
+                tdOrd(j) = tdOrd(j - gap): j = j - gap
+            LOOP
+            tdOrd(j) = w
+        NEXT
+        gap = gap \ 2
+    LOOP
+END SUB
+
 ' The points lying on edge u to v (not its ends), into tjW from u's end: how many
 FUNCTION TdOnEdge& (u AS LONG, v AS LONG)
     DIM ex#, ey#, ez#, l2#, l#, tol#, lo#, hi#, ylo#, yhi#, zlo#, zhi#, a AS LONG, b AS LONG, md AS LONG, i AS LONG, w AS LONG
     DIM dx#, dy#, dz#, s#, d2#, cnt AS LONG, j AS LONG
-    tol# = .00004
+    tol# = .00004: IF tdTol# > 0 THEN tol# = tdTol#
     ex# = swX(v) - swX(u): ey# = swY(v) - swY(u): ez# = swZ(v) - swZ(u)
     l2# = ex# * ex# + ey# * ey# + ez# * ez#: IF l2# < 1E-12 THEN EXIT FUNCTION
     l# = SQR(l2#)

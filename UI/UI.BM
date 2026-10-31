@@ -189,6 +189,12 @@ SUB GuidesToggle
     Msg IIFS$(guidesOn, "Guides shown (Ctrl+H: hidden)", "Guides hidden: just the model (Ctrl+H: back)")
 END SUB
 
+' INSIDE / Ctrl+B: faces seen from behind drawn red (else left out, so they look like holes)
+SUB BacksToggle
+    viewBacks = NOT viewBacks: viewDirty = -1
+    Msg IIFS$(viewBacks, "INSIDE: a face seen from behind is red - on a good solid there's none. Red: E, then MEND (or FLIP N) turns it to face out", "Faces seen from behind left out again (Ctrl+B: red)")
+END SUB
+
 ' The snap set (0: none): the grid's finest lines follow it; a shape being put down is sized again on it
 SUB SnapSet (st)
     snapStep = st: viewDirty = -1
@@ -234,6 +240,7 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 4: x = PX0 + 118: y = 514: w = 112
         CASE 11 TO 15: SliderRect 3, x, w: x = x + w + 14 + (k - 11) * 42: y = 3: w = 40 ' (the snap: in the top bar, after GRID's slider)
         CASE 16: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6: y = 3: w = 64 ' (GUIDES, after it)
+        CASE 17: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 70: y = 3: w = 64 ' (INSIDE, after that)
         CASE 21: x = PX0 + 100: y = 58: w = 24
         CASE 22: x = PX0 + 206: y = 58: w = 24
         CASE 23: x = PX0 + 158: y = 32: w = 72
@@ -263,6 +270,7 @@ FUNCTION PanelBtnName$ (k)
         CASE 29: PanelBtnName$ = IIFS$(mdlTidy, "EXPORT: TIDIED", "EXPORT: AS BUILT")
         CASE 31 TO 37: PanelBtnName$ = LTRIM$(STR$(dieN(k - 30)))
         CASE 16: PanelBtnName$ = "GUIDES"
+        CASE 17: PanelBtnName$ = "INSIDE"
     END SELECT
 END FUNCTION
 
@@ -552,7 +560,7 @@ SUB UiFrame
         ELSEIF inView AND refTr THEN
             RefWheel -SGN(mWheel) ' (TR: the reference sized, up: bigger)
         ELSEIF inView AND txOn AND TxListAt(mX, mY) <> 0 THEN
-            TxWheel -SGN(mWheel) ' (the font list)
+            TxWheel SGN(mWheel) ' (the font list: as the bin and the parts list)
         ELSEIF inView AND PvWheelOn THEN
             PvWheel SGN(mWheel) ' (moving the picture: the wheel sizes it, up: bigger)
         ELSEIF f > 0 AND f <> F_COL AND NOT FieldWords(f) THEN
@@ -598,6 +606,8 @@ SUB UiFrame
             NEXT
             PanelBtn 16, x, y, w, h
             IF InRect(mX, mY, x, y, w, h) THEN GuidesToggle
+            PanelBtn 17, x, y, w, h
+            IF InRect(mX, mY, x, y, w, h) THEN BacksToggle
             topSlide = SliderAt(mX, mY)
         ELSEIF mX < BIN_W THEN
             BinClick
@@ -778,6 +788,8 @@ SUB UiKey (k&)
             UiScaleStep 1
         ELSEIF k& = 45 OR k& = 95 THEN ' (Ctrl + -: smaller)
             UiScaleStep -1
+        ELSEIF CtrlIs(k&, "b") THEN
+            BacksToggle
         ELSEIF CtrlIs(k&, "h") THEN
             GuidesToggle
         ELSEIF CtrlIs(k&, "c") OR CtrlIs(k&, "x") THEN ' (by what you're on: E's faces - the picture on one; else the parts)
@@ -1022,6 +1034,7 @@ SUB PanelClick
     IF SelCount > 0 THEN IF AlClick(604) THEN EXIT SUB
     IF SelCount > 0 THEN IF ShClick(684) THEN EXIT SUB
     IF SelCount > 0 THEN IF SmClick(790) THEN EXIT SUB
+    IF SelCount > 0 THEN IF SnClick(880) THEN EXIT SUB
     FOR k = 1 TO 37
         PanelBtn k, x, y, w, h
         IF w > 0 AND InRect(mX, mY, x, y, w, h) AND PanelBtnOn(k) THEN
@@ -1809,6 +1822,7 @@ SUB UiDraw
         PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (snapStep = SnapOf(k - 11))
     NEXT
     PanelBtn 16, x, y, w, h: Btn x, y, w, h, PanelBtnName$(16), guidesOn
+    PanelBtn 17, x, y, w, h: Btn x, y, w, h, PanelBtnName$(17), viewBacks
     t$ = APP_NAME$ + " " + APP_VERSION$
     IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
     IF mdlDirty THEN t$ = "* not saved   " + t$
@@ -1952,6 +1966,7 @@ SUB PanelDraw
         AlDraw 604
         ShDraw 684
         SmDraw 790
+        SnDraw 880
     ELSEIF y + 80 < scrH - BAR_H THEN
         Txt PX0, y, "1 = a NEON-CASTER cell", cDim
         Txt PX0, y + 16, "(the purple square)", cDim
@@ -2102,6 +2117,7 @@ SUB HelpSetup
     HelpAdd "TEX  Shift+W|the faces on / off - the slider beside it: how solid (less shows the grid and the edges behind)"
     HelpAdd "W  or  WIRE|each part's edges drawn over it, each pixel the opposite of what's under it (so they show on white or dark) - the slider: how strong"
     HelpAdd "GRID|the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines. The ground's grid never ends: it thins and fades out with distance"
+    HelpAdd "Ctrl+B  INSIDE|a face seen from behind drawn red (else left out: it looks like a hole). On a good solid there's none - red: E, then MEND turns it to face out"
     HelpAdd "Ctrl+H  GUIDES|hide every guide (edges, points, picked colours, outlines, the widget) to see just the model; again: back"
     HelpAdd "The bin's edge|drag it: wider or narrower (no narrower than at first; remembered)"
     HelpAdd "The sliders|drag one, or the wheel over it. TEX, WIRE, GRID and their sliders are remembered"
@@ -2172,6 +2188,9 @@ SUB HelpSetup
     HelpAdd "#SAME (the panel: as the first picked)"
     HelpAdd "PLACE SIZE TURN|each selected part given the first one's place / size / turn - on the X Y Z beside them"
     HelpAdd "WIDTH HEIGHT DEPTH|(AS SEEN) each part's reach across / up / into the screen made the first one's"
+    HelpAdd "#SNAP TO GRID (the panel, under SAME)"
+    HelpAdd "Parts|each moved so its box's low corner is on the grid (a group as one) - on the X Y Z lit, the snap step's grid (OFF: 1/32)"
+    HelpAdd "In E|the picked points (edges' / faces' corners; none picked: all) each to the nearest grid line; points meeting made one"
     HelpAdd "#GROUPS"
     HelpAdd "G|group the selected parts (G on a group: ungroup)"
     HelpAdd "Click|picks the whole group (Alt+click: one part)"
@@ -2179,13 +2198,12 @@ SUB HelpSetup
     HelpTopic "EDIT (E)"
     HelpAdd "#EDITING A PART'S POINTS, EDGES AND FACES"
     HelpAdd "E|edit the selected part (it becomes a mesh part)"
-    HelpAdd "1  3  2|points, edges, faces (Tab: the next)"
+    HelpAdd "1  3  2  4|points, edges, faces, PLANES - a whole flat run of faces at a time, its lines inside hidden; Ctrl+click: the band of planes round (a round thing's outside). Tab: the next"
     HelpAdd "Click|pick one (Shift adds) - an edge: click its line"
     HelpAdd "Ctrl+click|an edge: its whole loop - on across four-sided corners till it comes round or stops (Shift+Ctrl: adds it)"
-    HelpAdd "Drag a box|pick all in it;  Ctrl+A: all"
+    HelpAdd "Drag a box|pick all in it (TEX off: the ones behind too);  Ctrl+A: all"
     HelpAdd "Drag a picked one|move it (Shift: up and down; X / Y / Z held: one axis). An edge moves its two points: the faces on it follow"
-    HelpAdd "Arrows PgUp PgDn|nudge"
-    HelpAdd "=  -  R|size, turn"
+    HelpAdd "Arrows PgUp PgDn|nudge  (= -: size, R: turn)"
     HelpAdd "The panel|CENTRE, TURN BY, SIZE (0: flat), PUSH OUT"
     HelpAdd "#TOOLS"
     HelpAdd "E|extrude faces"
@@ -2195,11 +2213,14 @@ SUB HelpSetup
     HelpAdd "J  or  CONNECT|a new edge across a face: between the middles of two of its picked edges (3), or two of its picked corners (1)"
     HelpAdd "O  or  LOOP|a ring of new edges round the part, across the picked edge, through each four-sided face in turn: POSITION slides it (near an edge: a thin face along it), CUTS makes more. Enter / APPLY: made; Esc: as it was"
     HelpAdd "H  V|divide faces across / down"
-    HelpAdd "M|faces joined into one (angled ones laid flat); points or an edge made one point"
-    HelpAdd "Shift+M|each face drawn to a point (a cone, a pyramid)"
-    HelpAdd "N|flip faces"
-    HelpAdd "Delete|take away (an edge: the faces along it)"
+    HelpAdd "M|picked faces joined into one face (angled ones laid flat); picked points or an edge made one point. Not the parts' MERGE"
+    HelpAdd "Shift+M   N|each face drawn to a point (a cone, a pyramid);  N: flip faces"
+    HelpAdd "MEND|cracks and holes closed, every face turned to face out, points on a face's edge joined into it (E does that to an old merge)"
+    HelpAdd "Shift+F  FLATTEN|each picked face laid flat (a bent one shows two shades): its corners moved onto the plane that fits them best (within 3 degrees of level or upright: exactly). Points / edges: all onto one plane"
+    HelpAdd "Delete|never leaves a hole: points taken out of their faces (each face keeps its other corners, as a pen's point); edges taken out (the faces either side made one); faces drawn in to a point (the faces round close over)"
+    HelpAdd "Shift+Delete|the faces go instead, leaving a hole"
     HelpAdd "Palette|colour the picked faces"
+    HelpAdd "SAME|(the panel) each picked point / piece made like the one clicked first: PLACE its middle, SIZE its reach (on the X Y Z lit), TURN (faces) facing the same way, AS SEEN its width / height / depth on screen"
     HelpAdd "Esc|let go of the picked ones, then done"
 
     HelpTopic "PICTURES"
@@ -2274,6 +2295,12 @@ SUB HelpSetup
     HelpAdd "The first point|click it (or Enter) to close: a flat part a snap step thick, selected"
     HelpAdd "Then|thicker: TRANSFORM SCALE with only Y on (or its Y size); E to extrude, bevel..."
     HelpAdd "Backspace  Esc|back a point; let the outline go (Esc again or P: put the pen away)"
+    HelpAdd "#RECT, ELLIPSE, LINE (with the pen out)"
+    HelpAdd "R  E  L  P|rect, ellipse, line, back to the pen - or the strip in the view; Tab: the next"
+    HelpAdd "Drag|on the ground: made when you let go, a snap step thick, selected; the tool stays out for the next"
+    HelpAdd "Shift  Ctrl|square / circle (a line: at 45 degrees);  from the middle"
+    HelpAdd "F  FILLED|filled, or an outline WIDTH wide (a hole in the middle)"
+    HelpAdd "[  ]|WIDTH: a line's, or the outline's (Shift: 4 steps).  < >: an ellipse's SIDES"
     HelpAdd "#LETTERS IN A FONT"
     HelpAdd "X  or  the Aa tile|(after the pen) then type"
     HelpAdd "The font list|(in the view) click one, the wheel over it, or PgUp / PgDn - fonts from fonts/, DRAW's fonts, and the system's"

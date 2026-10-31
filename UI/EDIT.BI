@@ -23,3 +23,7 @@ REDIM SHARED wkPkA(0) AS LONG, wkPkB(0) AS LONG ' (the same while an edit's made
 DIM SHARED edPkN AS LONG, wkPkN AS LONG
 REDIM SHARED edPkIn(0) AS _BYTE ' (the mesh's points on a clicked edge still picked: EdPkInMake)
 DIM SHARED edNb(16) AS LONG ' (EdFan&: a point's neighbours in turn round it)
+DIM SHARED edPlane, edPlKey$ ' (PLANES: faces picked a flat run at a time - edMode stays ED_FACES)
+REDIM SHARED edPlId(0) AS LONG, edPlC0(0) AS LONG, edPlIn(0) AS _BYTE, edPlNb(0) AS LONG, edPlNk(0) AS LONG, edPlF(0) AS LONG
+REDIM SHARED edPlNx(0) AS DOUBLE, edPlNy(0) AS DOUBLE, edPlNz(0) AS DOUBLE ' (per polygon: its plane (a polygon's number), its corners from edPlC0; per corner: inside a plane, the polygon across and its corner there, whose corner it is)
+DIM SHARED edFirstOn, edFirstM, edFirst AS LONG, edFirst2 AS LONG ' (SAME in E: the point / edge (its two points) / face clicked first, in which mode)
