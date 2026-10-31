@@ -99,7 +99,7 @@ END FUNCTION
 SUB TriCopy (a AS LONG, b AS LONG)
     tA(b) = tA(a): tB(b) = tB(a): tC(b) = tC(a): tNrm(b) = tNrm(a)
     tPart(b) = tPart(a): tFace(b) = tFace(a): tCol(b) = tCol(a): tSol(b) = tSol(a): tEdge(b) = tEdge(a)
-    tTex(b) = tTex(a)
+    tTex(b) = tTex(a): tMat(b) = tMat(a)
     tU(3 * b) = tU(3 * a): tU(3 * b + 1) = tU(3 * a + 1): tU(3 * b + 2) = tU(3 * a + 2)
     tW(3 * b) = tW(3 * a): tW(3 * b + 1) = tW(3 * a + 1): tW(3 * b + 2) = tW(3 * a + 2)
 END SUB
@@ -152,6 +152,17 @@ END SUB
 
 ' Part j as triangles that count as part owner's (a prefab's parts are its use's)
 SUB MeshItem (j, owner)
+    DIM t0 AS LONG, t AS LONG
+    t0 = tN
+    MeshItemMake j, owner
+    IF pMat(j) THEN ' (the part's material on each of its faces with none of its own: a use's on its parts' too)
+        FOR t = t0 + 1 TO tN
+            IF tMat(t) = 0 THEN tMat(t) = pMat(j)
+        NEXT
+    END IF
+END SUB
+
+SUB MeshItemMake (j, owner)
     DIM pf, q
     IF pKind(j) <> K_USE THEN MeshShape j, owner: EXIT SUB
     pf = PfFind(pRef$(j))
@@ -325,7 +336,7 @@ SUB MkTri (ax, ay, az, bx, by, bz, cx, cy, cz, hx, hy, hz)
         tA(t) = a: tB(t) = b: tC(t) = c: tEdge(t) = mkTriE
         IF mkTex THEN tU(3 * t) = mkU(0): tW(3 * t) = mkW(0): tU(3 * t + 1) = mkU(1): tW(3 * t + 1) = mkW(1): tU(3 * t + 2) = mkU(2): tW(3 * t + 2) = mkW(2)
     END IF
-    tTex(t) = mkTex
+    tTex(t) = mkTex: tMat(t) = mkMat
     tNrm(t) = n: tPart(t) = mkPart: tFace(t) = mkFace: tCol(t) = mkCol
     IF usN THEN tCol(t) = TintCol~&(mkCol)
     tN = t

@@ -75,6 +75,7 @@ FUNCTION FieldShown (f)
     IF f = F_PFNAME THEN FieldShown = (typeField = F_PFNAME): EXIT FUNCTION
     IF f = F_PICPATH THEN FieldShown = (binTab = 1): EXIT FUNCTION
     IF f = F_BUDGET THEN FieldShown = (edPart = 0 AND SelCount = 0 AND placeKind = 0): EXIT FUNCTION
+    IF maOn THEN EXIT FUNCTION ' (MATERIAL has the panel)
     IF edPart THEN FieldShown = EdFieldShown(f): EXIT FUNCTION
     p = SelFirst
     IF p = 0 THEN
@@ -245,7 +246,8 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 21: x = PX0 + 100: y = 58: w = 24
         CASE 22: x = PX0 + 206: y = 58: w = 24
         CASE 23: x = PX0 + 158: y = 32: w = 72
-        CASE 24 TO 27: x = PX0 + ((k - 24) MOD 2) * 118: y = 542 + ((k - 24) \ 2) * 28: w = 112
+        CASE 24 TO 27, 30: i = k - 24: IF k = 30 THEN i = 4
+            x = PX0 + (i MOD 3) * 78: y = 542 + (i \ 3) * 28: w = 74 ' (EDIT APPLY GROUP / KEEP MATERIAL)
         CASE 28: x = PX0: y = 156: w = 230
         CASE 29: x = PX0: y = 184: w = 230
         CASE 31 TO 37: x = PX0 + (k - 31) * 33: y = 252: w = 31 ' (a die's faces: 4 6 8 10 12 20 30)
@@ -267,6 +269,7 @@ FUNCTION PanelBtnName$ (k)
         CASE 25: PanelBtnName$ = IIFS$(SelHasHole, "APPLY A", IIFS$(SelHasUse, "UNLINK U", "MERGE M"))
         CASE 26: PanelBtnName$ = "GROUP G"
         CASE 27: PanelBtnName$ = "KEEP K"
+        CASE 30: PanelBtnName$ = "MATERIAL"
         CASE 28: PanelBtnName$ = IIFS$(tidyView, "AS BUILT  T", "TIDY VIEW  T")
         CASE 29: PanelBtnName$ = IIFS$(mdlTidy, "EXPORT: TIDIED", "EXPORT: AS BUILT")
         CASE 31 TO 37: PanelBtnName$ = LTRIM$(STR$(dieN(k - 30)))
@@ -287,7 +290,7 @@ FUNCTION PanelBtnOn (k)
                 IF pSel(i) AND (pHole(i) <> 0 OR pKind(i) = K_USE) THEN PanelBtnOn = -1: EXIT FUNCTION
             NEXT
             PanelBtnOn = (SelCount > 1) ' (MERGE)
-        CASE 26: PanelBtnOn = (SelCount > 0)
+        CASE 26, 30: PanelBtnOn = (SelCount > 0)
         CASE 28, 29: PanelBtnOn = (SelCount = 0 AND placeKind = 0)
         CASE 31 TO 37: PanelBtnOn = (PanelDie > 0)
         CASE ELSE: PanelBtnOn = -1
@@ -559,7 +562,9 @@ SUB UiFrame
         k = SliderAt(mX, mY): SliderSet k, SliderVal(k) - 5 * SGN(mWheel), -1
     ELSEIF mWheel <> 0 THEN
         f = FieldAt(mX, mY)
-        IF BvSlideAt(mX, mY) > 0 THEN
+        IF MaSlideAt(mX, mY) >= 0 THEN
+            MaWheel -SGN(mWheel) ' (MATERIAL: a slider)
+        ELSEIF BvSlideAt(mX, mY) > 0 THEN
             BvWheel -SGN(mWheel) ' (bevelling: a slider)
         ELSEIF onRef = 2 THEN
             RefOpSet refOp(refSel) - 5 * SGN(mWheel) ' (REF's slider)
@@ -617,6 +622,8 @@ SUB UiFrame
             PanelBtn 18, x, y, w, h
             IF InRect(mX, mY, x, y, w, h) THEN SgToggle
             topSlide = SliderAt(mX, mY)
+        ELSEIF maOn AND mX < scrW - PANEL_W THEN
+            Msg "MATERIAL is open: APPLY (Enter) or CANCEL (Esc) first"
         ELSEIF mX < BIN_W THEN
             BinClick
         ELSEIF listOn AND mX < BIN_W + LIST_W THEN
@@ -676,6 +683,7 @@ SUB UiFrame
     END IF
     IF edDrag THEN EdDragUpdate lx, ly
     IF bvDrag THEN BvFrame
+    IF maDrag THEN MaFrame
     IF pvArm AND mB1 AND pvDrag = 0 THEN
         IF ABS(mX - dragPX) + ABS(mY - dragPY) > 3 THEN PvStart lx, ly
     END IF
@@ -770,9 +778,13 @@ SUB UiKey (k&)
     END IF
     IF binMenu AND k& = 27 THEN binMenu = 0: EXIT SUB
     IF LEN(pmRef$) > 0 AND k& = 27 THEN pmRef$ = "": Msg "": EXIT SUB
-    IF edPart AND NOT (kCtrl OR CtrlCode(k&)) THEN
+    IF maOn AND NOT (kCtrl OR CtrlCode(k&)) THEN
+        IF MaKey(k&) THEN EXIT SUB
+    END IF
+    IF edPart AND NOT (kCtrl OR CtrlCode(k&)) AND maOn = 0 THEN
         IF EdKey(k&) THEN EXIT SUB
     END IF
+    IF maOn AND (kCtrl OR CtrlCode(k&)) THEN MaCancel ' (an undo, a save...: the material not made first)
     IF bvOn AND (kCtrl OR CtrlCode(k&)) THEN BvCancel ' (an undo, a save...: the bevel not made first)
     IF kCtrl OR CtrlCode(k&) THEN
         IF CtrlIs(k&, "z") THEN
@@ -845,6 +857,7 @@ SUB UiKey (k&)
         CASE 112, 80: PenToggle ' (P: the pen)
         CASE 120, 88: TxToggle ' (X: text)
         CASE 117, 85: UseUnlink ' (U)
+        CASE 113, 81: MaStart ' (Q: MATERIAL)
         CASE 109, 77: SelMerge ' (M: the selected parts made one)
         CASE 116, 84: TidyToggle ' (T)
         CASE 118: FpStart 1 ' (V: walk)
@@ -996,6 +1009,7 @@ END FUNCTION
 ' ---------------------------------------------------------------- the bars' and panel's buttons
 
 SUB TopAction (k)
+    IF maOn AND k <= 7 AND k <> 5 THEN MaCancel ' (new, open, save, export...: the material not made first)
     SELECT CASE k
         CASE 1
             IF mdlDirty AND mdlAsk <> 1 THEN mdlAsk = 1: Msg "Not saved: NEW again to start over anyway (Ctrl+S saves)": EXIT SUB
@@ -1044,6 +1058,7 @@ END SUB
 
 SUB PanelClick
     DIM k, x, y, w, h, i, p, c AS _UNSIGNED LONG, b#
+    IF maOn THEN MaClick: EXIT SUB
     IF edPart THEN EdPanelClick: EXIT SUB
     IF TfClick THEN EXIT SUB
     IF SelCount > 0 THEN IF AlClick(604) THEN EXIT SUB
@@ -1065,6 +1080,7 @@ SUB PanelClick
                 CASE 24: EdToggle
                 CASE 25: IF SelHasHole THEN HoleApply ELSE IF SelHasUse THEN UseUnlink ELSE SelMerge
                 CASE 26: GroupToggle
+                CASE 30: MaStart
                 CASE 27: KeepToggle
                 CASE 1: SelDuplicate
                 CASE 2: SelDelete
@@ -1917,6 +1933,7 @@ SUB PanelDraw
     x = scrW - PANEL_W
     LINE (x, TOP_H)-(scrW - 1, scrH - BAR_H - 1), cPanel, BF
     LINE (x, TOP_H)-(x, scrH - BAR_H - 1), cLine
+    IF maOn THEN MaDraw: EXIT SUB
     IF edPart THEN EdPanelDraw: EXIT SUB
     p = SelFirst: n = SelCount
     IF n = 0 AND placeKind THEN p = P_TPL: n = -1 ' (the shape being put down, set up here first)
@@ -1996,8 +2013,9 @@ SUB PanelDraw
     FOR k = 1 TO 4
         PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), 0
     NEXT
-    FOR k = 24 TO 27
-        IF PanelBtnOn(k) THEN PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (k = 27 AND p > 0 AND pKeep(p) <> 0)
+    FOR k = 24 TO 30
+        IF k = 28 THEN k = 30
+        IF PanelBtnOn(k) THEN PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (k = 27 AND p > 0 AND pKeep(p) <> 0) OR (k = 30 AND p > 0 AND pMat(p) <> 0)
     NEXT
     y = 606
     IF SelCount > 0 AND edPart = 0 THEN
@@ -2288,6 +2306,7 @@ SUB HelpSetup
     HelpAdd "Delete|never leaves a hole: points taken out of their faces (each face keeps its other corners, as a pen's point); edges taken out (the faces either side made one); faces drawn in to a point (the faces round close over)"
     HelpAdd "Shift+Delete|the faces go instead, leaving a hole"
     HelpAdd "Palette|colour the picked faces"
+    HelpAdd "Q  or  MATERIAL|the picked faces' material (none picked: all the part's) - the MATERIAL topic"
     HelpAdd "SAME|(the panel) each picked point / piece made like the one clicked first: PLACE its middle, SIZE its reach (on the X Y Z lit), TURN (faces) facing the same way, AS SEEN its width / height / depth on screen"
     HelpAdd "Esc|let go of the picked ones, then done"
 
@@ -2313,12 +2332,31 @@ SUB HelpSetup
     HelpAdd "REPEAT|more or fewer times across"
     HelpAdd "Arrow buttons|slide it"
     HelpAdd "NO PICTURE|take it off (a colour from the palette does too)"
-    HelpAdd "Ctrl+C|copy the picture on the picked face (or the one pointed at) as it lies on it - how big, turned, where"
+    HelpAdd "Ctrl+C|copy the picture on the picked face (or the one pointed at) as it lies on it - how big, turned, where - and its colour and material"
     HelpAdd "Ctrl+V  Ctrl+Shift+V|put it on the picked faces (none picked: the one pointed at); on every face of the part"
     HelpAdd "#PAINTING ONE HERE"
     HelpAdd "Ctrl+P  PAINT IT|paint the picture of the face under the pointer (in E: of the picked faces) - no picture on it: a new one, its colour, put on first. The PAINT topic has the keys"
     HelpAdd "#PAINTING ONE IN DRAW"
     HelpAdd "EDIT IN DRAW|(E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first. Save it in DRAW (Ctrl+S) and it shows here straight away"
+
+    HelpTopic "MATERIAL"
+    HelpAdd "#WHAT A FACE IS MADE OF (Q, or MATERIAL)"
+    HelpAdd "Q|the selected parts' material - or in E, the picked faces' (none picked: all the part's). A face's own beats its part's"
+    HelpAdd "Presets|PLAIN GLASS NEON METAL CHROME PLASTIC PAINT RUBBER STONE VELVET GHOST GOLD: a start, then the sliders"
+    HelpAdd "Sliders|drag, or the wheel over one (16 steps, 0-100%). Pointing at one says what it does. Shown as it'll be"
+    HelpAdd "Enter  APPLY  Q|made (one Ctrl+Z puts it back);  Esc: as it was"
+    HelpAdd "#THE EIGHT"
+    HelpAdd "SEE|see-through: 0 solid, 100 nearly gone (glass, water, ghosts). Drawn after the rest, far to near; a click still picks it"
+    HelpAdd "GLOW|lights itself: its colour as it is, with no light on it, and a halo round it (in the game: blooms)"
+    HelpAdd "SHINE|how strong the bright spot the lights make on it is"
+    HelpAdd "ROUGH|how wide that spot spreads: 0 small and sharp (wet, polished), 100 broad and soft"
+    HelpAdd "METAL|the spot and the sky it reflects take the face's own colour, the face itself goes darker (gold: a yellow METAL)"
+    HelpAdd "BUMP|relief from its picture: lighter pixels stand out, darker sink in (stone, bark, rust) - only on a face with a picture"
+    HelpAdd "COAT|a clear glossy layer over the rest: a second sharp spot (car paint, lacquer, a wet floor)"
+    HelpAdd "SHEEN|soft light along its edges seen side-on (velvet, cloth, dust)"
+    HelpAdd "#IN THE GAME"
+    HelpAdd "EXPORT|writes NAME_mat.png beside the texture: NEON-CASTER draws all eight. The .mtl has them too, for Blender (Pm Pr Pc Ps Ke d). The 8 pictures show GLOW and SEE"
+    HelpAdd "OPEN a prop|its NAME_mat.png read back onto its faces"
 
     HelpTopic "PAINT"
     HelpAdd "#THE PAINTER (Ctrl+P on a face)"
@@ -2395,6 +2433,7 @@ SUB HelpSetup
     HelpAdd "C  or  HOLE|a hole: cut out of the solid parts before it in the list (so a part after it can sit in it). Seen see-through grey (click to pick it)"
     HelpAdd "Put down as one|it drills into the face it's put on"
     HelpAdd "K  or  KEEP|only where it overlaps the parts before it stays"
+    HelpAdd "Q  or  MATERIAL|see-through, glow, shine, metal... on the selected parts (the MATERIAL topic)"
     HelpAdd "M  or  MERGE|(two or more solid parts selected) made one mesh part: their outsides kept, the insides where they overlap gone - a boolean add. Colours and pictures kept; Ctrl+Z: back"
     HelpAdd "A  or  APPLY|a hole or KEEP cut for good (mesh parts, editable) - select solid parts with it and it cuts just those, wherever they're listed"
     HelpAdd "In a group|a hole cuts every solid part of its group, wherever it's listed - and nothing else"

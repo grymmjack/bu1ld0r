@@ -16,6 +16,7 @@ SUB ExportAll
     ex$ = appDir$ + "export/"
     WriteObj ex$ + n$ + ".obj", n$, n$ + "_tex.png", 0
     WriteTex ex$ + n$ + "_tex.png", 256
+    WriteMat ex$ + n$ + "_mat.png", 256
     made$ = ex$ + n$ + ".obj"
 
     nd$ = neonDir$
@@ -26,6 +27,8 @@ SUB ExportAll
             WriteObj nd$ + "models/" + n$ + ".obj", n$, "../hd/models/" + n$ + "_tex.png", -1
             WriteTex nd$ + "models/" + n$ + "_tex.png", 64
             WriteTex nd$ + "hd/models/" + n$ + "_tex.png", 256
+            WriteMat nd$ + "models/" + n$ + "_mat.png", 64
+            WriteMat nd$ + "hd/models/" + n$ + "_mat.png", 256
             img& = _NEWIMAGE(PIC_SIZE, PIC_SIZE, 32): big& = _NEWIMAGE(PIC_SIZE * PIC_SS, PIC_SIZE * PIC_SS, 32)
             FOR f = 0 TO 7
                 RenderPicture f, big&, img&
@@ -52,7 +55,7 @@ FUNCTION ExTexOf (t AS LONG)
     DIM k
     IF tTex(t) <= 0 THEN EXIT FUNCTION
     FOR k = 1 TO exPicN
-        IF exPic(k) = tTex(t) THEN ExTexOf = k: EXIT FUNCTION
+        IF exPic(k) = tTex(t) AND exPicM(k) = tMat(t) THEN ExTexOf = k: EXIT FUNCTION
     NEXT
 END FUNCTION
 
@@ -315,7 +318,7 @@ SUB ExAtlas
     FOR t = 1 TO sceneTN
         k = tTex(t)
         IF k > 0 AND exPicN < EX_PICS THEN
-            IF picW(k) > 0 AND ExTexOf(t) = 0 THEN exPicN = exPicN + 1: exPic(exPicN) = k
+            IF picW(k) > 0 AND ExTexOf(t) = 0 THEN exPicN = exPicN + 1: exPic(exPicN) = k: exPicM(exPicN) = tMat(t)
         END IF
     NEXT
     ExColours
@@ -405,7 +408,8 @@ SUB ExColSpot (k0, u, v)
     END SELECT
 END SUB
 
-' The model's colours (of faces with no picture), each a square of the texture
+' The model's colours (of faces with no picture), each a square of the texture -
+' a colour and a material (exColM): the material file has that square its own
 SUB ExColours
     DIM t AS LONG, k, found
     exColN = 0
@@ -413,22 +417,27 @@ SUB ExColours
         IF ExTexOf(t) THEN _CONTINUE
         found = -1
         FOR k = 0 TO exColN - 1
-            IF exCol(k) = tCol(t) THEN found = k: EXIT FOR
+            IF exCol(k) = tCol(t) AND exColM(k) = tMat(t) THEN found = k: EXIT FOR
         NEXT
-        IF found < 0 AND exColN < EX_COLS THEN exCol(exColN) = tCol(t): exColN = exColN + 1
+        IF found < 0 AND exColN < EX_COLS THEN exCol(exColN) = tCol(t): exColM(exColN) = tMat(t): exColN = exColN + 1
     NEXT
 END SUB
 
-' Which square of the texture colour c is (the nearest, past 64 colours)
-FUNCTION ExColIdx (c AS _UNSIGNED LONG)
-    DIM k, best, d, bd
-    bd = 1E9
-    FOR k = 0 TO exColN - 1
-        IF exCol(k) = c THEN ExColIdx = k: EXIT FUNCTION
-        d = (_RED32(c) - _RED32(exCol(k))) ^ 2 + (_GREEN32(c) - _GREEN32(exCol(k))) ^ 2 + (_BLUE32(c) - _BLUE32(exCol(k))) ^ 2
-        IF d < bd THEN bd = d: best = k
+' Which square of the texture colour c with material m is (past 64: the nearest
+' colour with that material, else the nearest)
+FUNCTION ExColIdx (c AS _UNSIGNED LONG, m AS _UNSIGNED LONG)
+    DIM k, best, d, bd, pass
+    FOR pass = 1 TO 2
+        bd = 1E9: best = -1
+        FOR k = 0 TO exColN - 1
+            IF exColM(k) = m OR pass = 2 THEN
+                IF exCol(k) = c AND exColM(k) = m THEN ExColIdx = k: EXIT FUNCTION
+                d = (_RED32(c) - _RED32(exCol(k))) ^ 2 + (_GREEN32(c) - _GREEN32(exCol(k))) ^ 2 + (_BLUE32(c) - _BLUE32(exCol(k))) ^ 2
+                IF d < bd THEN bd = d: best = k
+            END IF
+        NEXT
+        IF best >= 0 THEN ExColIdx = best: EXIT FUNCTION
     NEXT
-    ExColIdx = best
 END FUNCTION
 
 ' How many cells across its pictures are: room for it all round, as models.py works it out
@@ -450,7 +459,7 @@ SUB ExFrameWork
 END SUB
 
 SUB WriteObj (f$, n$, tex$, neon)
-    DIM fh, t AS LONG, k, a AS LONG, ti, u, v, vtN AS LONG, pk, l$
+    DIM fh, t AS LONG, k, a AS LONG, ti, u, v, vtN AS LONG, pk, l$, lm AS _UNSIGNED LONG, j AS LONG, seen
     fh = FREEFILE: OPEN f$ FOR OUTPUT AS #fh
     IF neon THEN
         PRINT #fh, "# NEON-CASTER prop: " + n$ + " - made by bu1ld0r (edit models/" + n$ + ".bld there, not this)"
@@ -461,7 +470,6 @@ SUB WriteObj (f$, n$, tex$, neon)
     PRINT #fh, "# frame " + Fmt$(exFrame)
     PRINT #fh, "# (how many cells across its 8 pictures are)"
     PRINT #fh, "mtllib " + n$ + ".mtl"
-    PRINT #fh, "usemtl " + n$
     ' (each corner once: the triangles name them)
     EmClear: EmWeldStart sceneTN * 3
     REDIM woV(3 * sceneTN + 3) AS LONG
@@ -478,7 +486,9 @@ SUB WriteObj (f$, n$, tex$, neon)
         PRINT #fh, "vt " + Fmt$(u) + " " + Fmt$(1 - v)
     NEXT
     vtN = EX_COLS
+    lm = 1
     FOR t = 1 TO sceneTN
+        IF t = 1 OR tMat(t) <> lm THEN lm = tMat(t): PRINT #fh, "usemtl " + ExMtlName$(n$, lm) ' (3D programs: each material its own; the game reads none of it)
         pk = ExTexOf(t)
         IF pk THEN ' (a picture: each corner its own spot)
             l$ = "f"
@@ -497,17 +507,100 @@ SUB WriteObj (f$, n$, tex$, neon)
             NEXT
             PRINT #fh, l$
         ELSE
-            ti = ExColIdx(tCol(t)) + 1
+            ti = ExColIdx(tCol(t), tMat(t)) + 1
             PRINT #fh, "f" + STR$(woV(3 * t)) + "/" + LTRIM$(STR$(ti)) + STR$(woV(3 * t + 1)) + "/" + LTRIM$(STR$(ti)) + STR$(woV(3 * t + 2)) + "/" + LTRIM$(STR$(ti))
         END IF
     NEXT
     CLOSE #fh
     fh = FREEFILE: OPEN LEFT$(f$, LEN(f$) - 4) + ".mtl" FOR OUTPUT AS #fh
-    PRINT #fh, "# " + n$ + " - its texture, for 3D programs"
-    PRINT #fh, "newmtl " + n$
+    PRINT #fh, "# " + n$ + " - its texture and materials, for 3D programs (Pm Pr Pc Ps: the PBR"
+    PRINT #fh, "# words Blender's importer reads). NEON-CASTER reads " + n$ + "_mat.png instead"
+    FOR t = 1 TO sceneTN ' (each material once)
+        seen = 0
+        FOR j = 1 TO t - 1
+            IF tMat(j) = tMat(t) THEN seen = -1: EXIT FOR
+        NEXT
+        IF seen = 0 THEN ExMtl fh, ExMtlName$(n$, tMat(t)), tMat(t), tex$
+    NEXT
+    CLOSE #fh
+END SUB
+
+FUNCTION ExMtlName$ (n$, m AS _UNSIGNED LONG)
+    IF m = 0 THEN ExMtlName$ = n$ ELSE ExMtlName$ = n$ + "_" + LCASE$(MaShort$(m)) + "_" + LCASE$(RIGHT$("0000000" + HEX$(m), 8))
+END FUNCTION
+
+' One material's .mtl entry
+SUB ExMtl (fh, nm$, m AS _UNSIGNED LONG, tex$)
+    DIM see, glow, shine, rough, metal, bump, coat, sheen
+    see = MatGet(m, 0) / 100: glow = MatGet(m, 1) / 100: shine = MatGet(m, 2) / 100: rough = MatGet(m, 3) / 100
+    metal = MatGet(m, 4) / 100: bump = MatGet(m, 5) / 100: coat = MatGet(m, 6) / 100: sheen = MatGet(m, 7) / 100
+    PRINT #fh, ""
+    PRINT #fh, "newmtl " + nm$
     PRINT #fh, "Kd 1 1 1"
     PRINT #fh, "map_Kd " + tex$
-    CLOSE #fh
+    IF m = 0 THEN EXIT SUB
+    PRINT #fh, "Ks " + Fmt$(shine) + " " + Fmt$(shine) + " " + Fmt$(shine)
+    PRINT #fh, "Ns " + Fmt$(10 + 990 * (1 - rough) ^ 2)
+    IF see > 0 THEN PRINT #fh, "d " + Fmt$(1 - see * .85)
+    IF glow > 0 THEN PRINT #fh, "Ke " + Fmt$(glow) + " " + Fmt$(glow) + " " + Fmt$(glow): PRINT #fh, "map_Ke " + tex$
+    PRINT #fh, "Pm " + Fmt$(metal)
+    PRINT #fh, "Pr " + Fmt$(rough)
+    IF coat > 0 THEN PRINT #fh, "Pc " + Fmt$(coat): PRINT #fh, "Pcr 0.03"
+    IF sheen > 0 THEN PRINT #fh, "Ps " + Fmt$(sheen)
+    IF bump > 0 THEN PRINT #fh, "map_Bump -bm " + Fmt$(bump) + " " + tex$
+END SUB
+
+' Material m as the material file's pixel (two values a channel, MODEL/MAT.BI)
+FUNCTION MatPx~& (m AS _UNSIGNED LONG)
+    MatPx~& = _RGBA32((m \ &H1000000~&) AND 255, (m \ &H10000~&) AND 255, (m \ &H100~&) AND 255, 255 - (m AND 255))
+END FUNCTION
+
+' The material file: as the texture is laid out, each colour square and each
+' picture's place its material's pixel. None in the model: no file (an old one
+' taken away - every face plain)
+SUB WriteMat (f$, size)
+    DIM img&, k, c AS _UNSIGNED LONG, d, b, cs, x0, y0, t AS LONG, got
+    FOR t = 1 TO sceneTN
+        IF tMat(t) THEN got = -1: EXIT FOR
+    NEXT
+    IF got = 0 THEN
+        IF _FILEEXISTS(f$) THEN KILL f$
+        EXIT SUB
+    END IF
+    img& = _NEWIMAGE(size, size, 32)
+    d = _DEST: _DEST img&: _DONTBLEND img&
+    CLS , MatPx~&(0)
+    SELECT CASE exMode
+        CASE 0
+            b = size \ 8
+            FOR k = 0 TO EX_COLS - 1
+                c = MatPx~&(exColM(0)): IF k < exColN THEN c = MatPx~&(exColM(k))
+                LINE ((k MOD 8) * b, (k \ 8) * b)-((k MOD 8) * b + b - 1, (k \ 8) * b + b - 1), c, BF
+            NEXT
+        CASE 1
+            CLS , MatPx~&(exPicM(1))
+            b = size \ EX_BLK
+            FOR k = 0 TO exColN - 1
+                x0 = (exBlk(k) MOD EX_BLK) * b: y0 = (exBlk(k) \ EX_BLK) * b
+                LINE (x0, y0)-(x0 + b - 1, y0 + b - 1), MatPx~&(exColM(k)), BF
+            NEXT
+        CASE ELSE
+            cs = size \ exGrid
+            FOR k = 1 TO exPicN
+                x0 = ((k - 1) MOD exGrid) * cs: y0 = ((k - 1) \ exGrid) * cs
+                LINE (x0, y0)-(x0 + cs - 1, y0 + cs - 1), MatPx~&(exPicM(k)), BF
+            NEXT
+            IF exColN > 0 THEN
+                x0 = (exPicN MOD exGrid) * cs: y0 = (exPicN \ exGrid) * cs: b = cs \ 8
+                FOR k = 0 TO EX_COLS - 1
+                    c = MatPx~&(exColM(0)): IF k < exColN THEN c = MatPx~&(exColM(k))
+                    LINE (x0 + (k MOD 8) * b, y0 + (k \ 8) * b)-(x0 + (k MOD 8) * b + b - 1, y0 + (k \ 8) * b + b - 1), c, BF
+                NEXT
+            END IF
+    END SELECT
+    _DEST d
+    _SAVEIMAGE f$, img&
+    _FREEIMAGE img&
 END SUB
 
 ' The texture: each colour an eighth across, the squares past the last the
@@ -588,7 +681,10 @@ SUB RenderPicture (f, big&, img&)
     rOrtho = -1: rSpan = exFrame: rCull = 0: rBacks = 0: rGhost = 0
     RenderBegin big&, S, S
     d = _DEST: _DEST big&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
+    rMatOn = -1: rSeeN = 0: rGlowN = 0
     FOR t = 1 TO sceneTN: RasterTri t: NEXT
+    RenderSeePass: GlowHalo
+    rMatOn = 0
     RenderEnd
     rOrtho = 0
     m = _MEMIMAGE(big&): mi = _MEMIMAGE(img&)
@@ -598,7 +694,7 @@ SUB RenderPicture (f, big&, img&)
             FOR sy = 0 TO PIC_SS - 1
                 FOR sx = 0 TO PIC_SS - 1
                     i = (y * PIC_SS + sy) * S + x * PIC_SS + sx
-                    IF rId(i) > 0 THEN
+                    IF rId(i) > 0 AND (rZ(i) > 0 OR (tMat(rId(i)) \ &H10000000~&) < 8) THEN ' (more see-through than not, over nothing: not covered)
                         _MEMGET m, m.OFFSET + i * 4, c
                         r = r + _RED32(c): g = g + _GREEN32(c): b = b + _BLUE32(c): cnt = cnt + 1
                     END IF

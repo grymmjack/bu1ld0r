@@ -900,6 +900,6 @@ SUB SvTri (ax#, ay#, az#, bx#, by#, bz#, cx#, cy#, cz#, col AS _UNSIGNED LONG)
     tA(tN).x = ax#: tA(tN).y = ay#: tA(tN).z = az#
     tB(tN).x = bx#: tB(tN).y = by#: tB(tN).z = bz#
     tC(tN).x = cx#: tC(tN).y = cy#: tC(tN).z = cz#
-    tEdge(tN) = 7: tTex(tN) = 0: tCol(tN) = col
+    tEdge(tN) = 7: tTex(tN) = 0: tMat(tN) = 0: tCol(tN) = col
     tU(3 * tN) = 0: tU(3 * tN + 1) = 0: tU(3 * tN + 2) = 0: tW(3 * tN) = 0: tW(3 * tN + 1) = 0: tW(3 * tN + 2) = 0
 END SUB

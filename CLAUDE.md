@@ -415,6 +415,36 @@ frames on (`DropFrame`: GLFW gives the pointer late); `--drop F` tests it.
 Export: `ExSplitRepeats` cuts repeats (the game clamps). Test: `--open neon:crate --save` / `--export --neon
 SCRATCH` and compare with the game's own textures (`compare -metric AE`).
 
+## Materials (0.7.0)
+
+Eight values a face, 4 bits each in one `_UNSIGNED LONG` from the top: SEE
+GLOW SHINE ROUGH METAL BUMP COAT SHEEN (MODEL/MAT: `MatPack~&`, `MatGet`
+in %, `MatSet~&`, `.bld` word `m=..` via `MatWord$` / `MatParse~&`;
+presets `matPre`). Carried as pictures are: `mfMat`/`sfMat`/`tMat`/`cgMat`,
+`emMat` before each EmAddF& (every call site sets it), EmMerge joins only
+equal ones. `pMat` (part): MeshItem puts it on the part's triangles with
+`tMat` 0 - so MERGE / APPLY clear the result's pMat (its faces carry it),
+UNLINK hands the use's to its parts, PartMeshOf& keeps a use's off the faces.
+UI/MATS: Q / MATERIAL, a mode like BEVEL (`maOn`; in E `maBase`/`maPrev`
+meshes, outside `maOld`); UiKey gives it keys before EdKey, PanelDraw /
+PanelClick hand it the panel, presses elsewhere are refused.
+The view (VIEW/VMAT): RasterTri sends a tMat triangle to `RasterMat` only when
+`rMatOn` (ViewRender, bin icons, export pictures); SEE ones are queued
+(`rSeeT`) and drawn by `RenderSeePass` far to near (rId, not rZ); light at
+corners (`MatCorner`: highlight, coat, sheen, a fake sky for metal - `rmEnv`),
+`MatPiece` cuts big ones up to 64 pieces; `FillTriM` fills (BUMP from the
+picture, alpha < 128 cut - FillTriT cuts too); `GlowHalo` blurs the glowing
+faces' box (`rGlX0..`) a quarter size. Plain faces never go there.
+Export: colour squares are colour + material (`exColM`, `ExColIdx(c, m)`),
+pictures picture + material (`exPicM`); `WriteMat` writes `NAME_mat.png`
+(R = SEE*16+GLOW, G = SHINE*16+ROUGH, B = METAL*16+BUMP, A = 255-(COAT*16+SHEEN);
+`MatPx~&` / `MatFromPx~&`) or deletes a stale one; `.mtl` per material with
+Blender's PBR words; OBJ `usemtl` per run. IMPORT reads `_mat.png` beside
+the texture. NEON-CASTER's side: its CLAUDE.md "Model materials".
+Testing in the game: `+map 8 +wait 20 +put X Y n +tp ..` puts a vending
+machine anywhere (export as `vending` into a `cp -as` copy after removing
+that copy's `vending*` links - writing through a link overwrites the repo's).
+
 ## Tidying the export (OUT/TIDY)
 
 Opt-in: `mdlTidy` (`tidy 1` in the .bld, EXPORT: TIDIED) - Rick found it
@@ -435,7 +465,7 @@ As models.py: OBJ y up, front -z, `# frame F` (max of 2 x reach and
 height, x 1.04), one texture (each colour an 8th-square block), 8 pictures
 at 64 px drawn 4x and shrunk (textured faces drawn textured), lit `eye*.55 + up*.8 - right*.35`, shade
 `.72 + .45 x lit`, see-through below half coverage. Picture f's eye is
-(sin f45, 0, -cos f45). The game's models share MAX_MDL_TRIS (16,000).
+(sin f45, 0, -cos f45). The game's models share MAX_MDL_TRIS (64,000; its own ~11,000). A new model goes in a level as a prop: `[things]` `x, y, prop, NAME[, HP]` (the game's editor: MODEL < >; console `prop X Y NAME`); the game reloads a prop when its files change (PropWatch, RENDER/MODELS.BM there).
 
 ## Build
 

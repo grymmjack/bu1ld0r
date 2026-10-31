@@ -67,7 +67,10 @@ SUB RenderIcon (k, r$, img&)
         RenderBegin img&, 64, 64
         d = _DEST: _DEST img&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
         rOrtho = 0: rCull = -1: rBacks = 0: rGhost = 0
+        rMatOn = -1: rSeeN = 0: rGlowN = 0 ' (materials shown: see-through, glow, shine)
         FOR t = t0 + 1 TO tN: RasterTri t: NEXT
+        RenderSeePass
+        rMatOn = 0: rGlowN = 0
         RenderEnd
         IF k > NUM_KINDS THEN EXIT FOR
         ext = IconExtent(img&)

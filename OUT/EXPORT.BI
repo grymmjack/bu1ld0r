@@ -12,6 +12,7 @@ CONST PIC_SIZE = 64, PIC_SS = 4 ' (the 8 pictures: 64 px, drawn 4 times bigger a
 REDIM SHARED woV(0) AS LONG ' (the OBJ's triangles: each corner's point)
 
 DIM SHARED exCol(EX_COLS - 1) AS _UNSIGNED LONG, exColN
+DIM SHARED exColM(EX_COLS - 1) AS _UNSIGNED LONG ' (each colour square's material: the same colour with two materials is two squares)
 DIM SHARED exFrame ' (how many cells across the 8 pictures are)
 
 ' Pictures on the model (imported props' textures): the texture holds them too.
@@ -20,3 +21,4 @@ DIM SHARED exFrame ' (how many cells across the 8 pictures are)
 ' a square of it, then the colours' square
 CONST EX_PICS = 15, EX_BLK = 16
 DIM SHARED exMode, exPicN, exPic(EX_PICS) AS INTEGER, exGrid, exBlk(EX_COLS - 1) AS INTEGER
+DIM SHARED exPicM(EX_PICS) AS _UNSIGNED LONG ' (and its material: one picture on faces of two materials is put in twice, each its own place)

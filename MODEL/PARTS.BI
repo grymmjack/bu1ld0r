@@ -34,6 +34,7 @@ DIM SHARED pMesh(P_SWAP) AS LONG ' (a mesh part's polygons: which in the pool - 
 DIM SHARED pKeep(P_SWAP) AS INTEGER ' (a hole that keeps only where it overlaps: an intersection)
 DIM SHARED pGrp(P_SWAP) AS INTEGER ' (its group: a hole in one cuts only its own group's parts; a click selects them all)
 DIM SHARED pTint(P_SWAP) AS _UNSIGNED LONG ' (a prefab's use: every colour of it mixed towards this, by its alpha)
+DIM SHARED pMat(P_SWAP) AS _UNSIGNED LONG ' (its material - MODEL/MAT: on every face of it that has none of its own)
 
 DIM SHARED kindName$(K_MESH), kindSX(K_MESH), kindSY(K_MESH), kindSZ(K_MESH), kindAmt(K_MESH)
 DIM SHARED kindB(K_MESH) AS DOUBLE ' (a die's, star's, spike's base size: the last put down's, ShapeBase#)

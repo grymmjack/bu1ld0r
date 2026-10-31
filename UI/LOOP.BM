@@ -166,7 +166,7 @@ SUB LcCut
                 IF tx THEN emU(0) = pu#(s + 1): emW(0) = pw#(s + 1): emU(1) = pu#(s): emW(1) = pw#(s): emU(2) = qu#(s): emW(2) = qw#(s): emU(3) = qu#(s + 1): emW(3) = qw#(s + 1)
             END IF
             IF tx THEN emTex = tx
-            r = EmAddF&(4, sfCol(g))
+            emMat = sfMat(g): r = EmAddF&(4, sfCol(g))
         NEXT
         sfLive(g) = 0
     NEXT
@@ -211,7 +211,7 @@ SUB LcInsert (f AS LONG)
         emTex = sfTex(f)
         FOR k = 0 TO m - 1: emU(k) = nu#(k): emW(k) = nw#(k): NEXT
     END IF
-    r = EmAddF&(m, sfCol(f)): sfLive(f) = 0
+    emMat = sfMat(f): r = EmAddF&(m, sfCol(f)): sfLive(f) = 0
 END SUB
 
 ' Has face g a side between points a and b (either way round)?

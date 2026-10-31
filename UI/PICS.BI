@@ -38,4 +38,5 @@ DIM SHARED picTS ' (the PICTURES tab's tiles, in pixels: Shift + wheel, pic_size
 CONST PIC_TS_MIN = 40, PIC_TS_MAX = 256
 DIM SHARED cfgKaleido$ ' (kaleidotron's program: kaleidotron= in bu1ld0r.cfg)
 DIM SHARED lookHave, lookCol AS _UNSIGNED LONG, lookTex, lookU#(2), lookV#(2) ' (a face's look copied in E: colour, picture, its spots as planes)
+DIM SHARED lookMat AS _UNSIGNED LONG ' (and its material)
 DIM SHARED clipParts$ ' (parts copied: their .bld lines)

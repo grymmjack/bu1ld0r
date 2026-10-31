@@ -1,0 +1,383 @@
+''
+' bu1ld0r - VIEW/VMAT.BM
+' =============================================================================
+' Faces with a material, drawn in the view as near the game as a CPU can:
+' - SHINE / ROUGH / METAL / COAT / SHEEN: light worked out at the corners and
+'   blended across (a big face cut into pieces first, up to 64, so the bright
+'   spot lands where it should); METAL's highlight in the face's colour, the
+'   face darker
+' - GLOW: unlit (its colour as it is), and a halo blurred round it after
+' - SEE: left out of the first pass, then drawn far to near over the rest,
+'   blended (not in rZ: what's behind stays; in rId: a click picks it)
+' - BUMP: each pixel of its picture lighter or darker by how much lighter it
+'   is than the one beside it (relief, as the game's walls)
+' Plain faces (tMat 0) never come here: RasterTri draws them as before.
+
+' Triangle t, seen (n: its normal turned to the eye, lit, sh: RasterTri's)
+SUB RasterMat (t AS LONG, n AS V3, lit, sh)
+    DIM m AS _UNSIGNED LONG, k, lvl, d, x0, x1, y0, y1, cx, cy, cz, sx, sy, behind, dx, dy, dz
+    m = tMat(t)
+    rmSee = ((m \ &H10000000~&) AND 15) / 15: rmGlow = ((m \ &H1000000~&) AND 15) / 15
+    rmShine = ((m \ &H100000~&) AND 15) / 15: rmRough = ((m \ &H10000~&) AND 15) / 15
+    rmMetal = ((m \ &H1000~&) AND 15) / 15: rmBump = ((m \ &H100~&) AND 15) / 15
+    rmCoat = ((m \ &H10~&) AND 15) / 15: rmSheen = (m AND 15) / 15
+    IF rmSee > 0 AND rSeePass = 0 THEN ' (later, far to near)
+        rSeeN = rSeeN + 1
+        IF rSeeN > UBOUND(rSeeT) THEN REDIM _PRESERVE rSeeT(rSeeN * 2 + 64) AS LONG: REDIM _PRESERVE rSeeD(rSeeN * 2 + 64) AS SINGLE
+        cx = (tA(t).x + tB(t).x + tC(t).x) / 3: cy = (tA(t).y + tB(t).y + tC(t).y) / 3: cz = (tA(t).z + tB(t).z + tC(t).z) / 3
+        IF rOrtho THEN
+            rSeeD(rSeeN) = cx * cFX + cy * cFY + cz * cFZ
+        ELSE
+            dx = cx - cEX: dy = cy - cEY: dz = cz - cEZ: rSeeD(rSeeN) = dx * dx + dy * dy + dz * dz
+        END IF
+        rSeeT(rSeeN) = t
+        EXIT SUB
+    END IF
+    rmA = 1 - rmSee * .85 ' (100% see-through still shows a little: else it can't be found)
+    rmNX = n.x: rmNY = n.y: rmNZ = n.z: rmLit = lit
+    rmDif = sh * (1 - .6 * rmMetal)
+    rmDif = rmDif * (1 - rmGlow) + 1.15 * rmGlow
+    IF rmGlow > 0 THEN
+        IF rGlowN = 0 THEN rGlX0 = rW: rGlY0 = rH: rGlX1 = -1: rGlY1 = -1
+        rGlowN = rGlowN + 1
+    END IF
+    rmEx = 64 - 58 * rmRough
+    rmSpk = (rmShine * 1.2 + rmMetal * .8) * (.25 + .75 * (rmEx - 6) / 58)
+    rmEnv = (rmShine * .2 + rmMetal * .55 + rmCoat * .25) * (1 - .6 * rmRough)
+    rmBR = _RED32(tCol(t)): rmBG = _GREEN32(tCol(t)): rmBB = _BLUE32(tCol(t))
+    rmTx = 0
+    IF tTex(t) > 0 THEN
+        IF picW(tTex(t)) > 0 THEN rmTx = tTex(t)
+    END IF
+    rmId = t
+    ' How finely: only if light changes across it, by how big it is on the view
+    lvl = 0
+    IF rmSpk > 0 OR rmCoat > 0 OR rmSheen > 0 THEN
+        x0 = 1E+30: x1 = -1E+30: y0 = 1E+30: y1 = -1E+30
+        FOR k = 0 TO 2
+            SELECT CASE k
+                CASE 0: cx = tA(t).x: cy = tA(t).y: cz = tA(t).z
+                CASE 1: cx = tB(t).x: cy = tB(t).y: cz = tB(t).z
+                CASE 2: cx = tC(t).x: cy = tC(t).y: cz = tC(t).z
+            END SELECT
+            IF rOrtho THEN
+                sx = ((cx * cRX + cy * cRY + cz * cRZ) / rSpan + .5) * rW
+                sy = (1 - (cx * cUX + cy * cUY + cz * cUZ) / rSpan) * rH
+            ELSE
+                CamSpace cx, cy, cz, dx, dy, dz
+                IF dz < rNear THEN behind = -1: dz = rNear
+                sx = cMidX + dx / dz * cFoc: sy = cMidY - dy / dz * cFoc
+            END IF
+            IF sx < x0 THEN x0 = sx
+            IF sx > x1 THEN x1 = sx
+            IF sy < y0 THEN y0 = sy
+            IF sy > y1 THEN y1 = sy
+        NEXT
+        d = x1 - x0: IF y1 - y0 > d THEN d = y1 - y0
+        IF d > 40 THEN lvl = 1
+        IF d > 100 THEN lvl = 2
+        IF d > 220 OR behind THEN lvl = 3
+    END IF
+    MatPiece lvl, tA(t).x, tA(t).y, tA(t).z, tU(3 * t), tW(3 * t), tB(t).x, tB(t).y, tB(t).z, tU(3 * t + 1), tW(3 * t + 1), tC(t).x, tC(t).y, tC(t).z, tU(3 * t + 2), tW(3 * t + 2)
+END SUB
+
+' A piece of it: cut in four lvl times, then its corners lit and it's filled
+SUB MatPiece (lvl, ax, ay, az, au, aw, bx, by, bz, bu, bw, cx, cy, cz, cu, cw)
+    DIM wx(2), wy(2), wz(2), ku(2), kw(2), kr(2), kg(2), kb(2), k, j, nz, f, ink, inj, cnt
+    DIM vx(4), vy(4), vz(4), vu(4), vw(4), vr(4), vg(4), vb(4), sx(4), sy(4), q(4), qx(2), qy(2), qz(2)
+    DIM mx1, my1, mz1, mu1, mw1, mx2, my2, mz2, mu2, mw2, mx3, my3, mz3, mu3, mw3
+    IF lvl > 0 THEN
+        mx1 = (ax + bx) / 2: my1 = (ay + by) / 2: mz1 = (az + bz) / 2: mu1 = (au + bu) / 2: mw1 = (aw + bw) / 2
+        mx2 = (bx + cx) / 2: my2 = (by + cy) / 2: mz2 = (bz + cz) / 2: mu2 = (bu + cu) / 2: mw2 = (bw + cw) / 2
+        mx3 = (cx + ax) / 2: my3 = (cy + ay) / 2: mz3 = (cz + az) / 2: mu3 = (cu + au) / 2: mw3 = (cw + aw) / 2
+        MatPiece lvl - 1, ax, ay, az, au, aw, mx1, my1, mz1, mu1, mw1, mx3, my3, mz3, mu3, mw3
+        MatPiece lvl - 1, mx1, my1, mz1, mu1, mw1, bx, by, bz, bu, bw, mx2, my2, mz2, mu2, mw2
+        MatPiece lvl - 1, mx3, my3, mz3, mu3, mw3, mx2, my2, mz2, mu2, mw2, cx, cy, cz, cu, cw
+        MatPiece lvl - 1, mx1, my1, mz1, mu1, mw1, mx2, my2, mz2, mu2, mw2, mx3, my3, mz3, mu3, mw3
+        EXIT SUB
+    END IF
+    wx(0) = ax: wy(0) = ay: wz(0) = az: ku(0) = au: kw(0) = aw
+    wx(1) = bx: wy(1) = by: wz(1) = bz: ku(1) = bu: kw(1) = bw
+    wx(2) = cx: wy(2) = cy: wz(2) = cz: ku(2) = cu: kw(2) = cw
+    FOR k = 0 TO 2: MatCorner wx(k), wy(k), wz(k), kr(k), kg(k), kb(k): NEXT
+    IF rOrtho THEN
+        FOR k = 0 TO 2
+            sx(k) = ((wx(k) * cRX + wy(k) * cRY + wz(k) * cRZ) / rSpan + .5) * rW
+            sy(k) = (1 - (wx(k) * cUX + wy(k) * cUY + wz(k) * cUZ) / rSpan) * rH
+            q(k) = 1000 - (wx(k) * cFX + wy(k) * cFY + wz(k) * cFZ)
+            rmR(k) = kr(k): rmG(k) = kg(k): rmB(k) = kb(k)
+        NEXT
+        FillTriM sx(0), sy(0), q(0), 1, ku(0), kw(0), sx(1), sy(1), q(1), 1, ku(1), kw(1), sx(2), sy(2), q(2), 1, ku(2), kw(2)
+        EXIT SUB
+    END IF
+    nz = rNear
+    FOR k = 0 TO 2: CamSpace wx(k), wy(k), wz(k), qx(k), qy(k), qz(k): NEXT
+    IF qz(0) < nz AND qz(1) < nz AND qz(2) < nz THEN EXIT SUB
+    cnt = 0
+    FOR k = 0 TO 2
+        j = (k + 1) MOD 3
+        ink = (qz(k) >= nz): inj = (qz(j) >= nz)
+        IF ink THEN
+            vx(cnt) = qx(k): vy(cnt) = qy(k): vz(cnt) = qz(k): vu(cnt) = ku(k): vw(cnt) = kw(k)
+            vr(cnt) = kr(k): vg(cnt) = kg(k): vb(cnt) = kb(k): cnt = cnt + 1
+        END IF
+        IF ink <> inj THEN
+            f = (nz - qz(k)) / (qz(j) - qz(k))
+            vx(cnt) = qx(k) + (qx(j) - qx(k)) * f: vy(cnt) = qy(k) + (qy(j) - qy(k)) * f: vz(cnt) = nz
+            vu(cnt) = ku(k) + (ku(j) - ku(k)) * f: vw(cnt) = kw(k) + (kw(j) - kw(k)) * f
+            vr(cnt) = kr(k) + (kr(j) - kr(k)) * f: vg(cnt) = kg(k) + (kg(j) - kg(k)) * f: vb(cnt) = kb(k) + (kb(j) - kb(k)) * f
+            cnt = cnt + 1
+        END IF
+    NEXT
+    FOR k = 0 TO cnt - 1
+        sx(k) = cMidX + vx(k) / vz(k) * cFoc: sy(k) = cMidY - vy(k) / vz(k) * cFoc: q(k) = 1 / vz(k)
+    NEXT
+    FOR k = 1 TO cnt - 2
+        rmR(0) = vr(0): rmG(0) = vg(0): rmB(0) = vb(0)
+        rmR(1) = vr(k): rmG(1) = vg(k): rmB(1) = vb(k)
+        rmR(2) = vr(k + 1): rmG(2) = vg(k + 1): rmB(2) = vb(k + 1)
+        FillTriM sx(0), sy(0), q(0), q(0), vu(0), vw(0), sx(k), sy(k), q(k), q(k), vu(k), vw(k), sx(k + 1), sy(k + 1), q(k + 1), q(k + 1), vu(k + 1), vw(k + 1)
+    NEXT
+END SUB
+
+' The light added at a point of it (0-255 each): the highlight, the coat's, the sheen
+SUB MatCorner (x, y, z, r, g, b)
+    DIM vx, vy, vz, l, hx, hy, hz, ndh, ndv, sp, co, rim, hr, hg, hb, ry, sky
+    IF rOrtho THEN
+        vx = -cFX: vy = -cFY: vz = -cFZ
+    ELSE
+        vx = cEX - x: vy = cEY - y: vz = cEZ - z
+        l = SQR(vx * vx + vy * vy + vz * vz): IF l < 1E-9 THEN l = 1
+        vx = vx / l: vy = vy / l: vz = vz / l
+    END IF
+    r = 0: g = 0: b = 0
+    ndv = rmNX * vx + rmNY * vy + rmNZ * vz: IF ndv < 0 THEN ndv = 0
+    IF rmLit > 0 THEN
+        hx = rLX + vx: hy = rLY + vy: hz = rLZ + vz
+        l = SQR(hx * hx + hy * hy + hz * hz)
+        IF l > 1E-9 THEN
+            ndh = (rmNX * hx + rmNY * hy + rmNZ * hz) / l
+            IF ndh > 0 THEN
+                l = rmLit * 4: IF l > 1 THEN l = 1 ' (fades as the light goes round behind it)
+                IF rmSpk > 0 THEN sp = rmSpk * ndh ^ rmEx * l
+                IF rmCoat > 0 THEN co = rmCoat * .9 * ndh ^ 96 * l
+            END IF
+        END IF
+    END IF
+    IF rmSheen > 0 THEN rim = (1 - ndv) ^ 3 * rmSheen * .6
+    IF rmEnv > 0 THEN ' (the sky it reflects: light above, dark below - what makes metal look like metal)
+        ry = 2 * ndv * rmNY - vy
+        sky = ry * .5 + .5: sky = .12 + .88 * sky * sky
+        sp = sp + rmEnv * sky
+    END IF
+    hr = 255 * (1 - rmMetal) + rmBR * rmMetal: hg = 255 * (1 - rmMetal) + rmBG * rmMetal: hb = 255 * (1 - rmMetal) + rmBB * rmMetal
+    r = sp * hr + co * 255 + rim * (255 + rmBR) / 2
+    g = sp * hg + co * 255 + rim * (255 + rmBG) / 2
+    b = sp * hb + co * 255 + rim * (255 + rmBB) / 2
+END SUB
+
+' The see-through ones, far to near
+SUB RenderSeePass
+    DIM i AS LONG, j AS LONG, gap AS LONG, t AS LONG, d AS SINGLE
+    IF rSeeN = 0 THEN EXIT SUB
+    gap = rSeeN \ 2
+    DO WHILE gap > 0 ' (far first)
+        FOR i = gap + 1 TO rSeeN
+            t = rSeeT(i): d = rSeeD(i): j = i
+            DO WHILE j > gap
+                IF rSeeD(j - gap) >= d THEN EXIT DO
+                rSeeT(j) = rSeeT(j - gap): rSeeD(j) = rSeeD(j - gap): j = j - gap
+            LOOP
+            rSeeT(j) = t: rSeeD(j) = d
+        NEXT
+        gap = gap \ 2
+    LOOP
+    rSeePass = -1
+    FOR i = 1 TO rSeeN: RasterTri rSeeT(i): NEXT
+    rSeePass = 0: rSeeN = 0
+END SUB
+
+$CHECKING:OFF
+' A piece filled: the picture (rmTx) or the colour, times rmDif, plus the
+' corners' light (rmR/G/B) blended across; see-through (rmA < 1) blended
+' over what's there and kept out of rZ
+SUB FillTriM (ax, ay, aq, ap, au, aw, bx, by, bq, bp, bu, bw, cx, cy, cq, cp, cu, cw)
+    DIM sLo, sHi, xs AS LONG, xe AS LONG
+    DIM den, x0, x1, y0, y1, x, y, w0, w1, w2, a0, b0, a1, b1, q, i AS LONG, yy, fx, pw, u, v, c AS _UNSIGNED LONG, c2 AS _UNSIGNED LONG
+    DIM aup, awp, bup, bwp, cup, cwp, pw0 AS LONG, ph0 AS LONG, po AS LONG, ix AS LONG, iy AS LONG, r, g, b, dif, tx AS LONG, a, old AS _UNSIGNED LONG, bk, cut
+    den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    IF ABS(den) < 1E-9 THEN EXIT SUB
+    x0 = INT(ax): IF bx < x0 THEN x0 = INT(bx)
+    IF cx < x0 THEN x0 = INT(cx)
+    x1 = INT(ax): IF bx > x1 THEN x1 = INT(bx)
+    IF cx > x1 THEN x1 = INT(cx)
+    y0 = INT(ay): IF by < y0 THEN y0 = INT(by)
+    IF cy < y0 THEN y0 = INT(cy)
+    y1 = INT(ay): IF by > y1 THEN y1 = INT(by)
+    IF cy > y1 THEN y1 = INT(cy)
+    IF x0 < 0 THEN x0 = 0
+    IF y0 < 0 THEN y0 = 0
+    IF x1 > rW - 1 THEN x1 = rW - 1
+    IF y1 > rH - 1 THEN y1 = rH - 1
+    IF x0 > x1 OR y0 > y1 THEN EXIT SUB
+    a0 = (by - cy) / den: b0 = (cx - bx) / den
+    a1 = (cy - ay) / den: b1 = (ax - cx) / den
+    tx = rmTx: dif = rmDif: a = rmA
+    IF rmGlow > 0 THEN ' (the halo looks only in here)
+        IF x0 < rGlX0 THEN rGlX0 = x0
+        IF y0 < rGlY0 THEN rGlY0 = y0
+        IF x1 > rGlX1 THEN rGlX1 = x1
+        IF y1 > rGlY1 THEN rGlY1 = y1
+    END IF
+    IF tx THEN
+        aup = au * ap: awp = aw * ap: bup = bu * bp: bwp = bw * bp: cup = cu * cp: cwp = cw * cp
+        pw0 = picW(tx): ph0 = picH(tx): po = picOff(tx)
+    END IF
+    fx = x0 + .5 - cx
+    FOR y = y0 TO y1
+        yy = y + .5 - cy
+        w0 = a0 * fx + b0 * yy: w1 = a1 * fx + b1 * yy
+        sLo = 0: sHi = x1 - x0
+        SpanCut w0, a0, sLo, sHi: SpanCut w1, a1, sLo, sHi: SpanCut 1 - w0 - w1, -a0 - a1, sLo, sHi
+        xs = -INT(-sLo) - 1: xe = INT(sHi) + 1
+        IF xs < 0 THEN xs = 0
+        IF xe > x1 - x0 THEN xe = x1 - x0
+        w0 = w0 + a0 * xs: w1 = w1 + a1 * xs
+        i = y * rW + x0 + xs
+        FOR x = x0 + xs TO x0 + xe
+            w2 = 1 - w0 - w1
+            IF w0 >= -.00001 AND w1 >= -.00001 AND w2 >= -.00001 THEN
+                q = w0 * aq + w1 * bq + w2 * cq
+                IF q > rZ(i) THEN
+                    cut = 0
+                    IF tx THEN
+                        pw = w0 * ap + w1 * bp + w2 * cp
+                        u = (w0 * aup + w1 * bup + w2 * cup) / pw: v = (w0 * awp + w1 * bwp + w2 * cwp) / pw
+                        ix = INT((u - INT(u)) * pw0): iy = INT((v - INT(v)) * ph0)
+                        IF ix >= pw0 THEN ix = pw0 - 1
+                        IF iy >= ph0 THEN iy = ph0 - 1
+                        c = picPix(po + iy * pw0 + ix)
+                        IF _ALPHA32(c) < 128 THEN cut = -1 ' (a see-through pixel of the picture: cut out, as the game does)
+                        bk = dif
+                        IF rmBump > 0 THEN ' (lighter than the one down-right of it: stands out, lit; darker: sunk)
+                            c2 = picPix(po + ((iy + 1) MOD ph0) * pw0 + (ix + 1) MOD pw0)
+                            bk = (_RED32(c) * 3 + _GREEN32(c) * 6 + _BLUE32(c) - _RED32(c2) * 3 - _GREEN32(c2) * 6 - _BLUE32(c2)) / 2550
+                            bk = 1 + bk * rmBump * 3: IF bk < .4 THEN bk = .4
+                            IF bk > 1.8 THEN bk = 1.8
+                            bk = bk * dif
+                        END IF
+                        r = _RED32(c) * bk: g = _GREEN32(c) * bk: b = _BLUE32(c) * bk
+                    ELSE
+                        r = rmBR * dif: g = rmBG * dif: b = rmBB * dif
+                    END IF
+                    IF cut = 0 THEN
+                        r = r + w0 * rmR(0) + w1 * rmR(1) + w2 * rmR(2)
+                        g = g + w0 * rmG(0) + w1 * rmG(1) + w2 * rmG(2)
+                        b = b + w0 * rmB(0) + w1 * rmB(1) + w2 * rmB(2)
+                        IF r > 255 THEN r = 255
+                        IF g > 255 THEN g = 255
+                        IF b > 255 THEN b = 255
+                        rId(i) = rmId
+                        IF a < 1 THEN
+                            _MEMGET rMem, rMem.OFFSET + i * 4, old
+                            r = _RED32(old) + (r - _RED32(old)) * a: g = _GREEN32(old) + (g - _GREEN32(old)) * a: b = _BLUE32(old) + (b - _BLUE32(old)) * a
+                        ELSE
+                            rZ(i) = q
+                        END IF
+                        _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(r, g, b) AS _UNSIGNED LONG
+                    END IF
+                END IF
+            END IF
+            w0 = w0 + a0: w1 = w1 + a1: i = i + 1
+        NEXT
+    NEXT
+END SUB
+
+' The halo: each glowing pixel's colour (by how much it glows) gathered a
+' quarter size, blurred, and added back over the view - all only round the
+' glowing faces' box (rGlX0..: FillTriM's)
+SUB GlowHalo
+    DIM gw AS LONG, gh AS LONG, x AS LONG, y AS LONG, i AS LONG, j AS LONG, t AS LONG, gl, c AS _UNSIGNED LONG
+    DIM bx0 AS LONG, by0 AS LONG, bx1 AS LONG, by1 AS LONG, pass, fx, fy, ix AS LONG, iy AS LONG, r, g, b, w00, w10, w01, w11, j2 AS LONG
+    DIM cx AS LONG, cy AS LONG, hx0 AS LONG, hy0 AS LONG, m AS _UNSIGNED LONG
+    IF rGlowN = 0 THEN EXIT SUB
+    rGlowN = 0
+    IF rGlX1 < rGlX0 OR rGlY1 < rGlY0 THEN EXIT SUB
+    gw = rW \ 4 + 2: gh = rH \ 4 + 2
+    IF UBOUND(glR) < gw * gh THEN REDIM glR(gw * gh) AS SINGLE, glG(gw * gh) AS SINGLE, glB(gw * gh) AS SINGLE, glT(gw * gh) AS SINGLE
+    ' (the cells: the faces' box, room round it to spread)
+    bx0 = rGlX0 \ 4 + 1 - 6: by0 = rGlY0 \ 4 + 1 - 6: bx1 = rGlX1 \ 4 + 1 + 6: by1 = rGlY1 \ 4 + 1 + 6
+    IF bx0 < 1 THEN bx0 = 1
+    IF by0 < 1 THEN by0 = 1
+    IF bx1 > gw - 2 THEN bx1 = gw - 2
+    IF by1 > gh - 2 THEN by1 = gh - 2
+    FOR y = by0 - 1 TO by1 + 1
+        j = y * gw + bx0 - 1
+        FOR x = bx0 - 1 TO bx1 + 1: glR(j) = 0: glG(j) = 0: glB(j) = 0: glT(j) = 0: j = j + 1: NEXT
+    NEXT
+    FOR y = rGlY0 TO rGlY1
+        i = y * rW + rGlX0: j = (y \ 4 + 1) * gw + 1
+        FOR x = rGlX0 TO rGlX1
+            t = rId(i)
+            IF t > 0 AND t <= sceneTN THEN
+                m = tMat(t)
+                IF m AND &HF000000~& THEN
+                    gl = ((m \ &H1000000~&) AND 15) / 240
+                    _MEMGET rMem, rMem.OFFSET + i * 4, c
+                    j2 = j + x \ 4
+                    glR(j2) = glR(j2) + _RED32(c) * gl: glG(j2) = glG(j2) + _GREEN32(c) * gl: glB(j2) = glB(j2) + _BLUE32(c) * gl
+                END IF
+            END IF
+            i = i + 1
+        NEXT
+    NEXT
+    FOR pass = 1 TO 3 ' (a box blur both ways, three times: near enough a soft round one)
+        GlowBlur glR(), gw, bx0, by0, bx1, by1
+        GlowBlur glG(), gw, bx0, by0, bx1, by1
+        GlowBlur glB(), gw, bx0, by0, bx1, by1
+    NEXT
+    ' Back over the view, smoothly between cells - a 4 x 4 block at a time, none where it's dark
+    FOR cy = by0 - 1 TO by1
+        FOR cx = bx0 - 1 TO bx1
+            j = cy * gw + cx: j2 = j + gw
+            IF glR(j) + glG(j) + glB(j) + glR(j + 1) + glG(j + 1) + glB(j + 1) + glR(j2) + glG(j2) + glB(j2) + glR(j2 + 1) + glG(j2 + 1) + glB(j2 + 1) > .6 THEN
+                hx0 = (cx - 1) * 4 + 2: hy0 = (cy - 1) * 4 + 2 ' (cell cx's middle is pixel (cx - 1) * 4 + 1.5)
+                FOR y = hy0 TO hy0 + 3
+                    IF y >= 0 AND y < rH THEN
+                        fy = (y - hy0 + .5) / 4
+                        FOR x = hx0 TO hx0 + 3
+                            IF x >= 0 AND x < rW THEN
+                                fx = (x - hx0 + .5) / 4
+                                w00 = (1 - fx) * (1 - fy): w10 = fx * (1 - fy): w01 = (1 - fx) * fy: w11 = fx * fy
+                                r = (glR(j) * w00 + glR(j + 1) * w10 + glR(j2) * w01 + glR(j2 + 1) * w11) * 2.2
+                                g = (glG(j) * w00 + glG(j + 1) * w10 + glG(j2) * w01 + glG(j2 + 1) * w11) * 2.2
+                                b = (glB(j) * w00 + glB(j + 1) * w10 + glB(j2) * w01 + glB(j2 + 1) * w11) * 2.2
+                                i = y * rW + x
+                                _MEMGET rMem, rMem.OFFSET + i * 4, c
+                                r = r + _RED32(c): g = g + _GREEN32(c): b = b + _BLUE32(c)
+                                IF r > 255 THEN r = 255
+                                IF g > 255 THEN g = 255
+                                IF b > 255 THEN b = 255
+                                _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(r, g, b) AS _UNSIGNED LONG
+                            END IF
+                        NEXT
+                    END IF
+                NEXT
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+' One channel blurred, three cells across then three down (glT the go-between)
+SUB GlowBlur (a() AS SINGLE, gw AS LONG, bx0 AS LONG, by0 AS LONG, bx1 AS LONG, by1 AS LONG)
+    DIM x AS LONG, y AS LONG, j AS LONG
+    FOR y = by0 - 1 TO by1 + 1
+        j = y * gw + bx0
+        FOR x = bx0 TO bx1: glT(j) = (a(j - 1) + a(j) + a(j + 1)) * .3333333: j = j + 1: NEXT
+    NEXT
+    FOR y = by0 TO by1
+        j = y * gw + bx0
+        FOR x = bx0 TO bx1: a(j) = (glT(j - gw) + glT(j) + glT(j + gw)) * .3333333: j = j + 1: NEXT
+    NEXT
+END SUB
+$CHECKING:ON

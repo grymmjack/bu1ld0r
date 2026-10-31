@@ -7,6 +7,7 @@
 
 SUB PartsSetup
     DIM k
+    MatSetup
     kindName$(K_BOX) = "box": kindName$(K_CYL) = "cylinder": kindName$(K_SPHERE) = "sphere"
     kindName$(K_CONE) = "cone": kindName$(K_WEDGE) = "wedge": kindName$(K_TUBE) = "tube"
     FOR k = 1 TO NUM_KINDS: kindSX(k) = 0.25: kindSY(k) = 0.25: kindSZ(k) = 0.25: NEXT
@@ -47,7 +48,7 @@ SUB PartFresh (i, k, x, y, z)
     pSX(i) = kindSX(k): pSY(i) = kindSY(k): pSZ(i) = kindSZ(k)
     pAmt(i) = kindAmt(k): pSeg(i) = 0: pCol(i) = curCol: pSel(i) = 0: pRef$(i) = ""
     pHole(i) = 0: pHide(i) = 0: pWire(i) = 0: pName$(i) = ""
-    pMesh(i) = 0: pKeep(i) = 0: pGrp(i) = 0: pTint(i) = 0
+    pMesh(i) = 0: pKeep(i) = 0: pGrp(i) = 0: pTint(i) = 0: pMat(i) = 0
 END SUB
 
 ' Part a copied over part b (all but whether it's selected)
@@ -57,7 +58,7 @@ SUB PartCopy (a, b)
     pSX(b) = pSX(a): pSY(b) = pSY(a): pSZ(b) = pSZ(a)
     pAmt(b) = pAmt(a): pSeg(b) = pSeg(a): pCol(b) = pCol(a): pRef$(b) = pRef$(a)
     pHole(b) = pHole(a): pHide(b) = pHide(a): pWire(b) = pWire(a): pName$(b) = pName$(a)
-    pMesh(b) = pMesh(a): pKeep(b) = pKeep(a): pGrp(b) = pGrp(a): pTint(b) = pTint(a)
+    pMesh(b) = pMesh(a): pKeep(b) = pKeep(a): pGrp(b) = pGrp(a): pTint(b) = pTint(a): pMat(b) = pMat(a)
 END SUB
 
 ' The ghost (part 0) put in the model as a part of its own: its number
@@ -159,6 +160,7 @@ FUNCTION PartLine$ (i)
     IF pHole(i) THEN t$ = t$ + IIFS$(pKeep(i), "  keep", "  hole")
     IF pGrp(i) THEN t$ = t$ + "  group=" + LTRIM$(STR$(pGrp(i)))
     IF _ALPHA32(pTint(i)) THEN t$ = t$ + "  tint=" + HexCol$(pTint(i)) + RIGHT$("0" + HEX$(_ALPHA32(pTint(i))), 2)
+    IF pMat(i) THEN t$ = t$ + "  " + MatWord$(pMat(i))
     IF pHide(i) THEN t$ = t$ + "  hide"
     IF pWire(i) THEN t$ = t$ + "  wire"
     IF LEN(pName$(i)) THEN t$ = t$ + "  name=" + pName$(i)
@@ -206,6 +208,7 @@ FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
                         MbAddF mb, c
                         w0 = 3
                         IF LEFT$(wd$(3), 1) = "@" THEN mfTex(mfTop) = PicFind(MID$(wd$(3), 2)): w0 = 4 ' (its picture; corners point:u:v)
+                        IF LCASE$(LEFT$(wd$(w0), 2)) = "m=" THEN mfMat(mfTop) = MatParse~&(wd$(w0)): w0 = w0 + 1 ' (its material)
                         FOR w = w0 TO wdN
                             v = ABS(VAL(wd$(w))) - 1
                             IF v >= 0 AND v < nv THEN
@@ -242,6 +245,7 @@ FUNCTION PartsFromText& (t$, at0 AS LONG, room AS LONG)
                                 CASE "mesh=": pMesh(i) = VAL(MID$(wd$(w), 6)) ' (an undo step's: the mesh in the pool)
                                 CASE "group=": pGrp(i) = VAL(MID$(wd$(w), 7))
                                 CASE "tint=": pTint(i) = TintParse~&(MID$(wd$(w), 6))
+                                CASE "m=": pMat(i) = MatParse~&(wd$(w))
                             END SELECT
                     END SELECT
                 NEXT
@@ -293,6 +297,7 @@ SUB RedoStep
 END SUB
 
 SUB ModelNew
+    maOn = 0: maDrag = 0
     pN = 0: undoN = 0: redoN = 0: mdlName$ = "untitled": mdlPf$ = "": mdlBudget = TD_BUDGET
     RefClearAll
     ModelChanged: mdlDirty = 0: MeshGc
@@ -328,6 +333,7 @@ END SUB
 ' f$: a path, or a name in models/
 SUB ModelLoad (f$)
     DIM fh, t$, p$, i
+    IF maOn THEN MaCancel
     IF LCASE$(LEFT$(f$, 5)) = "neon:" THEN ObjImport NeonInDir$ + "models/" + MID$(f$, 6) + ".obj": EXIT SUB
     IF LCASE$(RIGHT$(f$, 4)) = ".obj" THEN ObjImport f$: EXIT SUB
     IF LCASE$(RIGHT$(f$, 4)) = ".svg" THEN SvgImport f$: EXIT SUB

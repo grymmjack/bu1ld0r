@@ -997,7 +997,7 @@ SUB FaceLookCopy
     DIM sa#, sb#, saa#, sab#, sbb#, su#, sau#, sbu#, sv#, sav#, sbv#, det#
     f = FaceLookSrc&: IF f < 0 THEN Msg "Pick a face (or point at one), then Ctrl+C copies its picture as it lies": EXIT SUB
     EdBegin 0: f = f + 1
-    lookCol = sfCol(f): lookTex = sfTex(f)
+    lookCol = sfCol(f): lookTex = sfTex(f): lookMat = sfMat(f)
     IF lookTex > 0 THEN
         FaceFrame f, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#
         n = sfCN(f)
@@ -1012,9 +1012,9 @@ SUB FaceLookCopy
         IF ABS(det#) < 1E-15 THEN lookTex = 0: Msg "That face's picture can't be read off it (squashed to a line)": EXIT SUB
         Solve3 n, sa#, sb#, sa#, saa#, sab#, sb#, sab#, sbb#, su#, sau#, sbu#, det#, lookU#(0), lookU#(1), lookU#(2)
         Solve3 n, sa#, sb#, sa#, saa#, sab#, sb#, sab#, sbb#, sv#, sav#, sbv#, det#, lookV#(0), lookV#(1), lookV#(2)
-        Msg "Copied: the picture " + picRef$(lookTex) + " as it lies on that face - Ctrl+V: on the picked faces (Shift: every face)"
+        Msg "Copied: the picture " + picRef$(lookTex) + " as it lies on that face" + IIFS$(lookMat <> 0, ", and its material " + MaShort$(lookMat), "") + " - Ctrl+V: on the picked faces (Shift: every face)"
     ELSE
-        Msg "Copied: that face's colour (no picture on it) - Ctrl+V: on the picked faces (Shift: every face)"
+        Msg "Copied: that face's colour (no picture on it)" + IIFS$(lookMat <> 0, " and material " + MaShort$(lookMat), "") + " - Ctrl+V: on the picked faces (Shift: every face)"
     END IF
     lookHave = -1
 END SUB
@@ -1058,7 +1058,7 @@ SUB FaceLookPaste (all)
         END IF
         IF sfLive(f) AND hit THEN
             n = n + 1
-            sfCol(f) = lookCol: sfTex(f) = lookTex
+            sfCol(f) = lookCol: sfTex(f) = lookTex: sfMat(f) = lookMat
             IF lookTex > 0 THEN
                 FaceFrame f, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#
                 FOR k = 0 TO sfCN(f) - 1

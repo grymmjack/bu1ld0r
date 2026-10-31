@@ -11,7 +11,7 @@ $CHECKING:OFF
 
 SUB MbRoom (nv AS LONG, nf AS LONG, nc AS LONG)
     IF mvTop + nv > mvCap THEN mvCap = (mvTop + nv) * 2 + 1024: REDIM _PRESERVE mvX(mvCap) AS SINGLE, mvY(mvCap) AS SINGLE, mvZ(mvCap) AS SINGLE
-    IF mfTop + nf > mfCap THEN mfCap = (mfTop + nf) * 2 + 1024: REDIM _PRESERVE mfC0(mfCap) AS LONG, mfCN(mfCap) AS LONG, mfCol(mfCap) AS _UNSIGNED LONG, mfTex(mfCap) AS INTEGER
+    IF mfTop + nf > mfCap THEN mfCap = (mfTop + nf) * 2 + 1024: REDIM _PRESERVE mfC0(mfCap) AS LONG, mfCN(mfCap) AS LONG, mfCol(mfCap) AS _UNSIGNED LONG, mfTex(mfCap) AS INTEGER, mfMat(mfCap) AS _UNSIGNED LONG
     IF mcTop + nc > mcCap THEN mcCap = (mcTop + nc) * 2 + 4096: REDIM _PRESERVE mcV(mcCap) AS LONG, mcE(mcCap) AS _BYTE, mcTU(mcCap) AS SINGLE, mcTV(mcCap) AS SINGLE
 END SUB
 
@@ -32,7 +32,7 @@ END FUNCTION
 
 SUB MbAddF (id AS LONG, c AS _UNSIGNED LONG)
     MbRoom 0, 1, 0
-    mfTop = mfTop + 1: mfC0(mfTop) = mcTop + 1: mfCN(mfTop) = 0: mfCol(mfTop) = c: mfTex(mfTop) = 0
+    mfTop = mfTop + 1: mfC0(mfTop) = mcTop + 1: mfCN(mfTop) = 0: mfCol(mfTop) = c: mfTex(mfTop) = 0: mfMat(mfTop) = 0
     mbFN(id) = mbFN(id) + 1
 END SUB
 
@@ -94,10 +94,10 @@ SUB MkMesh (i)
     id = pMesh(i)
     FOR f = 0 TO mbFN(id) - 1
         g = mbF0(id) + 1 + f
-        mkFace = f: mkCol = mfCol(g): mkTex = mfTex(g)
+        mkFace = f: mkCol = mfCol(g): mkTex = mfTex(g): mkMat = mfMat(g)
         MkPolyTris id, g
     NEXT
-    mkTriE = 7: mkTex = 0
+    mkTriE = 7: mkTex = 0: mkMat = 0
 END SUB
 
 ' Polygon g of mesh id as triangles: a fan when it bulges out all round,
@@ -218,7 +218,7 @@ SUB EmRoom (nv AS LONG, nf AS LONG, nc AS LONG)
         sfCap = (sfN + nf) * 2 + 1024
         REDIM _PRESERVE sfC0(sfCap) AS LONG, sfCN(sfCap) AS LONG, sfCol(sfCap) AS _UNSIGNED LONG, sfLive(sfCap) AS _BYTE, sfBusy(sfCap) AS _BYTE
         REDIM _PRESERVE sfNx(sfCap) AS DOUBLE, sfNy(sfCap) AS DOUBLE, sfNz(sfCap) AS DOUBLE
-        REDIM _PRESERVE sfTag(sfCap) AS LONG, sfTex(sfCap) AS INTEGER
+        REDIM _PRESERVE sfTag(sfCap) AS LONG, sfTex(sfCap) AS INTEGER, sfMat(sfCap) AS _UNSIGNED LONG
     END IF
     IF scTop + nc > scCap THEN scCap = (scTop + nc) * 2 + 4096: REDIM _PRESERVE scV(scCap) AS LONG, scE(scCap) AS _BYTE, scTU(scCap) AS SINGLE, scTV(scCap) AS SINGLE
 END SUB
@@ -233,12 +233,12 @@ END FUNCTION
 FUNCTION EmAddF& (n AS LONG, c AS _UNSIGNED LONG)
     DIM k AS LONG
     EmRoom 0, 1, n
-    sfN = sfN + 1: sfC0(sfN) = scTop + 1: sfCN(sfN) = n: sfCol(sfN) = c: sfLive(sfN) = -1: sfBusy(sfN) = 0: sfTag(sfN) = emTag: sfTex(sfN) = emTex
+    sfN = sfN + 1: sfC0(sfN) = scTop + 1: sfCN(sfN) = n: sfCol(sfN) = c: sfLive(sfN) = -1: sfBusy(sfN) = 0: sfTag(sfN) = emTag: sfTex(sfN) = emTex: sfMat(sfN) = emMat
     FOR k = 0 TO n - 1
         scTop = scTop + 1: scV(scTop) = emL(k): scE(scTop) = emE(k)
         IF emTex THEN scTU(scTop) = emU(k): scTV(scTop) = emW(k) ELSE scTU(scTop) = 0: scTV(scTop) = 0
     NEXT
-    emTex = 0
+    emTex = 0: emMat = 0
     EmNormal sfN
     EmAddF& = sfN
 END FUNCTION
@@ -269,7 +269,7 @@ SUB EmLoad (id AS LONG)
         g = mbF0(id) + 1 + f
         FOR k = 0 TO mfCN(g) - 1: emL(k) = mcV(mfC0(g) + k) + 1: emE(k) = mcE(mfC0(g) + k): emU(k) = mcTU(mfC0(g) + k): emW(k) = mcTV(mfC0(g) + k): NEXT
         emTex = mfTex(g)
-        r = EmAddF&(mfCN(g), mfCol(g))
+        emMat = mfMat(g): r = EmAddF&(mfCN(g), mfCol(g))
     NEXT
 END SUB
 
@@ -293,7 +293,7 @@ FUNCTION EmWrite&
         sfMap(f) = -1
         IF sfLive(f) AND sfCN(f) >= 3 THEN
             sfMap(f) = n: n = n + 1
-            MbAddF id, sfCol(f): mfTex(mfTop) = sfTex(f)
+            MbAddF id, sfCol(f): mfTex(mfTop) = sfTex(f): mfMat(mfTop) = sfMat(f)
             FOR k = 0 TO sfCN(f) - 1
                 MbAddC swMap(scV(sfC0(f) + k)), scE(sfC0(f) + k)
                 IF sfTex(f) THEN mcTU(mcTop) = scTU(sfC0(f) + k): mcTV(mcTop) = scTV(sfC0(f) + k)
@@ -320,7 +320,7 @@ FUNCTION EmFromTris& (t0 AS LONG, t1 AS LONG, i, allEdges)
         emE(0) = -((tEdge(t) AND 1) <> 0): emE(1) = -((tEdge(t) AND 2) <> 0): emE(2) = -((tEdge(t) AND 4) <> 0)
         IF emL(0) <> emL(1) AND emL(1) <> emL(2) AND emL(2) <> emL(0) THEN
             emTex = tTex(t): emU(0) = tU(3 * t): emW(0) = tW(3 * t): emU(1) = tU(3 * t + 1): emW(1) = tW(3 * t + 1): emU(2) = tU(3 * t + 2): emW(2) = tW(3 * t + 2)
-            r = EmAddF&(3, tCol(t))
+            emMat = tMat(t): r = EmAddF&(3, tCol(t))
             IF sfNx(r) = 0 AND sfNy(r) = 0 AND sfNz(r) = 0 THEN sfLive(r) = 0 ' (no area)
         END IF
     NEXT
@@ -394,7 +394,7 @@ SUB EmMerge (allEdges)
                         q = EmEdgeFind&(v, u)
                         IF q > 0 AND q <> f THEN
                             ok = 0
-                            IF sfLive(q) AND sfBusy(q) = 0 THEN
+                            IF sfLive(q) AND sfBusy(q) = 0 AND sfMat(q) = sfMat(f) THEN ' (never across a change of material)
                                 IF sfTex(q) = 0 AND sfTex(f) = 0 THEN
                                     ok = (sfCol(q) = sfCol(f))
                                 ELSEIF sfTex(q) = sfTex(f) THEN
@@ -410,7 +410,7 @@ SUB EmMerge (allEdges)
                                             m = EmJoin&(f, k, q, j, ok)
                                             IF ok THEN
                                                 IF sfTex(f) THEN EmJoinSpots f, q, m
-                                                emTag = sfTag(f): r = EmAddF&(m, sfCol(f)): sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
+                                                emTag = sfTag(f): emMat = sfMat(f): r = EmAddF&(m, sfCol(f)): sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
                                                 sfLive(f) = 0: sfLive(q) = 0: sfBusy(r) = -1: sfBusy(q) = -1: did = -1
                                                 EXIT FOR
                                             END IF
@@ -633,6 +633,7 @@ SUB MeshLines (fh, id AS LONG)
         g = mbF0(id) + 1 + f
         l$ = "f " + HexCol$(mfCol(g))
         IF mfTex(g) THEN l$ = l$ + " @" + picRef$(mfTex(g)) ' (its picture, then each corner's spot on it: point:u:v)
+        IF mfMat(g) THEN l$ = l$ + " " + MatWord$(mfMat(g)) ' (its material: m=SEE:GLOW:SHINE:ROUGH - VAL 0, so an older bu1ld0r skips it)
         FOR k = 0 TO mfCN(g) - 1
             c = mfC0(g) + k
             l$ = l$ + " " + IIFS$(mcE(c), "", "-") + LTRIM$(STR$(mcV(c) + 1))
@@ -665,7 +666,7 @@ SUB MeshGc
             FOR f = 1 TO mbFN(id)
                 g = mbF0(id) + f: c0 = mfC0(g)
                 FOR k = 0 TO mfCN(g) - 1: mcV(nc + 1 + k) = mcV(c0 + k): mcE(nc + 1 + k) = mcE(c0 + k): mcTU(nc + 1 + k) = mcTU(c0 + k): mcTV(nc + 1 + k) = mcTV(c0 + k): NEXT
-                mfC0(nf + f) = nc + 1: mfCN(nf + f) = mfCN(g): mfCol(nf + f) = mfCol(g): mfTex(nf + f) = mfTex(g)
+                mfC0(nf + f) = nc + 1: mfCN(nf + f) = mfCN(g): mfCol(nf + f) = mfCol(g): mfTex(nf + f) = mfTex(g): mfMat(nf + f) = mfMat(g)
                 nc = nc + mfCN(g)
             NEXT
             mbF0(id) = nf: nf = nf + mbFN(id)
@@ -726,7 +727,7 @@ FUNCTION EmTJoin&
                 END IF
             NEXT
             IF added THEN
-                emTex = sfTex(f): emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                emTex = sfTex(f): emTag = sfTag(f): emMat = sfMat(f): r = EmAddF&(m, sfCol(f))
                 sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f): sfLive(f) = 0: tot = tot + 1
             END IF
         END IF
@@ -754,7 +755,7 @@ FUNCTION EmFillHoles&
             NEXT
         END IF
     NEXT
-    REDIM emLp(swN + 1) AS LONG: REDIM lp0(swN + 1) AS LONG, lpN(swN + 1) AS LONG, lpC(swN + 1) AS _UNSIGNED LONG ' (the loops: their points one after another)
+    REDIM emLp(swN + 1) AS LONG: REDIM lp0(swN + 1) AS LONG, lpN(swN + 1) AS LONG, lpC(swN + 1) AS _UNSIGNED LONG, lpM(swN + 1) AS _UNSIGNED LONG ' (the loops: their points one after another)
     REDIM lnx#(swN + 1), lny#(swN + 1), lnz#(swN + 1), lcx#(swN + 1), lcy#(swN + 1), lcz#(swN + 1), lar#(swN + 1), lpair(swN + 1) AS LONG, lin(swN + 1) AS _BYTE
     FOR st = 1 TO swN
         IF hn(st) THEN
@@ -767,7 +768,7 @@ FUNCTION EmFillHoles&
                 IF hn(w) = 0 THEN EXIT DO
             LOOP
             IF ok AND m >= 3 THEN
-                nl = nl + 1: lpN(nl) = m: lpC(nl) = sfCol(hf(st)): np = np + m
+                nl = nl + 1: lpN(nl) = m: lpC(nl) = sfCol(hf(st)): lpM(nl) = sfMat(hf(st)): np = np + m
                 FOR k = 0 TO m - 1 ' (its plane: Newell's normal, its middle, its area)
                     a = emLp(lp0(nl) + k): b = emLp(lp0(nl) + (k + 1) MOD m)
                     lnx#(nl) = lnx#(nl) + (swY(a) - swY(b)) * (swZ(a) + swZ(b))
@@ -799,10 +800,10 @@ FUNCTION EmFillHoles&
     FOR a = 1 TO nl
         IF lin(a) = 0 THEN
             IF lpair(a) THEN
-                EmZipLoops lp0(a), lpN(a), lp0(lpair(a)), lpN(lpair(a)), lpC(a)
+                emZipMat = lpM(a): EmZipLoops lp0(a), lpN(a), lp0(lpair(a)), lpN(lpair(a)), lpC(a)
             ELSE
                 FOR k = 0 TO lpN(a) - 1: emL(k) = emLp(lp0(a) + k): emE(k) = 1: NEXT
-                r = EmAddF&(lpN(a), lpC(a)): EmNormal r
+                emMat = lpM(a): r = EmAddF&(lpN(a), lpC(a)): EmNormal r
             END IF
             tot = tot + 1
         END IF
@@ -863,7 +864,7 @@ SUB EmZipLoops (o0 AS LONG, onn AS LONG, i0 AS LONG, inn AS LONG, c AS _UNSIGNED
             emL(0) = a: emL(1) = ip((s + ii + 1) MOD inn): emL(2) = b: emE(0) = 0: emE(1) = 1: emE(2) = 0
             ii = ii + 1
         END IF
-        r = EmAddF&(3, c): EmNormal r
+        emMat = emZipMat: r = EmAddF&(3, c): EmNormal r
         IF sfNx(r) = 0 AND sfNy(r) = 0 AND sfNz(r) = 0 THEN sfLive(r) = 0
     LOOP
 END SUB
@@ -908,7 +909,7 @@ FUNCTION EmStraighten&
                         IF scE(c0) THEN emE(m - 1) = scE(c0)
                     END IF
                     did = -1: tot = tot + 1: sfLive(f) = 0
-                    emTex = sfTex(f): emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                    emTex = sfTex(f): emTag = sfTag(f): emMat = sfMat(f): r = EmAddF&(m, sfCol(f))
                     sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
                 END IF
             END IF

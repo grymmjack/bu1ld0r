@@ -515,7 +515,7 @@ SUB BvBuild
                         FOR j = 0 TO cnt - 1: emL(j) = lst(j): emE(j) = 1: NEXT
                     END IF
                     IF nseg = 1 THEN
-                        r = EmAddF&(cnt, sfCol(bfF(0)))
+                        emMat = sfMat(bfF(0)): r = EmAddF&(cnt, sfCol(bfF(0)))
                     ELSE
                         ' (rounded: a fan of flat triangles round a point on the round - the middle of
                         ' a curved patch whose edges are the strips' rounds, all bent towards where v was)
@@ -546,7 +546,7 @@ SUB BvBuild
                         FOR j = 0 TO cnt - 1
                             emL(0) = q: emL(1) = lst(j): emL(2) = lst((j + 1) MOD cnt)
                             emE(0) = 0: emE(1) = 1: emE(2) = 0
-                            r = EmAddF&(3, sfCol(bfF(0)))
+                            emMat = sfMat(bfF(0)): r = EmAddF&(3, sfCol(bfF(0)))
                         NEXT
                     END IF
                 END IF
@@ -601,7 +601,7 @@ SUB BvBuild
                         emTex = sfTex(f)
                         FOR j = 0 TO cnt - 1: emU(j) = ru(j): emW(j) = rw(j): NEXT
                     END IF
-                    r = EmAddF&(cnt, sfCol(f))
+                    emMat = sfMat(f): r = EmAddF&(cnt, sfCol(f))
                 END IF
                 sfLive(f) = 0
             END IF
@@ -616,7 +616,7 @@ SUB BvBuild
         FOR j = 0 TO nseg - 1
             emL(0) = bvPB(bs + j): emL(1) = bvPA(bs + j): emL(2) = bvPA(bs + j + 1): emL(3) = bvPB(bs + j + 1)
             emE(0) = 1: emE(1) = 1: emE(2) = 1: emE(3) = 1
-            r = EmAddF&(4, sfCol(bvEF1(e)))
+            emMat = sfMat(bvEF1(e)): r = EmAddF&(4, sfCol(bvEF1(e)))
         NEXT
     NEXT
 

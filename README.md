@@ -35,6 +35,11 @@ or a photo. Smart guides line a dragged part up with the others as you
 move it, and WALK / FLY take you through the model on foot or flying, to
 see it from inside, at its own scale.
 
+Every face can have a material as well as a colour and a picture, as in
+Blender: see-through, glowing, shiny or rough, metal, bumpy, a glossy
+coat, a velvet sheen. They show in the view as you set them, and
+NEON-CASTER draws them in the game.
+
 Coming next (see [PLAN.md](PLAN.md)): painting straight onto the model, in 3D.
 
 ## Build
@@ -300,6 +305,41 @@ under the tabs opens any folder of PNGs.
 ![TILED: the picture seen with its neighbours, as it repeats on a face](docs/screenshots/paint-tiled.png)
 
 ![Back in the view: the wood picture saved and on the box's face](docs/screenshots/paint-face.png)
+
+### Materials: glass, neon, metal...
+
+![The twelve presets on spheres: glass and a ghost see-through, neon glowing, gold, chrome and metal shining in their own colour](docs/screenshots/materials.png)
+
+- Select parts and press **Q** (or MATERIAL in the panel). In E, it's the
+  picked faces' (none picked: all the part's). A face's own material
+  beats its part's.
+- Start from a preset (PLAIN GLASS NEON METAL CHROME PLASTIC PAINT
+  RUBBER STONE VELVET GHOST GOLD), then move the sliders. Point at a slider
+  and the panel says what it does. Enter makes it (one Ctrl+Z puts it
+  back), Esc puts it back as it was.
+
+![The MATERIAL panel: presets, the eight sliders, and what the one pointed at does](docs/screenshots/material-panel.png)
+
+The eight, each 0-100% in 16 steps:
+
+| | What it does | Think of |
+|---|---|---|
+| SEE | see-through: 0 solid, 100 nearly gone | glass, water, ghosts |
+| GLOW | lights itself, with a halo round it (blooms in the game) | neon signs, screens |
+| SHINE | how strong the bright spot from the lights is | plastic, polish |
+| ROUGH | how wide that spot spreads: 0 small and sharp, 100 broad | wet vs. chalky |
+| METAL | the spot and the sky it reflects take the face's colour; the face goes darker | gold, copper, chrome |
+| BUMP | relief from its picture: light pixels stand out, dark sink in | stone, bark, rust |
+| COAT | a clear glossy layer on top: a second sharp spot | car paint, lacquer |
+| SHEEN | soft light along its edges seen side-on | velvet, cloth, dust |
+
+EXPORT writes `NAME_mat.png` beside the texture, laid out the same: two
+values to each colour channel (MODEL/MAT.BI and PLAN.md stage 10 have the
+details). NEON-CASTER reads it and draws all eight. Faces with no material
+look exactly as before, and a model with none writes no file. The `.mtl` has
+them too (Pm, Pr, Pc, Ps, Ke, d), so Blender's importer picks them up. The
+game's 8 pictures for its software renderer show GLOW and SEE. Opening a
+NEON-CASTER prop reads its `_mat.png` back onto its faces.
 
 ### Seeing it: TEX, WIRE, GRID
 
@@ -629,6 +669,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Delete | never leaves a hole: points taken out of their faces (each face keeps its other corners, as a pen's point); edges taken out (the faces either side made one); faces drawn in to a point (the faces round close over) |
 | Shift+Delete | the faces go instead, leaving a hole |
 | Palette | colour the picked faces |
+| Q or MATERIAL | the picked faces' material (none picked: all the part's) - the MATERIAL topic |
 | SAME | (the panel) each picked point / piece made like the one clicked first: PLACE its middle, SIZE its reach (on the X Y Z lit), TURN (faces) facing the same way, AS SEEN its width / height / depth on screen |
 | Esc | let go of the picked ones, then done |
 
@@ -669,7 +710,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | REPEAT | more or fewer times across |
 | Arrow buttons | slide it |
 | NO PICTURE | take it off (a colour from the palette does too) |
-| Ctrl+C | copy the picture on the picked face (or the one pointed at) as it lies on it - how big, turned, where |
+| Ctrl+C | copy the picture on the picked face (or the one pointed at) as it lies on it - how big, turned, where - and its colour and material |
 | Ctrl+V / Ctrl+Shift+V | put it on the picked faces (none picked: the one pointed at); on every face of the part |
 
 #### PAINTING ONE HERE
@@ -683,6 +724,40 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Keys | What it does |
 |---|---|
 | EDIT IN DRAW | (E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first. Save it in DRAW (Ctrl+S) and it shows here straight away |
+
+</details>
+
+<details>
+<summary><b>MATERIAL</b></summary>
+
+#### WHAT A FACE IS MADE OF (Q, or MATERIAL)
+
+| Keys | What it does |
+|---|---|
+| Q | the selected parts' material - or in E, the picked faces' (none picked: all the part's). A face's own beats its part's |
+| Presets | PLAIN GLASS NEON METAL CHROME PLASTIC PAINT RUBBER STONE VELVET GHOST GOLD: a start, then the sliders |
+| Sliders | drag, or the wheel over one (16 steps, 0-100%). Pointing at one says what it does. Shown as it'll be |
+| Enter / APPLY / Q | made (one Ctrl+Z puts it back);  Esc: as it was |
+
+#### THE EIGHT
+
+| Keys | What it does |
+|---|---|
+| SEE | see-through: 0 solid, 100 nearly gone (glass, water, ghosts). Drawn after the rest, far to near; a click still picks it |
+| GLOW | lights itself: its colour as it is, with no light on it, and a halo round it (in the game: blooms) |
+| SHINE | how strong the bright spot the lights make on it is |
+| ROUGH | how wide that spot spreads: 0 small and sharp (wet, polished), 100 broad and soft |
+| METAL | the spot and the sky it reflects take the face's own colour, the face itself goes darker (gold: a yellow METAL) |
+| BUMP | relief from its picture: lighter pixels stand out, darker sink in (stone, bark, rust) - only on a face with a picture |
+| COAT | a clear glossy layer over the rest: a second sharp spot (car paint, lacquer, a wet floor) |
+| SHEEN | soft light along its edges seen side-on (velvet, cloth, dust) |
+
+#### IN THE GAME
+
+| Keys | What it does |
+|---|---|
+| EXPORT | writes NAME_mat.png beside the texture: NEON-CASTER draws all eight. The .mtl has them too, for Blender (Pm Pr Pc Ps Ke d). The 8 pictures show GLOW and SEE |
+| OPEN a prop | its NAME_mat.png read back onto its faces |
 
 </details>
 
@@ -814,6 +889,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | C or HOLE | a hole: cut out of the solid parts before it in the list (so a part after it can sit in it). Seen see-through grey (click to pick it) |
 | Put down as one | it drills into the face it's put on |
 | K or KEEP | only where it overlaps the parts before it stays |
+| Q or MATERIAL | see-through, glow, shine, metal... on the selected parts (the MATERIAL topic) |
 | M or MERGE | (two or more solid parts selected) made one mesh part: their outsides kept, the insides where they overlap gone - a boolean add. Colours and pictures kept; Ctrl+Z: back |
 | A or APPLY | a hole or KEEP cut for good (mesh parts, editable) - select solid parts with it and it cuts just those, wherever they're listed |
 | In a group | a hole cuts every solid part of its group, wherever it's listed - and nothing else |
@@ -1005,10 +1081,30 @@ no room (or the model has more than one texture) the texture becomes a grid
 of squares, each texture in one, the colours in the last - each texture
 then has half the pixels across.
 
-The game draws any decoration or pickup as a model when a `models/NAME.obj`
-of its picture's name exists. Until the game can place models of its own
-(planned), export under a prop's name (`terminal`, `crate`...) to replace
-that prop's model; `git checkout` the game's files to get the old one back.
+### Putting a new model in a level
+
+Any model you export can stand in a NEON-CASTER level as a **prop**:
+
+1. Save the model under the name it'll have in the game (`statue`), and
+   EXPORT (Ctrl+E) with `neon_dir=` set: `models/statue.obj` and its files
+   go into the game's folder.
+2. In the game's level editor (F2), put down a thing (`"`), turn it to
+   **prop** with the pane's `<` `>`, and pick **statue** with MODEL `<` `>`.
+   Or, in the game's console: `prop X Y statue`.
+3. Save the level (Ctrl+S). The level file's `[things]` line is
+   `x, y, prop, statue`; `x, y, prop, statue, 3` lets three hits break it
+   (with no number, shots don't).
+
+A prop is solid, stands in its cell at its own size, and puts its back to a
+wall as furniture does (the pane's FACING turns it). The game watches its
+files: EXPORT again while the game is running and it changes within a
+second or two (the console's `reload statue` does it at once). A prop
+whose files aren't there shows as a cyan box.
+
+The game also draws any of its own decorations or pickups as a model when a
+`models/NAME.obj` of its picture's name exists: export under a prop's name
+(`terminal`, `crate`...) to replace that one everywhere; `git checkout` the
+game's files to get the old one back.
 
 Keep a prop near 200 triangles: the game works out every corner of every
 nearby model each frame. EXPORT sends the model as built, unless its

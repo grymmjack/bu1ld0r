@@ -19,6 +19,7 @@ DIM SHARED mvTop AS LONG, mvCap AS LONG
 REDIM SHARED mfC0(0) AS LONG, mfCN(0) AS LONG, mfCol(0) AS _UNSIGNED LONG ' (polygons: their corners from mfC0, mfCN of them)
 DIM SHARED mfTop AS LONG, mfCap AS LONG
 REDIM SHARED mfTex(0) AS INTEGER ' (its picture: 0 none - MODEL/PIC)
+REDIM SHARED mfMat(0) AS _UNSIGNED LONG ' (its material: SEE GLOW SHINE ROUGH, a byte each 0-100, high to low - 0 plain: MODEL/MAT)
 REDIM SHARED mcTU(0) AS SINGLE, mcTV(0) AS SINGLE ' (each corner's spot on the picture)
 REDIM SHARED mcV(0) AS LONG, mcE(0) AS _BYTE ' (corners: the point - its mesh's own number, from 0 - and whether the edge on to the next is the shape's own)
 DIM SHARED mcTop AS LONG, mcCap AS LONG
@@ -37,6 +38,9 @@ REDIM SHARED sfTag(0) AS LONG ' (whose it is: the export's tidying keeps each po
 DIM SHARED emTag AS LONG ' (what EmAddF tags a polygon with)
 DIM SHARED sfN AS LONG, sfCap AS LONG
 REDIM SHARED sfTex(0) AS INTEGER, scTU(0) AS SINGLE, scTV(0) AS SINGLE ' (a polygon's picture, each corner's spot on it)
+REDIM SHARED sfMat(0) AS _UNSIGNED LONG ' (its material)
+DIM SHARED emZipMat AS _UNSIGNED LONG ' (EmZipLoops' faces' material)
+DIM SHARED emMat AS _UNSIGNED LONG ' (the next EmAddF&'s material: set before each call, as emTex - it's put back to 0 after)
 REDIM SHARED scV(0) AS LONG, scE(0) AS _BYTE
 DIM SHARED scTop AS LONG, scCap AS LONG
 REDIM SHARED swMap(0) AS LONG, sfMap(0) AS LONG ' (EmWrite: where each work point and polygon went in the mesh made, -1 gone)

@@ -18,12 +18,12 @@ SUB TidyRun
         ' (faces with a picture on them are kept as they are - the picture's spots
         ' can't be joined or collapsed - at the top of the triangles meanwhile)
         FOR t = 1 TO sceneTN
-            IF tTex(t) > 0 AND tdHid(t) = 0 THEN tdHold = tdHold + 1
+            IF (tTex(t) > 0 OR tMat(t) <> 0) AND tdHid(t) = 0 THEN tdHold = tdHold + 1 ' (a picture or a material: kept as it is)
         NEXT
         IF sceneTN + tdHold > MAX_TRI THEN tdHold = 0: tdOut = sceneTN: EXIT SUB
         k = MAX_TRI - tdHold
         FOR t = 1 TO sceneTN
-            IF tTex(t) > 0 AND tdHid(t) = 0 THEN k = k + 1: TriCopy t, k: tdHid(t) = -1
+            IF (tTex(t) > 0 OR tMat(t) <> 0) AND tdHid(t) = 0 THEN k = k + 1: TriCopy t, k: tdHid(t) = -1
         NEXT
         TdWork
         TdTris
@@ -120,7 +120,7 @@ SUB TdWork
             emL(2) = EmWeld&(tC(t).x, tC(t).y, tC(t).z)
             emE(0) = -1: emE(1) = -1: emE(2) = -1
             IF emL(0) <> emL(1) AND emL(1) <> emL(2) AND emL(2) <> emL(0) THEN
-                emTag = tPart(t): r = EmAddF&(3, tCol(t))
+                emTag = tPart(t): emMat = tMat(t): r = EmAddF&(3, tCol(t))
                 IF sfNx(r) = 0 AND sfNy(r) = 0 AND sfNz(r) = 0 THEN sfLive(r) = 0
             END IF
         END IF
@@ -152,7 +152,7 @@ SUB TdTJoin
             NEXT
             IF added THEN
                 FOR k = 0 TO m - 1: emE(k) = -1: NEXT
-                emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                emTag = sfTag(f): emMat = sfMat(f): r = EmAddF&(m, sfCol(f))
                 sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f): sfLive(f) = 0
             END IF
         END IF
@@ -248,7 +248,7 @@ SUB TdStraight
                 IF m < n THEN
                     did = -1: sfLive(f) = 0
                     IF m >= 3 THEN
-                        emTag = sfTag(f): r = EmAddF&(m, sfCol(f))
+                        emTag = sfTag(f): emMat = sfMat(f): r = EmAddF&(m, sfCol(f))
                         sfNx(r) = sfNx(f): sfNy(r) = sfNy(f): sfNz(r) = sfNz(f)
                     END IF
                 END IF
@@ -659,7 +659,7 @@ SUB TdBack
                 tB(n).x = swX(b): tB(n).y = swY(b): tB(n).z = swZ(b)
                 tC(n).x = swX(c): tC(n).y = swY(c): tC(n).z = swZ(c)
                 tNrm(n).x = nx# / l#: tNrm(n).y = ny# / l#: tNrm(n).z = nz# / l#
-                tCol(n) = tdCol(t): tPart(n) = tdPart(t): tFace(n) = 0: tEdge(n) = 7: tTex(n) = 0
+                tCol(n) = tdCol(t): tPart(n) = tdPart(t): tFace(n) = 0: tEdge(n) = 7: tTex(n) = 0: tMat(n) = 0
             END IF
         END IF
     NEXT

@@ -1,0 +1,92 @@
+''
+' bu1ld0r - MODEL/MAT.BM
+' =============================================================================
+' MATERIALS: packing, the .bld word, the presets.
+
+' The eight values (each 0-100%) as one: 16 steps each (0-15), 4 bits apiece
+' from the top - SEE GLOW SHINE ROUGH METAL BUMP COAT SHEEN
+FUNCTION MatPack~& (see, glow, shine, rough, metal, bump, coat, sheen)
+    DIM v(7), k, r AS _UNSIGNED LONG
+    v(0) = see: v(1) = glow: v(2) = shine: v(3) = rough: v(4) = metal: v(5) = bump: v(6) = coat: v(7) = sheen
+    FOR k = 0 TO 7: v(k) = Clamp(INT(v(k) * 15 / 100 + .5), 0, 15): NEXT
+    FOR k = 0 TO 7: r = r * 16 + v(k): NEXT
+    MatPack~& = r
+END FUNCTION
+
+' Value k (0 SEE, 1 GLOW, 2 SHINE, 3 ROUGH, 4 METAL, 5 BUMP, 6 COAT, 7 SHEEN) in %
+FUNCTION MatGet (m AS _UNSIGNED LONG, k)
+    MatGet = INT(((m \ (16 ^ (7 - k))) AND 15) * 100 / 15 + .5)
+END FUNCTION
+
+' m with value k set to v%
+FUNCTION MatSet~& (m AS _UNSIGNED LONG, k, v)
+    DIM w(7), j
+    FOR j = 0 TO 7: w(j) = MatGet(m, j): NEXT
+    w(k) = v
+    MatSet~& = MatPack~&(w(0), w(1), w(2), w(3), w(4), w(5), w(6), w(7))
+END FUNCTION
+
+FUNCTION MatKeyName$ (k)
+    MatKeyName$ = MID$("SEE   GLOW  SHINE ROUGH METAL BUMP  COAT  SHEEN ", k * 6 + 1, 6)
+END FUNCTION
+
+' The .bld word for it ("" when plain): m=SEE:GLOW:SHINE:ROUGH:METAL:BUMP:COAT:SHEEN in %
+FUNCTION MatWord$ (m AS _UNSIGNED LONG)
+    DIM k, w$
+    IF m = 0 THEN EXIT FUNCTION
+    w$ = "m="
+    FOR k = 0 TO 7: w$ = w$ + LTRIM$(STR$(MatGet(m, k))) + IIFS$(k < 7, ":", ""): NEXT
+    MatWord$ = w$
+END FUNCTION
+
+' m=... back to a material (fewer than eight numbers: the rest 0)
+FUNCTION MatParse~& (w$)
+    DIM v(7), k, p, q
+    IF LCASE$(LEFT$(w$, 2)) <> "m=" THEN EXIT FUNCTION
+    p = 3
+    FOR k = 0 TO 7
+        IF p > LEN(w$) THEN EXIT FOR
+        q = INSTR(p, w$, ":"): IF q = 0 THEN q = LEN(w$) + 1
+        v(k) = VAL(MID$(w$, p, q - p)): p = q + 1
+    NEXT
+    MatParse~& = MatPack~&(v(0), v(1), v(2), v(3), v(4), v(5), v(6), v(7))
+END FUNCTION
+
+' A material file's pixel back to a material (MatPx~&'s other way)
+FUNCTION MatFromPx~& (c AS _UNSIGNED LONG)
+    MatFromPx~& = _RED32(c) * &H1000000~& + _GREEN32(c) * &H10000~& + _BLUE32(c) * &H100~& + (255 - _ALPHA32(c))
+END FUNCTION
+
+' The presets MATERIAL offers
+SUB MatSetup
+    DIM k
+    FOR k = 1 TO MAT_PRESETS
+        SELECT CASE k
+            CASE 1: matPreName$(k) = "PLAIN": matPre(k) = 0
+            ' (                                                 SEE GLOW SHINE ROUGH METAL BUMP COAT SHEEN)
+            CASE 2: matPreName$(k) = "GLASS": matPre(k) = MatPack~&(73, 0, 93, 7, 0, 0, 0, 0)
+            CASE 3: matPreName$(k) = "NEON": matPre(k) = MatPack~&(0, 100, 0, 0, 0, 0, 0, 0)
+            CASE 4: matPreName$(k) = "METAL": matPre(k) = MatPack~&(0, 0, 60, 47, 100, 13, 0, 0)
+            CASE 5: matPreName$(k) = "CHROME": matPre(k) = MatPack~&(0, 0, 100, 7, 100, 0, 0, 0)
+            CASE 6: matPreName$(k) = "PLASTIC": matPre(k) = MatPack~&(0, 0, 47, 33, 0, 0, 0, 0)
+            CASE 7: matPreName$(k) = "PAINT": matPre(k) = MatPack~&(0, 0, 20, 60, 40, 0, 100, 0)
+            CASE 8: matPreName$(k) = "RUBBER": matPre(k) = MatPack~&(0, 0, 13, 93, 0, 20, 0, 0)
+            CASE 9: matPreName$(k) = "STONE": matPre(k) = MatPack~&(0, 0, 7, 100, 0, 80, 0, 0)
+            CASE 10: matPreName$(k) = "VELVET": matPre(k) = MatPack~&(0, 0, 0, 0, 0, 20, 0, 100)
+            CASE 11: matPreName$(k) = "GHOST": matPre(k) = MatPack~&(53, 33, 0, 0, 0, 0, 0, 0)
+            CASE 12: matPreName$(k) = "GOLD": matPre(k) = MatPack~&(0, 0, 67, 27, 100, 0, 0, 0) ' (METAL in a yellow: the face's colour makes the metal)
+        END SELECT
+    NEXT
+END SUB
+
+' Its name if it's a preset, else its values that aren't 0
+FUNCTION MatName$ (m AS _UNSIGNED LONG)
+    DIM k, t$
+    FOR k = 1 TO MAT_PRESETS
+        IF matPre(k) = m THEN MatName$ = matPreName$(k): EXIT FUNCTION
+    NEXT
+    FOR k = 0 TO 7
+        IF MatGet(m, k) THEN t$ = t$ + RTRIM$(MatKeyName$(k)) + STR$(MatGet(m, k)) + "  "
+    NEXT
+    MatName$ = RTRIM$(t$)
+END FUNCTION

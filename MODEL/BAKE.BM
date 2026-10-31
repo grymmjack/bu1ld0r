@@ -37,7 +37,7 @@ SUB HoleApply
                         CsgRelease m1, m2
                         IF tN > t2 THEN
                             id = EmFromTris&(t2 + 1, tN, q, 0)
-                            MakeMeshPart q, id
+                            MakeMeshPart q, id: pMat(q) = 0 ' (its material's on its faces now: none left over to spread to the cut's walls)
                         ELSE
                             del(q) = -1: gone = gone + 1 ' (nothing left of it)
                         END IF
@@ -96,7 +96,7 @@ SUB SelMerge
     IF pSZ(first) < .001 THEN pSZ(first) = .001
     pX(first) = (lo.x + hi.x) / 2: pY(first) = lo.y: pZ(first) = (lo.z + hi.z) / 2
     id = EmFromTris&(t1 + 1, tN, first, 0)
-    MakeMeshPart first, id
+    MakeMeshPart first, id: pMat(first) = 0 ' (each part's material is on its faces now - the first's mustn't spread over the others')
     tN = t0
     j = 0
     FOR i = 1 TO pN
@@ -166,6 +166,7 @@ SUB UseUnlink
                     MakeMeshPart i, id
                 END IF
                 IF _ALPHA32(pTint(P_SWAP)) THEN TintPart i, pTint(P_SWAP)
+                IF pMat(i) = 0 THEN pMat(i) = pMat(P_SWAP) ' (the use's material on its parts with none)
             NEXT
             u = u + n: cnt = cnt + 1
         ELSE

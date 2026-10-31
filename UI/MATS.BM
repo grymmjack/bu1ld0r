@@ -1,0 +1,285 @@
+''
+' bu1ld0r - UI/MATS.BM
+' =============================================================================
+' MATERIAL: see MATS.BI.
+
+' ---------------------------------------------------------------- the mode
+
+' Q, or MATERIAL: begun on the picked faces (in E) or the selected parts - Q again: made
+SUB MaStart
+    DIM i AS LONG, f AS LONG, g AS LONG, got
+    IF maOn THEN MaApply: EXIT SUB
+    IF bvOn THEN EXIT SUB
+    IF edPart THEN
+        IF pKind(edPart) <> K_MESH OR MbOk(pMesh(edPart)) = 0 THEN EXIT SUB
+        maInE = -1: maBase = pMesh(edPart): maPrev = maBase
+        REDIM maT(edFN) AS _BYTE, maSelF(edFN) AS _BYTE
+        FOR f = 0 TO edFN - 1
+            maSelF(f) = edSelF(f)
+            IF edMode = ED_FACES AND edSelF(f) <> 0 THEN maT(f) = -1: got = -1
+        NEXT
+        IF got = 0 THEN
+            FOR f = 0 TO edFN - 1: maT(f) = -1: NEXT
+        END IF
+        maN = 0: maM = 0
+        FOR f = edFN - 1 TO 0 STEP -1
+            IF maT(f) THEN maN = maN + 1: g = mbF0(maBase) + 1 + f: maM = mfMat(g) ' (the first one's to start)
+        NEXT
+        pvOn = 0: pvArm = 0
+    ELSE
+        IF SelCount = 0 THEN Msg "Select the parts to give a material (or in E, pick faces), then Q": EXIT SUB
+        maInE = 0: maN = 0
+        REDIM maOld(pN) AS _UNSIGNED LONG
+        FOR i = 1 TO pN
+            maOld(i) = pMat(i)
+            IF pSel(i) THEN maN = maN + 1
+        NEXT
+        maM = pMat(SelFirst)
+    END IF
+    IF typeField THEN FieldCommit
+    maOn = -1: maDrag = 0: maHot = 0
+    Msg "MATERIAL: a preset, or drag the sliders (the pointer over one says what it does). Enter or APPLY: made. Esc: as it was"
+END SUB
+
+' Made: one undo step
+SUB MaApply
+    DIM i AS LONG, id AS LONG, same, own AS LONG
+    IF NOT maOn THEN EXIT SUB
+    maOn = 0: maDrag = 0
+    IF maInE THEN
+        IF edPart = 0 THEN EXIT SUB
+        id = pMesh(edPart)
+        IF id = maBase THEN Msg "Material unchanged": EXIT SUB
+        pMesh(edPart) = maBase: UndoPush: pMesh(edPart) = id
+        edGen = edGen + 1: ovDirty = -1
+        ModelChanged: MeshGcDue
+    ELSE
+        same = -1
+        FOR i = 1 TO pN
+            IF i <= UBOUND(maOld) THEN IF pMat(i) <> maOld(i) THEN same = 0
+        NEXT
+        IF same THEN Msg "Material unchanged": EXIT SUB
+        DIM nw(pN) AS _UNSIGNED LONG
+        FOR i = 1 TO pN
+            nw(i) = pMat(i)
+            IF i <= UBOUND(maOld) THEN pMat(i) = maOld(i)
+        NEXT
+        UndoPush
+        FOR i = 1 TO pN
+            pMat(i) = nw(i)
+            IF pSel(i) AND pKind(i) = K_MESH THEN own = own + MaOwnFaces&(i)
+        NEXT
+        ModelChanged
+        IF own THEN Msg "Material " + MaShort$(maM) + " (Ctrl+Z: as it was). " + LTRIM$(STR$(own)) + " faces keep their own: change those in E (pick them, then Q)": EXIT SUB
+    END IF
+    Msg "Material " + MaShort$(maM) + " (Ctrl+Z: as it was)"
+END SUB
+
+' How many of mesh part i's faces have a material of their own
+FUNCTION MaOwnFaces& (i AS LONG)
+    DIM id AS LONG, g AS LONG, n AS LONG
+    id = pMesh(i): IF MbOk(id) = 0 THEN EXIT FUNCTION
+    FOR g = mbF0(id) + 1 TO mbF0(id) + mbFN(id)
+        IF mfMat(g) THEN n = n + 1
+    NEXT
+    MaOwnFaces& = n
+END FUNCTION
+
+' Esc: as it was
+SUB MaCancel
+    DIM i AS LONG
+    IF NOT maOn THEN EXIT SUB
+    maOn = 0: maDrag = 0
+    IF maInE THEN
+        IF edPart = 0 THEN EXIT SUB
+        IF pMesh(edPart) <> maPrev THEN EXIT SUB ' (something else changed it meanwhile: left as it is)
+        MaShowE maBase
+    ELSE
+        FOR i = 1 TO pN
+            IF i <= UBOUND(maOld) THEN pMat(i) = maOld(i)
+        NEXT
+        meshDirty = -1: viewDirty = -1
+    END IF
+    Msg "Material as it was"
+END SUB
+
+' In E: mesh id shown as the part's, its faces picked as they were
+SUB MaShowE (id AS LONG)
+    DIM f AS LONG
+    pMesh(edPart) = id: maPrev = id
+    edId = id: edVN = mbVN(id): edFN = mbFN(id)
+    REDIM edSelV(edVN) AS _BYTE, edSelF(edFN) AS _BYTE
+    FOR f = 0 TO edFN - 1
+        IF f <= UBOUND(maSelF) THEN edSelF(f) = maSelF(f)
+    NEXT
+    edGen = edGen + 1: ovDirty = -1: meshDirty = -1: viewDirty = -1
+END SUB
+
+' Shown as maM says
+SUB MaPreview
+    DIM i AS LONG, f AS LONG, id AS LONG
+    IF maInE THEN
+        IF edPart = 0 THEN EXIT SUB
+        EmLoad maBase
+        FOR f = 1 TO sfN
+            IF f - 1 <= UBOUND(maT) THEN IF maT(f - 1) THEN sfMat(f) = maM
+        NEXT
+        id = EmWrite& ' (only the material changed: the faces stay as they were, in order)
+        MaShowE id
+    ELSE
+        FOR i = 1 TO pN
+            IF pSel(i) THEN pMat(i) = maM
+        NEXT
+        meshDirty = -1: viewDirty = -1
+    END IF
+END SUB
+
+FUNCTION MaShort$ (m AS _UNSIGNED LONG)
+    DIM k
+    FOR k = 1 TO MAT_PRESETS
+        IF matPre(k) = m THEN MaShort$ = matPreName$(k): EXIT FUNCTION
+    NEXT
+    MaShort$ = "CUSTOM"
+END FUNCTION
+
+' ---------------------------------------------------------------- the panel
+
+' Presets 1-11: three across
+SUB MaPreBtn (k, x, y, w, h)
+    x = PX0 + ((k - 1) MOD 3) * 78: y = 78 + ((k - 1) \ 3) * 24: w = 74: h = 22
+END SUB
+
+' Slider k (0-7: SEE GLOW SHINE ROUGH METAL BUMP COAT SHEEN): its bar
+SUB MaSlideRect (k, x, y, w, h)
+    x = PX0: y = 198 + k * 38: w = 226: h = 16
+END SUB
+
+FUNCTION MaSlideAt (x, y)
+    DIM k, rx, ry, rw, rh
+    MaSlideAt = -1
+    IF NOT maOn THEN EXIT FUNCTION
+    FOR k = 0 TO 7
+        MaSlideRect k, rx, ry, rw, rh
+        IF InRect(x, y, rx - 4, ry - 18, rw + 8, rh + 22) THEN MaSlideAt = k: EXIT FUNCTION ' (its name above it too)
+    NEXT
+END FUNCTION
+
+SUB MaSlideSet (k, v)
+    DIM m AS _UNSIGNED LONG
+    v = Clamp(v, 0, 100)
+    m = MatSet~&(maM, k, v)
+    IF m <> maM THEN maM = m: MaPreview
+END SUB
+
+' 1 APPLY, 2 CANCEL
+SUB MaBtn (k, x, y, w, h)
+    x = PX0 + (k - 1) * 118: y = 508: w = 112: h = 24
+END SUB
+
+' What value k does, in three short lines
+FUNCTION MaHelp$ (k, ln)
+    DIM t$
+    SELECT CASE k
+        CASE 0: t$ = "How see-through: 0 solid,|100 nearly gone. Glass,|water, ghosts, ice"
+        CASE 1: t$ = "Lights itself: its colour|shows in the dark, and in|the game it glows round it"
+        CASE 2: t$ = "How strong the bright spot|the lights make on it is|(0: none, as chalk)"
+        CASE 3: t$ = "How wide that spot spreads:|0 small and sharp (wet),|100 broad and soft"
+        CASE 4: t$ = "Metal: the bright spot is|the face's own colour, the|face darker. Gold, copper"
+        CASE 5: t$ = "Relief from its picture:|light parts stand out, dark|sink in. Stone, bark, rust"
+        CASE 6: t$ = "A clear glossy layer on top:|a second sharp spot. Car|paint, lacquer, a wet floor"
+        CASE 7: t$ = "Soft light along its edges|seen side-on. Velvet, cloth,|dust, a peach's skin"
+    END SELECT
+    MaHelp$ = PipePart$(t$, ln)
+END FUNCTION
+
+' Line ln (1-3) of a "|"-split text
+FUNCTION PipePart$ (t$, ln)
+    DIM i, p, q
+    p = 1
+    FOR i = 1 TO ln - 1
+        q = INSTR(p, t$, "|"): IF q = 0 THEN EXIT FUNCTION
+        p = q + 1
+    NEXT
+    q = INSTR(p, t$, "|"): IF q = 0 THEN q = LEN(t$) + 1
+    PipePart$ = MID$(t$, p, q - p)
+END FUNCTION
+
+SUB MaDraw
+    DIM k, x, y, w, h, kx, hot, v, i
+    Txt PX0, 36, "MATERIAL", cHi
+    Txt PX0 + 80, 36, LTRIM$(STR$(maN)) + IIFS$(maInE, IIFS$(maN = 1, " FACE", " FACES"), IIFS$(maN = 1, " PART", " PARTS")), cText
+    Txt PX0, 58, MaShort$(maM), cText
+    FOR k = 1 TO MAT_PRESETS
+        MaPreBtn k, x, y, w, h: Btn x, y, w, h, matPreName$(k), (matPre(k) = maM)
+    NEXT
+    hot = MaSlideAt(mX, mY): IF maDrag THEN hot = maDrag - 1
+    FOR k = 0 TO 7
+        MaSlideRect k, x, y, w, h
+        v = MatGet(maM, k)
+        Txt x, y - 16, RTRIM$(MatKeyName$(k)), IIFC~&(hot = k, cHi, cDim)
+        Txt x + 104, y - 16, LTRIM$(STR$(v)) + "%", cText
+        kx = x + w * v / 100
+        LINE (x, y + 6)-(x + w, y + 9), cLine, BF
+        LINE (x, y + 6)-(kx, y + 9), IIFC~&(hot = k, cHi, _RGB32(110, 90, 160)), BF
+        LINE (kx - 3, y)-(kx + 3, y + h - 1), IIFC~&(hot = k, cHi, cText), BF
+        LINE (kx - 3, y)-(kx + 3, y + h - 1), cBg, B
+    NEXT
+    MaBtn 1, x, y, w, h: Btn x, y, w, h, "APPLY  Enter", 0
+    MaBtn 2, x, y, w, h: Btn x, y, w, h, "CANCEL  Esc", 0
+    IF hot >= 0 THEN maHot = hot
+    y = 546
+    Txt PX0, y, RTRIM$(MatKeyName$(maHot)), cHi
+    FOR i = 1 TO 3: Txt PX0, y + i * 16, MaHelp$(maHot, i), cDim: NEXT
+    y = y + 76
+    IF y + 88 < scrH - BAR_H THEN
+        Txt PX0, y, "Drag a slider, or turn the", cDim
+        Txt PX0, y + 16, "wheel over it (16 steps)", cDim
+        Txt PX0, y + 40, "In the game: see-through,", cDim
+        Txt PX0, y + 56, "glow, shine and the rest", cDim
+        Txt PX0, y + 72, "go out with the export", cDim
+    END IF
+END SUB
+
+' A press in the panel (all of it's MATERIAL's)
+SUB MaClick
+    DIM k, x, y, w, h
+    k = MaSlideAt(mX, mY)
+    IF k >= 0 THEN
+        maDrag = k + 1: MaSlideRect k, x, y, w, h: MaSlideSet k, (mX - x) / w * 100
+        EXIT SUB
+    END IF
+    FOR k = 1 TO MAT_PRESETS
+        MaPreBtn k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN
+            IF maM <> matPre(k) THEN maM = matPre(k): MaPreview
+            EXIT SUB
+        END IF
+    NEXT
+    MaBtn 1, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN MaApply: EXIT SUB
+    MaBtn 2, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN MaCancel: EXIT SUB
+END SUB
+
+' Each frame: a slider being dragged
+SUB MaFrame
+    DIM x, y, w, h
+    IF maDrag = 0 THEN EXIT SUB
+    IF NOT maOn OR NOT mB1 THEN maDrag = 0: EXIT SUB
+    MaSlideRect maDrag - 1, x, y, w, h: MaSlideSet maDrag - 1, (mX - x) / w * 100
+END SUB
+
+' The wheel over a slider (up: a step more)
+SUB MaWheel (dir)
+    DIM k
+    k = MaSlideAt(mX, mY)
+    IF k >= 0 THEN MaSlideSet k, MatGet(maM, k) + dir * 100 / 15
+END SUB
+
+' A key while it's on: Enter / Q makes it, Esc puts it back; F and Home still frame the view
+FUNCTION MaKey (k&)
+    MaKey = -1
+    SELECT CASE k&
+        CASE 27: MaCancel
+        CASE 13, 113, 81: MaApply
+        CASE 102, 70, 18176: MaKey = 0
+    END SELECT
+END FUNCTION

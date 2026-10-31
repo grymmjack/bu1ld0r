@@ -68,10 +68,12 @@ END SUB
 
 ' Part p's shape as a mesh, in its own space
 FUNCTION PartMeshOf& (p)
-    DIM t0 AS LONG
+    DIM t0 AS LONG, m AS _UNSIGNED LONG
     t0 = tN
     IF pKind(p) = K_USE THEN
+        m = pMat(p): pMat(p) = 0 ' (the use's material stays the part's, not put on each face: MATERIAL can still change it)
         usN = 0: MeshItem p, p
+        pMat(p) = m
         PartMeshOf& = EmFromTris&(t0 + 1, tN, p, 0)
     ELSEIF pKind(p) = K_MESH THEN
         EmLoad pMesh(p): PartMeshOf& = EmWrite&
@@ -641,7 +643,7 @@ SUB EdExtrude
                         emU(1) = scTU(sfC0(f) + (k + 1) MOD n): emW(1) = scTV(sfC0(f) + (k + 1) MOD n)
                         emU(2) = emU(1): emW(2) = emW(1): emU(3) = emU(0): emW(3) = emW(0)
                     END IF
-                    r = EmAddF&(4, sfCol(f))
+                    emMat = sfMat(f): r = EmAddF&(4, sfCol(f))
                 END IF
             NEXT
         END IF
@@ -686,7 +688,7 @@ SUB EdInset
                     emU(0) = ou(k): emW(0) = ow(k): emU(1) = ou((k + 1) MOD n): emW(1) = ow((k + 1) MOD n)
                     emU(2) = iu((k + 1) MOD n): emW(2) = iw((k + 1) MOD n): emU(3) = iu(k): emW(3) = iw(k)
                 END IF
-                r = EmAddF&(4, sfCol(f))
+                emMat = sfMat(f): r = EmAddF&(4, sfCol(f))
             NEXT
             FOR k = 0 TO n - 1: scV(c0 + k) = nk(k): scTU(c0 + k) = iu(k): scTV(c0 + k) = iw(k): NEXT
         END IF
@@ -720,10 +722,10 @@ SUB EdDivide (across)
             tx = sfTex(f): m1u = (cu(0) + cu(1)) / 2: m1w = (cw(0) + cw(1)) / 2: m2u = (cu(2) + cu(3)) / 2: m2w = (cw(2) + cw(3)) / 2
             emL(0) = c(0): emL(1) = m1: emL(2) = m2: emL(3) = c(3): emE(0) = e(0): emE(1) = 1: emE(2) = e(2): emE(3) = e(3)
             IF tx THEN emTex = tx: emU(0) = cu(0): emW(0) = cw(0): emU(1) = m1u: emW(1) = m1w: emU(2) = m2u: emW(2) = m2w: emU(3) = cu(3): emW(3) = cw(3)
-            r = EmAddF&(4, sfCol(f)): EdWsRoom: wsF(r) = -1
+            emMat = sfMat(f): r = EmAddF&(4, sfCol(f)): EdWsRoom: wsF(r) = -1
             emL(0) = m1: emL(1) = c(1): emL(2) = c(2): emL(3) = m2: emE(0) = e(0): emE(1) = e(1): emE(2) = e(2): emE(3) = 1
             IF tx THEN emTex = tx: emU(0) = m1u: emW(0) = m1w: emU(1) = cu(1): emW(1) = cw(1): emU(2) = cu(2): emW(2) = cw(2): emU(3) = m2u: emW(3) = m2w
-            r = EmAddF&(4, sfCol(f)): EdWsRoom: wsF(r) = -1
+            emMat = sfMat(f): r = EmAddF&(4, sfCol(f)): EdWsRoom: wsF(r) = -1
             sfLive(f) = 0: cnt = cnt + 1
         ELSEIF sfLive(f) AND wsF(f) THEN ' (any other shape: cut through its middle, across the screen or down it)
             IF EdDivideAny(f, across, ceA(), ceB(), ceM(), ceN) THEN cnt = cnt + 1
@@ -764,7 +766,7 @@ SUB EdInsertCuts (ceA() AS LONG, ceB() AS LONG, ceM() AS LONG, ceN AS LONG)
                     emTex = sfTex(f)
                     FOR k = 0 TO m - 1: emU(k) = nu(k): emW(k) = nw(k): NEXT
                 END IF
-                r = EmAddF&(m, sfCol(f)): EdWsRoom: wsF(r) = wsF(f): sfLive(f) = 0
+                emMat = sfMat(f): r = EmAddF&(m, sfCol(f)): EdWsRoom: wsF(r) = wsF(f): sfLive(f) = 0
             END IF
         END IF
     NEXT
@@ -829,7 +831,7 @@ FUNCTION EdDivideAny (f AS LONG, across, ceA() AS LONG, ceB() AS LONG, ceM() AS 
         LOOP
         emE(r - 1) = 1
         IF sfTex(f) THEN emTex = sfTex(f)
-        r = EmAddF&(r, sfCol(f)): EdWsRoom: wsF(r) = -1
+        emMat = sfMat(f): r = EmAddF&(r, sfCol(f)): EdWsRoom: wsF(r) = -1
     NEXT
     sfLive(f) = 0
     EdDivideAny = -1
@@ -959,7 +961,7 @@ SUB EdConnect
                         LOOP
                         emE(r - 1) = 1
                         IF sfTex(f) THEN emTex = sfTex(f)
-                        r = EmAddF&(r, sfCol(f)): EdWsRoom: wsF(r) = 0
+                        emMat = sfMat(f): r = EmAddF&(r, sfCol(f)): EdWsRoom: wsF(r) = 0
                     NEXT
                     sfLive(f) = 0: cuts = cuts + 1
                     nN = nN + 1: nA(nN) = lv(z1): nB(nN) = lv(z2)
@@ -1101,7 +1103,7 @@ SUB EdJoinFaces
                                 m = EmJoin&(f, k, q, j, jok)
                                 IF jok THEN
                                     IF sfTex(f) THEN EmJoinSpots f, q, m
-                                    emTag = sfTag(f): r = EmAddF&(m, sfCol(b))
+                                    emTag = sfTag(f): emMat = sfMat(b): r = EmAddF&(m, sfCol(b))
                                     EdWsRoom: wsF(r) = -1
                                     IF r > UBOUND(big) THEN REDIM _PRESERVE big(r + 64) AS LONG: REDIM _PRESERVE fit(r + 64) AS _BYTE: REDIM _PRESERVE bent(r + 64) AS _BYTE
                                     big(r) = b: fit(r) = ok AND NOT bnt: bent(r) = bnt
@@ -1218,7 +1220,7 @@ SUB EdStraighten
                                 NEXT
                                 IF m < sfCN(g) THEN
                                     emTex = sfTex(g): emTag = sfTag(g)
-                                    r = EmAddF&(m, sfCol(g)): EdWsRoom: wsF(r) = wsF(g): sfLive(g) = 0
+                                    emMat = sfMat(g): r = EmAddF&(m, sfCol(g)): EdWsRoom: wsF(r) = wsF(g): sfLive(g) = 0
                                 END IF
                             END IF
                         NEXT
@@ -1266,7 +1268,7 @@ SUB EmRemap (rm() AS LONG)
                         emTex = sfTex(f)
                         FOR k = 0 TO m - 1: emU(k) = nu(k): emW(k) = nw(k): NEXT
                     END IF
-                    r = EmAddF&(m, sfCol(f))
+                    emMat = sfMat(f): r = EmAddF&(m, sfCol(f))
                 END IF
             END IF
         END IF
@@ -1714,8 +1716,8 @@ SUB EdBtn (k, x, y, w, h)
         CASE 2: x = PX0 + 100: y = 58: w = 44
         CASE 18: x = PX0 + 146: y = 58: w = 52
         CASE 3: x = PX0 + 200: y = 58: w = 36
-        CASE 4 TO 11, 13 TO 17, 19
-            i = k - 4: IF k = 13 THEN i = 2 ELSE IF k = 19 THEN i = 13 ELSE IF k >= 14 THEN i = k - 5 ELSE IF k >= 6 THEN i = k - 3
+        CASE 4 TO 11, 13 TO 17, 19, 20
+            i = k - 4: IF k = 13 THEN i = 2 ELSE IF k = 20 THEN i = 14 ELSE IF k = 19 THEN i = 13 ELSE IF k >= 14 THEN i = k - 5 ELSE IF k >= 6 THEN i = k - 3
             x = PX0 + (i MOD 3) * 78: y = 480 + (i \ 3) * 24: w = 74 ' (five rows: down to 598, ALIGN at 604)
         CASE ELSE: x = -100: y = -100: w = 0
     END SELECT
@@ -1728,6 +1730,7 @@ FUNCTION EdBtnName$ (k)
         CASE 3: EdBtnName$ = "DONE"
         CASE 18: EdBtnName$ = "PLANES"
         CASE 19: EdBtnName$ = "MEND"
+        CASE 20: EdBtnName$ = "MATERIAL"
         CASE 4: EdBtnName$ = "EXTRUDE E"
         CASE 5: EdBtnName$ = "INSET I"
         CASE 6: EdBtnName$ = "DIVIDE-H"
@@ -1793,7 +1796,7 @@ SUB EdPanelDraw
         LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(palCol(k) = c, cHi, cLine), B
     NEXT
     TfDraw
-    FOR k = 4 TO 19
+    FOR k = 4 TO 20
         IF k <> 12 AND k <> 18 THEN EdBtn k, x, y, w, h: Btn x, y, w, h, EdBtnName$(k), 0
     NEXT
     y = 606
@@ -1818,10 +1821,11 @@ SUB EdPanelClick
     IF AlClick(604) THEN EXIT SUB
     IF EdSameY THEN IF SmClick(EdSameY) THEN EXIT SUB
     IF EdSameY THEN IF SnClick(EdSameY + 90) THEN EXIT SUB
-    FOR k = 1 TO 19
+    FOR k = 1 TO 20
         EdBtn k, x, y, w, h
         IF w > 0 AND InRect(mX, mY, x, y, w, h) THEN
             SELECT CASE k
+                CASE 20: MaStart
                 CASE 19: EdMend
                 CASE 18: EdSetPlanes
                 CASE 12: EdSetMode ED_EDGES
@@ -2254,7 +2258,7 @@ SUB EdDissolve
                 NEXT
                 sfLive(f) = 0
                 IF m >= 3 THEN
-                    emTex = tex: emTag = sfTag(f): k = EmAddF&(m, sfCol(f))
+                    emTex = tex: emTag = sfTag(f): emMat = sfMat(f): k = EmAddF&(m, sfCol(f))
                 ELSE
                     gone = gone + 1
                 END IF
@@ -2275,7 +2279,7 @@ SUB EdDissolve
                 LOOP
                 IF found AND m >= 3 THEN
                     FOR k = 0 TO m - 1: emL(k) = ring(k + 1): emE(k) = 1: NEXT
-                    emTex = 0: emTag = sfTag(fa(1)): k = EmAddF&(m, sfCol(fa(1)))
+                    emTex = 0: emTag = sfTag(fa(1)): emMat = sfMat(fa(1)): k = EmAddF&(m, sfCol(fa(1)))
                     fills = fills + 1
                 END IF
             END IF
@@ -2335,7 +2339,7 @@ SUB EdDissolveEdges
                 IF same THEN emTex = sfTex(f1) ELSE emTex = 0
                 emTag = sfTag(f1)
                 sfLive(f1) = 0: sfLive(f2) = 0
-                r = EmAddF&(m, sfCol(f1))
+                emMat = sfMat(f1): r = EmAddF&(m, sfCol(f1))
                 cnt = cnt + 1
             END IF
         END IF

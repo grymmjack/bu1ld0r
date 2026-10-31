@@ -37,7 +37,7 @@ FUNCTION CsgPoly& (nv)
         REDIM _PRESERVE cgV0(n) AS LONG, cgVn(n) AS INTEGER, cgNext(n) AS LONG
         REDIM _PRESERVE cgPart(n) AS INTEGER, cgFace(n) AS INTEGER, cgCol(n) AS _UNSIGNED LONG, cgCut(n) AS INTEGER
         REDIM _PRESERVE cgPar(n) AS LONG, cgOn(n) AS INTEGER
-        REDIM _PRESERVE cgTex(n) AS INTEGER, cgMap(8 * n + 7) AS DOUBLE
+        REDIM _PRESERVE cgTex(n) AS INTEGER, cgMap(8 * n + 7) AS DOUBLE, cgMat(n) AS _UNSIGNED LONG
         cgCap = n
     END IF
     IF cvTop + nv > cvCap THEN
@@ -70,7 +70,7 @@ FUNCTION CsgFromTris& (t0 AS LONG, t1 AS LONG, cut)
             nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
             cgNx(p) = nx#: cgNy(p) = ny#: cgNz(p) = nz#: cgW(p) = nx# * cvX(v) + ny# * cvY(v) + nz# * cvZ(v)
             cgPart(p) = tPart(t): cgFace(p) = tFace(t): cgCol(p) = tCol(t): cgCut(p) = cut
-            cgTex(p) = tTex(t): IF tTex(t) THEN CsgMapFrom p, t
+            cgMat(p) = tMat(t): cgTex(p) = tTex(t): IF tTex(t) THEN CsgMapFrom p, t
             cgNext(p) = h: h = p
         END IF
     NEXT
@@ -152,7 +152,7 @@ SUB CsgLike (p AS LONG, q AS LONG)
     cgNx(q) = cgNx(p): cgNy(q) = cgNy(p): cgNz(q) = cgNz(p): cgW(q) = cgW(p)
     cgPart(q) = cgPart(p): cgFace(q) = cgFace(p): cgCol(q) = cgCol(p): cgCut(q) = cgCut(p)
     cgOn(q) = cgOn(p): cgPar(q) = p
-    cgTex(q) = cgTex(p)
+    cgTex(q) = cgTex(p): cgMat(q) = cgMat(p)
     IF cgTex(p) THEN
         FOR k = 0 TO 7: cgMap(8 * q + k) = cgMap(8 * p + k): NEXT
     END IF
@@ -360,13 +360,13 @@ END FUNCTION
 FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     DIM p AS LONG, nx AS LONG, q AS LONG, pp AS LONG, l AS LONG, nl AS LONG, f AS LONG, b AS LONG, cf AS LONG, cb AS LONG
     DIM plo AS V3, phi AS V3, aNear AS LONG, aFar AS LONG, bNear AS LONG, bFar AS LONG, aP AS LONG, bP AS LONG, na AS LONG, nb AS LONG, i AS LONG, k AS LONG
-    DIM x#, y#, z#, ins, res AS LONG, c AS _UNSIGNED LONG, side, goes
+    DIM x#, y#, z#, ins, res AS LONG, c AS _UNSIGNED LONG, side, goes, cm AS _UNSIGNED LONG
     IF la = 0 OR lb = 0 THEN
         IF keep = 0 THEN CsgBool& = la
         IF keep = 2 THEN CsgBool& = CsgJoin&(la, lb)
         EXIT FUNCTION
     END IF
-    c = cgCol(la)
+    c = cgCol(la): cm = cgMat(la)
     ' Both whole, for the inside tests
     rbN = 0
     CsgRays 0, la: CsgRays 1, lb
@@ -472,7 +472,7 @@ FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
                 LOOP
                 IF csDone(q) = 0 THEN
                     csDone(q) = 1
-                    IF side AND keep <> 2 THEN cgCol(q) = c: cgTex(q) = 0: IF keep = 0 THEN CsgFlip q ' (walls: the solid's colour, no picture)
+                    IF side AND keep <> 2 THEN cgCol(q) = c: cgMat(q) = cm: cgTex(q) = 0: IF keep = 0 THEN CsgFlip q ' (walls: the solid's colour, no picture)
                     cgNext(q) = res: res = q
                 END IF
             END IF
@@ -606,7 +606,7 @@ SUB CsgEmit (lst AS LONG)
                 tEdge(t) = e
                 tNrm(t).x = cgNx(p): tNrm(t).y = cgNy(p): tNrm(t).z = cgNz(p)
                 tPart(t) = cgPart(p): tFace(t) = cgFace(p): tCol(t) = cgCol(p)
-                tTex(t) = cgTex(p)
+                tTex(t) = cgTex(p): tMat(t) = cgMat(p)
                 IF tTex(t) THEN ' (its picture's spots where its corners are now)
                     m = 8 * p
                     tU(3 * t) = cgMap(m) * tA(t).x + cgMap(m + 1) * tA(t).y + cgMap(m + 2) * tA(t).z + cgMap(m + 3)

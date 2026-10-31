@@ -60,7 +60,7 @@ END FUNCTION
 SUB ObjImport (p$)
     DIM fh, t$, l$, a AS LONG, b AS LONG, i AS LONG, k AS LONG, j AS LONG, n$, tp$, tx, nv AS LONG, nt AS LONG, ntri AS LONG
     DIM fv(63) AS LONG, ft(63) AS LONG, nfc, s1, s2, w$, c AS LONG, pc AS LONG, npc AS LONG, cnt AS LONG, q, g
-    DIM lo AS V3, hi AS V3, t AS LONG, id AS LONG, u, v, r, gg, bb, col AS _UNSIGNED LONG, made, x#, y#, z#
+    DIM lo AS V3, hi AS V3, t AS LONG, id AS LONG, u, v, r, gg, bb, col AS _UNSIGNED LONG, made, x#, y#, z#, mp$, matImg&
     IF NOT _FILEEXISTS(p$) THEN Msg "No such file: " + p$: EXIT SUB
     i = _INSTRREV(p$, "/"): n$ = MID$(p$, i + 1): n$ = SafeName$(LEFT$(n$, LEN(n$) - 4))
     fh = FREEFILE: OPEN p$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
@@ -115,6 +115,11 @@ SUB ObjImport (p$)
         IF NOT _FILEEXISTS(PicDir$ + "neon/" + n$ + ".png") THEN FileCopy tp$, PicDir$ + "neon/" + n$ + ".png" ' (one already there - maybe changed in DRAW - is kept)
         tx = PicFind("neon/" + n$)
         IF tx > 0 THEN IF picW(tx) = 0 THEN tx = 0
+        mp$ = ""
+        IF LCASE$(RIGHT$(tp$, 8)) = "_tex.png" THEN mp$ = LEFT$(tp$, LEN(tp$) - 8) + "_mat.png" ' (its materials, beside its texture - MODEL/MAT.BI)
+        IF LEN(mp$) THEN
+            IF _FILEEXISTS(mp$) THEN matImg& = _LOADIMAGE(mp$, 32)
+        END IF
     END IF
     ' Pieces: triangles that share a point (welded) are one
     EmClear: EmWeldStart ntri * 3
@@ -156,12 +161,13 @@ SUB ObjImport (p$)
                 ImCorner tA(tN), 3 * t, lo, hi
                 ImCorner tB(tN), 3 * t + 1, lo, hi
                 ImCorner tC(tN), 3 * t + 2, lo, hi
-                tEdge(tN) = 7: tTex(tN) = tx
+                tEdge(tN) = 7: tTex(tN) = tx: tMat(tN) = 0
                 u = 0: v = 0
                 FOR k = 0 TO 2
                     tU(3 * tN + k) = imU(imCT(3 * t + k)): tW(3 * tN + k) = imV(imCT(3 * t + k))
                     u = u + tU(3 * tN + k) / 3: v = v + tW(3 * tN + k) / 3
                 NEXT
+                IF matImg& < -1 THEN tMat(tN) = MatFromPx~&(ImgAt~&(matImg&, u, v)) ' (its material: the pixel at its middle, as the game reads it)
                 col = _RGB32(170, 170, 170)
                 IF tx THEN
                     r = 0: gg = 0: bb = 0
@@ -188,11 +194,22 @@ SUB ObjImport (p$)
         END IF
     NEXT
     tN = 0
+    IF matImg& < -1 THEN _FREEIMAGE matImg&
     mdlPf$ = "": undoN = 0: redoN = 0
     ModelChanged: MeshGc
     ViewFrameAll
     Msg "Opened " + p$ + " -" + STR$(ntri) + " triangles, as" + STR$(made) + " mesh part" + IIFS$(made = 1, "", "s") + IIFS$(tx > 0, ", its texture on them", " (no texture found)") + ". Ctrl+S saves it as models/" + n$ + ".bld"
 END SUB
+
+' Image img&'s pixel at u, v (0..1 across, from the top; repeating)
+FUNCTION ImgAt~& (img&, u, v)
+    DIM x AS LONG, y AS LONG, w AS LONG, h AS LONG, d
+    w = _WIDTH(img&): h = _HEIGHT(img&)
+    x = INT((u - INT(u)) * w): y = INT((v - INT(v)) * h)
+    IF x >= w THEN x = w - 1
+    IF y >= h THEN y = h - 1
+    d = _SOURCE: _SOURCE img&: ImgAt~& = POINT(x, y): _SOURCE d
+END FUNCTION
 
 SUB ImCorner (o AS V3, c AS LONG, lo AS V3, hi AS V3)
     o.x = imX(imCV(c)): o.y = imY(imCV(c)): o.z = imZ(imCV(c))

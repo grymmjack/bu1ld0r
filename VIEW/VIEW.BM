@@ -106,6 +106,7 @@ SUB ViewRender
         rNoInk = 0
     ELSE
         IF texOp < 100 THEN bg& = _COPYIMAGE(viewImg&) ' (the backdrop and grid: the faces faded towards it)
+        rMatOn = -1: rSeeN = 0: rGlowN = 0
         FOR t = 1 TO sceneTN
             IF pWire(tPart(t)) = 0 AND FpIsBody(t) = 0 THEN RasterTri t ' (WALK's body: not drawn round the eye)
         NEXT
@@ -114,6 +115,9 @@ SUB ViewRender
             IF pWire(tPart(t)) = 0 THEN RasterTri t
         NEXT
         rHole = 0
+        RenderSeePass ' (see-through faces, far to near)
+        GlowHalo
+        rMatOn = 0
         IF edPart THEN ' (the part being edited, if it's lines only: filled unseen, so its faces can be picked)
             IF pWire(edPart) THEN
                 rNoInk = -1
@@ -441,6 +445,9 @@ SUB RasterTri (t AS LONG)
     IF rGhost THEN col = Shade~&(IIFC~&(pHole(0), _RGB32(150, 160, 190), _RGB32(255, 255, 255)), .5 + .5 * lit)
     IF rHole THEN col = Shade~&(IIFC~&(pKeep(tPart(t)), _RGB32(120, 200, 150), _RGB32(150, 160, 190)), .55 + .45 * lit) ' (a KEEP: greenish)
     IF bk THEN col = Shade~&(_RGB32(235, 40, 50), .55 + .45 * lit)
+    IF rMatOn THEN ' (a material: drawn its own way - VIEW/VMAT)
+        IF tMat(t) <> 0 AND rGhost = 0 AND rHole = 0 AND rNoInk = 0 AND bk = 0 THEN RasterMat t, n, lit, sh: EXIT SUB
+    END IF
 
     tx = 0 ' (a picture on it: drawn from that, each pixel - not see-through ones, nor the wireframe's picking)
     IF tTex(t) > 0 AND rGhost = 0 AND rHole = 0 AND rNoInk = 0 AND bk = 0 THEN
@@ -541,12 +548,14 @@ SUB FillTriT (ax, ay, aq, ap, au, aw, bx, by, bq, bp, bu, bw, cx, cy, cq, cp, cu
                     IF ix >= pw0 THEN ix = pw0 - 1
                     IF iy >= ph0 THEN iy = ph0 - 1
                     c = picPix(po + iy * pw0 + ix)
-                    r = _RED32(c) * sh: g = _GREEN32(c) * sh: b = _BLUE32(c) * sh
-                    IF r > 255 THEN r = 255
-                    IF g > 255 THEN g = 255
-                    IF b > 255 THEN b = 255
-                    rZ(i) = q: rId(i) = id
-                    _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(r, g, b) AS _UNSIGNED LONG
+                    IF _ALPHA32(c) >= 128 THEN ' (a see-through pixel of the picture: cut out, as the game does)
+                        r = _RED32(c) * sh: g = _GREEN32(c) * sh: b = _BLUE32(c) * sh
+                        IF r > 255 THEN r = 255
+                        IF g > 255 THEN g = 255
+                        IF b > 255 THEN b = 255
+                        rZ(i) = q: rId(i) = id
+                        _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(r, g, b) AS _UNSIGNED LONG
+                    END IF
                 END IF
             END IF
             w0 = w0 + a0: w1 = w1 + a1: i = i + 1

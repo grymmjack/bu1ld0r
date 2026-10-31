@@ -125,47 +125,78 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
    pipe (straight, elbow, T), lamp, antenna (vents and dials use stage 7's
    cuts).
 
-10. **Materials** (planned; Rick asked 2026-10-31: see-through, light,
-   shine, roughness, glow, emit, refraction). What NEON-CASTER shows today
-   (read from its code; it reads only `v` / `vt` / `f` and `# frame` - the
-   .mtl is never opened, one texture `NAME_tex.png` a model):
-   - **Cut-out see-through: works now.** A texture pixel under alpha 128
-     isn't drawn (GL shader `discard`, the software path the same). So a
-     picture with clear pixels (the painter can make them) = holes, grilles,
-     leaves. No half see-through on models (only the game's glass panes and
-     liquids blend).
-   - **Glow: works now, through colour.** In GL, a texel that is bright
-     (a channel over ~.68) and strongly coloured lights itself whatever the
-     room's light (model textures get neon .6) and feeds the bloom. So a
-     bright saturated face or picture glows; dark or grey ones don't.
-   - **Lighting: the game's own.** Each triangle gets one brightness from
-     its facing and the cell's light (coloured, flickering lamps and all);
-     up to 4 moving lights, but on models they ignore the facing. Far away
-     the model is its 8 pictures, lit as baked by the export.
-   - **Shine, roughness, emissive maps, blended alpha, reflection,
-     refraction: not in the game for models** (shine exists only for walls
-     and floors; models are forced to shine 0).
-   The plan, in steps:
-   a. bu1ld0r: a face MATERIAL beside its picture - ALPHA, GLOW, SHINE,
-      ROUGH (0-100 each), kept per polygon (as `mfTex`) and on the .bld's
-      `f` lines; the view shows them (alpha blended, GLOW unlit and
-      haloed, SHINE a highlight from the light, ROUGH spreading it).
-   b. Export: the .mtl written properly (`d`, `Ks`, `Ns`, `Ke`, `map_Ke`)
-      for other programs, a `NAME_glow.png` (where it glows), and
-      `# mat` lines the game can read; until the game reads them, GLOW
-      pushes those faces' texels into the range the game already makes
-      glow, and ALPHA under half cuts them out - so it shows in the game
-      at once, as near as it can.
-   c. NEON-CASTER (its own work, Rick's call): read the `# mat` lines /
-      glow map - blended alpha for models, shine and roughness from the
-      normals (the walls' code has it), moving lights using the facing.
-      Refraction would need a copy of the screen behind the model (the
-      glass panes' ripple does something like it): last, if ever.
+10. **Materials** (0.7.0, branch `materials` in bu1ld0r and NEON-CASTER).
+   Each face gets eight values beside its colour and picture, 0-100% in
+   16 steps, all 0 = a plain face exactly as before (Blender's Principled
+   BSDF, the part a game can show):
+   - **SEE** - how see-through (0 solid, 100 gone): blended, not cut out.
+   - **GLOW** - lights itself (unlit by the room) and blooms in the game.
+   - **SHINE** - how strong the highlight from the lights is.
+   - **ROUGH** - how wide it spreads (0 a small hard spot, 100 broad).
+   - **METAL** - the highlight takes the face's colour, the face goes darker.
+   - **BUMP** - relief from its picture's light and dark (as the game's walls).
+   - **COAT** - a second sharp glossy highlight over the rest (car paint).
+   - **SHEEN** - soft light along the edges seen side-on (velvet, cloth).
+   Later, in a `NAME_mat2.png`: REFRACT (glass bends what's behind - the
+   frosted panes' copy of the screen), SUBSURFACE (light through wax and
+   skin), FILM (soap-bubble rainbow), ANISO (brushed metal).
 
-And on NEON-CASTER's side (its own work, later): a thing to place any
-exported model in a sector (a `prop NAME` thing), the level editor's picker
-showing them, and the game opening bu1ld0r (as it opens DRAW) and reloading
-a model when its files change.
+   **bu1ld0r** (all done on the branch)
+   a. Kept per polygon like its picture: `mfMat` (pool) / `sfMat` (work) /
+      `tMat` (triangles) / `cgMat` (cuts), packed in an `_UNSIGNED LONG`
+      (4 bits each from the top: SEE GLOW SHINE ROUGH METAL BUMP COAT
+      SHEEN - MODEL/MAT). Every tool that makes a face from another passes
+      it on (`emMat`, reset after each EmAddF&); faces join only with the
+      same material. A part has one too (`pMat`): on each of its faces with
+      none of its own (MeshItem; a use's on its parts'). `.bld`: an
+      `m=S:G:H:R:M:B:C:H` word (%) after the colour / `@picture` on `f`
+      lines, and on `part` / `use` lines (old builds ignore it).
+   b. MATERIAL (Q; the panel's MATERIAL, E's MATERIAL): a mode like BEVEL
+      (UI/MATS) - twelve presets, eight sliders, what the pointed-at one
+      does, shown live, APPLY / Esc, one undo step.
+   c. The view (VIEW/VMAT): SEE faces drawn last, far to near, blended
+      (still clickable); GLOW unlit plus a halo (a quarter-size blur round
+      the glowing faces' box); SHINE / ROUGH / METAL / COAT / SHEEN and a
+      fake sky reflection worked out at the corners, a big face cut into up
+      to 64 pieces first; BUMP from the picture's brightness. A picture's
+      clear pixels (alpha under 128) cut out, as the game does. Bin icons
+      too.
+   d. Export: `NAME_mat.png` beside each `NAME_tex.png` (64 and 256), the
+      same layout; the atlas keys colour squares by colour + material, and
+      pictures by picture + material (one on faces of two materials goes in
+      twice); the .mtl has a `newmtl` per material (`Ks` `Ns` `d` `Ke` and
+      Blender's `Pm` `Pr` `Pc` `Ps`); the 8 pictures show glow and
+      see-through. TIDY keeps material faces as they are (as pictures).
+   e. Opening a NEON-CASTER prop reads its `_mat.png` back onto the faces.
+
+   **The file between them: `NAME_mat.png`** - the same size as `NAME_tex.png`
+   and read with the same spots, nearest pixel (never smoothed, no mipmaps).
+   Each value is 0-15 (n / 15 = 0-100%), two to a channel, high 4 bits first:
+   R = SEE * 16 + GLOW, G = SHINE * 16 + ROUGH, B = METAL * 16 + BUMP,
+   A = 255 - (COAT * 16 + SHEEN). A plain face is (0, 0, 0, 255). No
+   `_mat.png`: every face plain.
+
+   **NEON-CASTER** (done on its branch: RENDER/MODELS, GL/OPENGL)
+   f. NewModel loads `NAME_mat.png` if there (ArtPath$, as `_tex.png`);
+      each triangle's SEE is read at its middle on the CPU (`mdlSee`).
+   g. GL: the material picture on texture unit 4 for a model's slot
+      (`hasMat` 0 for everything else, so walls, sprites and models without
+      one draw exactly as now). The shader: SHINE adds to `shine`, ROUGH
+      sets the highlight's power (24 now; 64 sharp - 6 broad), GLOW lifts
+      the neon mix and brightens (bloom picks it up), SEE sets the alpha.
+   h. SEE triangles held back from the opaque sprites and drawn after them,
+      before liquids and glass: far to near, blended, no depth write.
+   i. Software renderer: unchanged (it draws the 8 pictures, which bu1ld0r
+      bakes the look into).
+   Refraction (glass bending what's behind, like the frosted panes' copy
+   of the screen): later, if ever.
+
+And on NEON-CASTER's side: a thing to place any exported model in a sector
+(a `prop NAME` thing), the level editor's picker showing them, and the game
+reloading a model when its files change - done 2026-10-31 (`[things]`
+`x, y, prop, NAME[, HP]`, the pane's MODEL < >, console `prop X Y NAME` /
+`reload`, PropWatch). Still to do: the game opening bu1ld0r (as it opens
+DRAW).
 
 ## Testing
 
