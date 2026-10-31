@@ -11,10 +11,23 @@ SUB PartsSetup
     kindName$(K_CONE) = "cone": kindName$(K_WEDGE) = "wedge": kindName$(K_TUBE) = "tube"
     FOR k = 1 TO NUM_KINDS: kindSX(k) = 0.25: kindSY(k) = 0.25: kindSZ(k) = 0.25: NEXT
     kindSY(K_CYL) = 0.3: kindSY(K_TUBE) = 0.15: kindAmt(K_TUBE) = 0.6: kindAmt(K_SPHERE) = 1
+    kindName$(K_DIE) = "die": kindName$(K_STAR) = "star": kindName$(K_GEAR) = "gear": kindName$(K_DONUT) = "donut"
+    kindName$(K_DIAMOND) = "diamond": kindName$(K_SPIKE) = "spike": kindName$(K_PILL) = "pill": kindName$(K_ARROW) = "arrow"
+    kindSY(K_STAR) = .08: kindAmt(K_STAR) = .45
+    kindSY(K_GEAR) = .08: kindAmt(K_GEAR) = .35
+    kindSY(K_DONUT) = .075: kindAmt(K_DONUT) = .4
+    kindSY(K_DIAMOND) = .16: kindAmt(K_DIAMOND) = .55
+    kindAmt(K_SPIKE) = .5
+    kindSX(K_PILL) = .5: kindAmt(K_PILL) = .5
+    kindSY(K_ARROW) = .06: kindSZ(K_ARROW) = .4: kindAmt(K_ARROW) = .4
+    ShapesSetup
     kindName$(K_USE) = "prefab": kindSX(K_USE) = 1: kindSY(K_USE) = 1: kindSZ(K_USE) = 1 ' (a prefab's size is its scale)
     kindName$(K_MESH) = "mesh": kindSX(K_MESH) = 1: kindSY(K_MESH) = 1: kindSZ(K_MESH) = 1 ' (its points are its own: its size is its scale)
     FOR k = 1 TO K_MESH: defSX(k) = kindSX(k): defSY(k) = kindSY(k): defSZ(k) = kindSZ(k): NEXT
-    snapStep = 1 / 32
+    FOR k = 1 TO NUM_KINDS: kindB(k) = .25: NEXT
+    snapStep = 1 / 32: guidesOn = -1
+    smAx(1) = -1: smAx(2) = -1: smAx(3) = -1
+    tfAx(1) = -1: tfAx(2) = -1: tfAx(3) = -1 ' (TRANSFORM: MOVE, every axis)
     curCol = _RGB32(76, 255, 255) ' (ANSI32's cyan, 4CFFFF)
     defCol = curCol
 END SUB
@@ -53,6 +66,7 @@ FUNCTION PartFromGhost
     PartFromGhost = pN
     ' (the next of this kind starts as big as this one - a prefab always as made)
     IF pKind(0) <> K_USE AND pKind(0) <> K_MESH THEN kindSX(pKind(0)) = pSX(0): kindSY(pKind(0)) = pSY(0): kindSZ(pKind(0)) = pSZ(0)
+    IF FitKind(pKind(0)) THEN kindB(pKind(0)) = FitBase#(0, kindB(pKind(0)))
 END FUNCTION
 
 SUB SelNone
@@ -127,6 +141,7 @@ SUB ModelWrite (f$)
         PRINT #fh, PartLine$(i)
         IF pKind(i) = K_MESH THEN MeshLines fh, pMesh(i)
     NEXT
+    RefLines fh ' (its reference pictures)
     CLOSE #fh
 END SUB
 
@@ -278,6 +293,7 @@ END SUB
 
 SUB ModelNew
     pN = 0: undoN = 0: redoN = 0: mdlName$ = "untitled": mdlPf$ = "": mdlBudget = TD_BUDGET
+    RefClearAll
     ModelChanged: mdlDirty = 0: MeshGc
 END SUB
 
@@ -304,6 +320,7 @@ SUB ModelSave
     f$ = ModelPath$(mdlName$)
     ModelWrite f$
     mdlDirty = 0
+    IF binTab = 2 THEN BinList ' (its picture made again)
     Msg "Saved " + f$
 END SUB
 
@@ -312,12 +329,14 @@ SUB ModelLoad (f$)
     DIM fh, t$, p$, i
     IF LCASE$(LEFT$(f$, 5)) = "neon:" THEN ObjImport NeonInDir$ + "models/" + MID$(f$, 6) + ".obj": EXIT SUB
     IF LCASE$(RIGHT$(f$, 4)) = ".obj" THEN ObjImport f$: EXIT SUB
+    IF LCASE$(RIGHT$(f$, 4)) = ".svg" THEN SvgImport f$: EXIT SUB
     p$ = f$
     IF NOT _FILEEXISTS(p$) THEN p$ = ModelPath$(f$)
     IF NOT _FILEEXISTS(p$) THEN Msg "No such model: " + f$: EXIT SUB
     PicReloadAll ' (a picture changed since - in DRAW - shows as it is now)
     fh = FREEFILE: OPEN p$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
     ModelFromText t$
+    RefFromText t$
     mdlPf$ = "" ' (PfEdit says when it's a prefab)
     i = _INSTRREV(p$, "/"): mdlName$ = MID$(p$, i + 1): IF LCASE$(RIGHT$(mdlName$, 4)) = ".bld" THEN mdlName$ = LEFT$(mdlName$, LEN(mdlName$) - 4) ' (named for its file)
     undoN = 0: redoN = 0

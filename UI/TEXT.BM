@@ -1,0 +1,262 @@
+''
+' bu1ld0r - UI/TEXT.BM
+' =============================================================================
+' The TEXT tool (see TEXT.BI)
+'
+
+SUB TxToggle
+    DIM i
+    IF txOn THEN TxStop: EXIT SUB
+    IF edPart THEN Msg "Leave E first (Esc), then X writes text": EXIT SUB
+    IF placeKind THEN PlaceStop
+    IF penOn THEN PenStop
+    IF txScanned = 0 THEN
+        txScanned = -1: FontScan
+        txSize# = 1: txTh# = .125: txFont = 1
+        FOR i = ftN TO 1 STEP -1 ' (a plain bold one to start with, if there is)
+            IF LCASE$(ftName$(i)) = "dejavusans-bold" OR LCASE$(ftName$(i)) = "liberationsans-bold" THEN txFont = i
+        NEXT
+        TxSeeFont
+    END IF
+    IF ftN = 0 THEN Msg "TEXT: no fonts found (.ttf in fonts/, ~/.local/share/fonts, /usr/share/fonts, ~/git/DRAW/ASSETS/FONTS)": EXIT SUB
+    SelNone: ovDirty = -1
+    txOn = -1: txHave = 0: txRk$ = ""
+    Msg "TEXT: type it, click the ground where it starts, Enter: made. Fonts: the list or PgUp / PgDn. Up / Down size, Left / Right thickness, Tab lying / standing. Esc: stop"
+END SUB
+
+SUB TxStop
+    txOn = 0: txHave = 0
+    Msg "Text put away"
+END SUB
+
+' The rings for the text as it is now (only when it's changed)
+SUB TxRings
+    DIM k$
+    k$ = txBuf$ + CHR$(0) + ftFile$(txFont) + STR$(txSize#)
+    IF k$ = txRk$ THEN EXIT SUB
+    txRk$ = k$
+    IF FontLoad(ftFile$(txFont)) = 0 THEN svPN = 0: svRC = 0: txW# = 0: EXIT SUB
+    FontText txBuf$, txSize#, txW#
+    SvPrep 8E-4 * txSize#
+END SUB
+
+' Where it starts: clicked, or where the pointer is (ok 0: neither)
+SUB TxAnchor (ax#, az#, ok)
+    ok = -1
+    IF txHave THEN
+        ax# = txAX#: az# = txAZ#
+    ELSEIF txHOk THEN
+        ax# = txHX#: az# = txHZ#
+    ELSE
+        ok = 0
+    END IF
+END SUB
+
+' A point of the text's outline (x along, y up from the baseline) in the world
+SUB TxWorld (x#, y#, ax#, az#, p AS V3)
+    IF txUp THEN
+        p.x = ax# - x#: p.y = y#: p.z = az#
+    ELSE
+        p.x = ax# - x#: p.y = 0: p.z = az# + y#
+    END IF
+END SUB
+
+' ---------------------------------------------------------------- the font list (in the view, at its left)
+
+SUB TxListRect (x, y, w, h, rows)
+    x = vX0 + 8: y = vY0 + 64: w = 250: h = vH - 100
+    rows = (h - 8) \ 16: IF rows < 1 THEN rows = 1
+END SUB
+
+FUNCTION TxListAt (mx, my) ' (the font under the pointer: 0 none, -1 the list's box but no font)
+    DIM x, y, w, h, rows, i
+    TxListRect x, y, w, h, rows
+    IF NOT InRect(mx, my, x, y, w, h) THEN EXIT FUNCTION
+    TxListAt = -1
+    i = txScroll + (my - y - 4) \ 16 + 1
+    IF i >= 1 AND i <= ftN AND my >= y + 4 THEN TxListAt = i
+END FUNCTION
+
+SUB TxSeeFont ' (the list scrolled to show the font picked)
+    DIM x, y, w, h, rows
+    TxListRect x, y, w, h, rows
+    IF txFont - 1 < txScroll THEN txScroll = txFont - 1
+    IF txFont > txScroll + rows THEN txScroll = txFont - rows
+    IF txScroll > ftN - rows THEN txScroll = ftN - rows
+    IF txScroll < 0 THEN txScroll = 0
+END SUB
+
+SUB TxWheel (d)
+    DIM x, y, w, h, rows
+    TxListRect x, y, w, h, rows
+    txScroll = txScroll + d * 3
+    IF txScroll > ftN - rows THEN txScroll = ftN - rows
+    IF txScroll < 0 THEN txScroll = 0
+END SUB
+
+SUB TxPick (i)
+    IF i < 1 OR i > ftN THEN EXIT SUB
+    txFont = i: TxSeeFont
+    IF FontLoad(ftFile$(i)) THEN Msg "Font: " + ftName$(i) ELSE Msg "Font: " + ftName$(i) + " - its outlines can't be read (PostScript outlines, not TrueType's): pick another"
+END SUB
+
+' ---------------------------------------------------------------- input
+
+SUB TxPress (lx, ly)
+    DIM i, x#, z#
+    i = TxListAt(mX, mY)
+    IF i > 0 THEN TxPick i: EXIT SUB
+    IF i = -1 THEN EXIT SUB
+    IF PenGround(lx, ly, x#, z#) = 0 THEN Msg "Point at the ground (turn the view to look down at it)": EXIT SUB
+    txAX# = x#: txAZ# = z#: txHave = -1
+    IF LEN(txBuf$) THEN Msg "It starts here: Enter makes it (click again to move it)" ELSE Msg "It starts here: type it, then Enter"
+END SUB
+
+SUB TxFrame (lx, ly)
+    txHOk = PenGround(lx, ly, txHX#, txHZ#)
+END SUB
+
+' Keys while TEXT is out: -1 if it took the key (Ctrl+ keys go on: undo, save...)
+FUNCTION TxKey (k&)
+    DIM st#
+    IF kCtrl OR CtrlCode(k&) THEN EXIT FUNCTION
+    st# = .125: IF kShift THEN st# = .5
+    SELECT CASE k&
+        CASE 27: TxStop
+        CASE 13: TxMake
+        CASE 8: IF LEN(txBuf$) THEN txBuf$ = LEFT$(txBuf$, LEN(txBuf$) - 1)
+        CASE 9: txUp = NOT txUp: Msg IIFS$(txUp, "Text standing up, facing the front (Tab: lying down)", "Text lying on the ground (Tab: standing up)")
+        CASE 18432: txSize# = txSize# + st#: Msg "Text" + STR$(txSize#) + " high (to the em: capitals a little less)"
+        CASE 20480: txSize# = txSize# - st#: IF txSize# < .125 THEN txSize# = .125
+            Msg "Text" + STR$(txSize#) + " high (to the em: capitals a little less)"
+        CASE 19712: txTh# = txTh# + 1 / 32: Msg "Text" + STR$(txTh#) + " thick"
+        CASE 19200: txTh# = txTh# - 1 / 32: IF txTh# < 1 / 64 THEN txTh# = 1 / 64
+            Msg "Text" + STR$(txTh#) + " thick"
+        CASE 18688: TxPick txFont - 1
+        CASE 20736: TxPick txFont + 1
+        CASE 32 TO 126: IF LEN(txBuf$) < 80 THEN txBuf$ = txBuf$ + CHR$(k&)
+        CASE ELSE: EXIT FUNCTION
+    END SELECT
+    TxKey = -1
+END FUNCTION
+
+' ---------------------------------------------------------------- making it
+
+' Enter: each character a flat mesh part, all one group, selected
+SUB TxMake
+    DIM ax#, az#, ok, e, r AS LONG, t0 AS LONG, t AS LONG, p, g, id AS LONG, made, v AS LONG, lo AS V3, hi AS V3, c$, p0
+    IF LEN(txBuf$) = 0 THEN Msg "Type something first": EXIT SUB
+    TxAnchor ax#, az#, ok
+    IF ok = 0 THEN Msg "Click the ground where it starts": EXIT SUB
+    txRk$ = "": TxRings
+    IF ftOk = 0 THEN Msg "That font's outlines can't be read: pick another (PgUp / PgDn)": EXIT SUB
+    IF svRC = 0 THEN Msg "That font has none of those characters": EXIT SUB
+    IF txUp = 0 THEN ' (lying down: turned half round in its own plane, so it reads from above as it's laid)
+        FOR v = 1 TO svPN: svPX(v) = -svPX(v): svPY(v) = -svPY(v): NEXT
+    END IF
+    UndoPush
+    g = GroupNew: p0 = pN
+    FOR e = 1 TO LEN(txBuf$)
+        t0 = tN
+        FOR r = 1 TO svRC
+            IF svRE(r) = e AND svRN(r) > 0 AND (svRD(r) MOD 2) = 0 THEN SvSolid r, curCol, 0, txTh#
+        NEXT
+        IF tN > t0 AND pN < MAX_PARTS - 3 THEN
+            FOR t = t0 + 1 TO tN
+                TxTurn tA(t), ax#, az#: TxTurn tB(t), ax#, az#: TxTurn tC(t), ax#, az#
+            NEXT
+            TriBounds t0 + 1, tN, lo, hi
+            p = pN + 1
+            PartFresh p, K_MESH, (lo.x + hi.x) / 2, lo.y, (lo.z + hi.z) / 2
+            pSX(p) = hi.x - lo.x: pSY(p) = hi.y - lo.y: pSZ(p) = hi.z - lo.z
+            IF pSX(p) < .001 THEN pSX(p) = .001
+            IF pSY(p) < .001 THEN pSY(p) = .001
+            IF pSZ(p) < .001 THEN pSZ(p) = .001
+            id = EmFromTris&(t0 + 1, tN, p, 0)
+            pN = p: MakeMeshPart p, id
+            pGrp(p) = g
+            c$ = MID$(txBuf$, e, 1)
+            IF (c$ >= "A" AND c$ <= "Z") OR (c$ >= "a" AND c$ <= "z") OR (c$ >= "0" AND c$ <= "9") THEN pName$(p) = c$
+            made = made + 1
+        END IF
+        tN = t0
+    NEXT
+    txRk$ = ""
+    IF made = 0 THEN Msg "Nothing came of it (a font with empty letters?)": EXIT SUB
+    SelNone
+    FOR p = p0 + 1 TO pN: pSel(p) = -1: NEXT
+    ModelChanged
+    txOn = 0: txHave = 0
+    Msg "Made: " + CHR$(34) + txBuf$ + CHR$(34) + " - " + LTRIM$(STR$(made)) + " letters, one group (Alt+click one to move it alone; G ungroups). Ctrl+Z: gone"
+END SUB
+
+' A made triangle's point from the outline's (x, y, thickness z) into the world
+SUB TxTurn (p AS V3, ax#, az#)
+    DIM y#
+    IF txUp THEN ' (standing: facing the front, -z, thickness behind it - half round on y)
+        p.x = ax# - p.x: p.z = az# - p.z
+    ELSE ' (lying: thickness up, as the pen's)
+        y# = p.y: p.y = p.z: p.z = az# - y#: p.x = ax# + p.x
+    END IF
+END SUB
+
+' ---------------------------------------------------------------- drawing
+
+SUB TxDraw
+    DIM x, y, w, h, rows, i, k, c AS _UNSIGNED LONG, hot, ax#, az#, ok, r AS LONG, j AS LONG, a AS LONG, b AS LONG
+    DIM pa AS V3, pb AS V3, sx, sy, sx2, sy2, ok1, ok2, nm$
+    ' The text, as it'll be
+    TxRings
+    TxAnchor ax#, az#, ok
+    IF ok AND ftOk THEN
+        VIEW SCREEN (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
+        FOR r = 1 TO svRC
+            IF svRN(r) > 0 THEN
+                FOR j = 0 TO svRN(r) - 1
+                    a = svR0(r) + j: b = svR0(r) + (j + 1) MOD svRN(r)
+                    TxWorld svPX(a), svPY(a), ax#, az#, pa: TxWorld svPX(b), svPY(b), ax#, az#, pb
+                    ScrPt pa.x, pa.y, pa.z, sx, sy, ok1: ScrPt pb.x, pb.y, pb.z, sx2, sy2, ok2
+                    IF ok1 AND ok2 THEN LINE (sx, sy)-(sx2, sy2), IIFC~&(txHave, cHi, _RGB32(150, 140, 190))
+                NEXT
+            END IF
+        NEXT
+        TxWorld 0, 0, ax#, az#, pa: TxWorld txW#, 0, ax#, az#, pb ' (the baseline, and where it starts)
+        ScrPt pa.x, pa.y, pa.z, sx, sy, ok1: ScrPt pb.x, pb.y, pb.z, sx2, sy2, ok2
+        IF ok1 AND ok2 THEN LINE (sx, sy)-(sx2, sy2), _RGB32(60, 180, 255)
+        IF ok1 THEN LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), _RGB32(60, 180, 255), BF
+        VIEW
+    END IF
+    ' What's typed, and how
+    x = vX0 + 8: y = vY0 + 24
+    LINE (x - 4, y - 2)-(x + 600, y + 36), _RGB32(16, 12, 28), BF
+    LINE (x - 4, y - 2)-(x + 600, y + 36), cLine, B
+    Txt x, y, "TEXT: " + txBuf$ + IIFS$((TIMER * 2) MOD 2 = 0, "_", " "), cHi
+    Txt x, y + 18, ftName$(txFont) + "  " + LTRIM$(Fmt$(txSize#)) + " high  " + LTRIM$(Fmt$(txTh#)) + " thick  " + IIFS$(txUp, "STANDING", "LYING") + IIFS$(txHave, "", "  - click where it starts"), cDim
+    ' The fonts
+    TxListRect x, y, w, h, rows
+    LINE (x, y)-(x + w - 1, y + h - 1), _RGB32(16, 12, 28), BF
+    LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
+    hot = TxListAt(mX, mY)
+    FOR k = 1 TO rows
+        i = txScroll + k
+        IF i > ftN THEN EXIT FOR
+        c = cText: IF i = hot THEN c = cHi
+        IF i = txFont THEN LINE (x + 2, y + 4 + (k - 1) * 16)-(x + w - 3, y + 4 + k * 16 - 1), _RGB32(90, 30, 110), BF: c = cHi
+        nm$ = ftName$(i): IF LEN(nm$) > 29 THEN nm$ = LEFT$(nm$, 28) + "~"
+        Txt x + 6, y + 4 + (k - 1) * 16, nm$, c
+    NEXT
+    IF ftN > rows THEN ' (how far down)
+        k = (h - 8) * txScroll \ ftN
+        LINE (x + w - 4, y + 4 + k)-(x + w - 2, y + 4 + k + (h - 8) * rows \ ftN), cDim, BF
+    END IF
+END SUB
+
+' The bin's tile for it
+SUB TxIcon (x, y)
+    DIM c AS _UNSIGNED LONG
+    c = _RGB32(76, 255, 255)
+    LINE (x + 9, y + 38)-(x + 17, y + 10), c: LINE (x + 17, y + 10)-(x + 25, y + 38), c
+    LINE (x + 12, y + 28)-(x + 22, y + 28), c
+    LINE (x + 29, y + 22)-(x + 37, y + 22), c: LINE (x + 37, y + 22)-(x + 37, y + 38), c
+    CIRCLE (x + 33, y + 32), 4, c
+END SUB

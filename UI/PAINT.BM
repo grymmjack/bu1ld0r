@@ -1,0 +1,1498 @@
+''
+' bu1ld0r - UI/PAINT.BM
+' =============================================================================
+' The painter (UI/PAINT.BI): opened on a picture, it takes the whole window
+' until Esc. Buttons: 1-24 down the left (tools, toggles, undo, zoom, save),
+' 101 on down the right (colours, the gradient's way, MAKE, FILTERS) - where
+' each is comes from PntRect alone, for drawing and clicks alike.
+'
+
+' ---------------------------------------------------------------- opening, closing
+
+' Ctrl+P: the picture of the faces picked in E, or of the face under the pointer
+' (none: a new one in its colour, put on it first)
+SUB PntFromPointer
+    DIM ref$, t AS LONG, lx, ly, cnt AS LONG, k
+    IF edPart THEN
+        IF edMode = ED_FACES AND EdAny THEN
+            ref$ = PicOfPicked$(cnt): IF LEN(ref$) = 0 THEN EXIT SUB
+            PntOpen ref$: EXIT SUB
+        END IF
+    END IF
+    lx = mX - vX0: ly = mY - vY0
+    IF lx >= 0 AND ly >= 0 AND lx < vW AND ly < vH THEN t = PickTri(lx, ly)
+    IF t < 1 OR t > sceneTN THEN Msg "Point at a face (or pick faces in E) and press Ctrl+P: its picture opens to paint": EXIT SUB
+    IF tTex(t) > 0 THEN PntOpen picRef$(tTex(t)): EXIT SUB
+    IF tPart(t) < 1 OR tPart(t) > pN THEN EXIT SUB
+    IF pKind(tPart(t)) = K_USE THEN Msg "That's a prefab put down: paint it in the prefab (right-click it in the bin: EDIT IT)": EXIT SUB
+    ref$ = PicNewFile$(64, 64, tCol(t)): IF LEN(ref$) = 0 THEN EXIT SUB
+    PicPutAt lx, ly, ref$, 0
+    k = PicFind(ref$)
+    PntOpen ref$
+END SUB
+
+' A new picture iw x ih in colour c, in pictures/ (the folder open there): its ref ("": couldn't)
+FUNCTION PicNewFile$ (iw, ih, c AS _UNSIGNED LONG)
+    DIM n$, k, ref$, img&, d
+    IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
+    IF NOT _DIREXISTS(PicDir$ + binPicDir$) THEN binPicDir$ = ""
+    n$ = SafeName$(mdlName$): IF LEN(n$) = 0 THEN n$ = "model"
+    k = 1: ref$ = binPicDir$ + n$ + "-face"
+    DO WHILE _FILEEXISTS(PicDir$ + ref$ + ".png")
+        k = k + 1: ref$ = binPicDir$ + n$ + "-face" + LTRIM$(STR$(k))
+    LOOP
+    img& = _NEWIMAGE(iw, ih, 32): d = _DEST: _DEST img&: CLS , c OR &HFF000000: _DEST d
+    _SAVEIMAGE PicDir$ + ref$ + ".png", img&: _FREEIMAGE img&
+    IF NOT _FILEEXISTS(PicDir$ + ref$ + ".png") THEN Msg "Couldn't make pictures/" + ref$ + ".png": EXIT FUNCTION
+    IF binTab = 1 THEN BinList
+    PicNewFile$ = ref$
+END FUNCTION
+
+' Picture ref$ opened in the painter
+SUB PntOpen (ref$)
+    DIM img&
+    IF pntOn THEN PntClose
+    img& = _LOADIMAGE(PicPath$(ref$), 32)
+    IF img& >= -1 THEN Msg "Can't read " + PicPath$(ref$): EXIT SUB
+    IF pntSize = 0 THEN ' (the first time: as NEON-CASTER's)
+        pntTool = PN_BRUSH: pntSize = 3: pntFg = &HFFFF2080~&: pntBg = &HFF101020~&: pntGrid = -1: pntWay$ = "V": pntFx = 50: pntGRep = 1
+    END IF
+    pntImg& = img&: pntW = _WIDTH(img&): pntH = _HEIGHT(img&): pntM = _MEMIMAGE(pntImg&)
+    pntRef$ = ref$: pntOn = -1: pntDirty = 0: pntAsk = 0: pntUN = 0: pntRN = 0: pntDown = 0: pntTyping = 0
+    IF typeField THEN FieldCommit
+    PntFit
+    Msg "Painting " + PntName$ + " - left: paint, right: the second colour, Ctrl+click: pick a colour, wheel: zoom, middle drag: move. Ctrl+S saves, Esc: back"
+END SUB
+
+FUNCTION PntName$
+    IF LEFT$(pntRef$, 1) = "/" THEN PntName$ = Tilde$(pntRef$) ELSE PntName$ = "pictures/" + pntRef$ + ".png"
+END FUNCTION
+
+SUB PntClose
+    DIM i
+    IF pntOn = 0 THEN EXIT SUB
+    _MEMFREE pntM: _FREEIMAGE pntImg&: pntImg& = 0
+    FOR i = 1 TO PN_UNDO: pntU$(i) = "": pntR$(i) = "": NEXT
+    pntUN = 0: pntRN = 0: pntBack$ = "": pntOn = 0: pntDown = 0: pntPan = 0
+    viewDirty = -1: ovDirty = -1
+END SUB
+
+' Saved to its file, and shown so on every face with it
+SUB PntSave
+    DIM k, i
+    _SAVEIMAGE PicPath$(pntRef$), pntImg&
+    pntDirty = 0: pntAsk = 0
+    FOR k = 1 TO picN
+        IF picRef$(k) = pntRef$ THEN
+            picW(k) = 0: i = PicFind(pntRef$)
+            IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
+            pcThumb&(k) = 0
+            EXIT FOR
+        END IF
+    NEXT
+    FOR i = 1 TO pwN ' (watched for DRAW: this save isn't news)
+        IF pwRef$(i) = pntRef$ THEN pwSig$(i) = PicFileSig$(pntRef$)
+    NEXT
+    IF LEFT$(pntRef$, 1) = "/" THEN PicThumbOutDrop pntRef$
+    viewDirty = -1: meshKey$ = "": meshDirty = -1
+    Msg "Saved " + PntName$ + " - its faces show it"
+END SUB
+
+SUB PntEsc
+    IF pntTyping THEN pntTyping = 0: Msg "": EXIT SUB
+    IF pntDirty AND pntAsk = 0 THEN pntAsk = -1: Msg "Not saved: Ctrl+S saves it - Esc again leaves without saving": EXIT SUB
+    PntClose
+    Msg "Back from painting"
+END SUB
+
+' ---------------------------------------------------------------- where things are
+
+SUB PntCanvas (x, y, w, h)
+    x = 170: y = 30: w = scrW - 170 - 222: h = scrH - BAR_H - 30 - 4
+END SUB
+
+FUNCTION PntRX0
+    PntRX0 = scrW - 214
+END FUNCTION
+
+' Button id's box (w 0: not one)
+SUB PntRect (id, x, y, w, h)
+    DIM r, c, x0
+    w = 0: h = 20
+    SELECT CASE id
+        CASE 1 TO 10: x = 6: y = 30 + (id - 1) * 22: w = 156
+        CASE 11: x = 92: y = 30 + 10 * 22 + 6: w = 34 ' (SIZE - +)
+        CASE 12: x = 128: y = 30 + 10 * 22 + 6: w = 34
+        CASE 13 TO 17: x = 6: y = 30 + 11 * 22 + 12 + (id - 13) * 22: w = 156
+        CASE 18: x = 6: y = 30 + 16 * 22 + 18: w = 76
+        CASE 19: x = 86: y = 30 + 16 * 22 + 18: w = 76
+        CASE 20: x = 6: y = 30 + 17 * 22 + 18: w = 36
+        CASE 21: x = 46: y = 30 + 17 * 22 + 18: w = 36
+        CASE 22: x = 86: y = 30 + 17 * 22 + 18: w = 76
+        CASE 23: x = 6: y = 30 + 18 * 22 + 24: w = 156
+        CASE 24: x = 6: y = 30 + 19 * 22 + 24: w = 156
+        CASE 25: x = 6: y = 30 + 20 * 22 + 30: w = 156
+        CASE 26: x = 6: y = 30 + 10 * 22: w = 156 ' (SELECT, and what it does to the box)
+        CASE 27: x = 6: y = 30 + 11 * 22: w = 76
+        CASE 28: x = 86: y = 30 + 11 * 22: w = 76
+        CASE 29: x = 6: y = 30 + 12 * 22: w = 50
+        CASE 30: x = 59: y = 30 + 12 * 22: w = 50
+        CASE 31: x = 112: y = 30 + 12 * 22: w = 50
+    END SELECT
+    IF id >= 11 AND id <= 25 THEN y = y + 66
+    x0 = PntRX0
+    SELECT CASE id
+        CASE 101: x = x0 + 132: y = 30: w = 76: h = 30
+        CASE 110 TO 141: r = (id - 110) \ 8: c = (id - 110) MOD 8: x = x0 + c * 26: y = 70 + r * 26: w = 24: h = 24
+        CASE 150 TO 155: r = (id - 150) \ 2: c = (id - 150) MOD 2: x = x0 + 120 + c * 44: y = 178 + r * 22: w = 40
+        CASE 156: x = x0 + 120: y = 178 + 3 * 22: w = 84
+        CASE 160 TO 164: x = x0 + (id - 160) * 42: y = 290: w = 40
+        CASE 166 TO 168: x = x0 + (id - 166) * 42: y = 312: w = 40 ' (the gradient: PAD REP BNC, how many times)
+        CASE 174: x = x0 + 156: y = 312: w = 24
+        CASE 175: x = x0 + 182: y = 312: w = 24
+        CASE 165: x = x0 + 64: y = 358: w = 142 ' (STR: a slider)
+        CASE 170: x = x0: y = 380: w = 101
+        CASE 171: x = x0 + 105: y = 380: w = 101
+        CASE 172: x = x0 + 150: y = 402: w = 26
+        CASE 173: x = x0 + 180: y = 402: w = 26
+        CASE 201 TO 200 + PN_MAKES: r = (id - 201) \ 2: c = (id - 201) MOD 2: x = x0 + c * 105: y = 426 + r * 22: w = 102
+        CASE 301 TO 300 + PN_FILTERS: r = (id - 301) \ 2: c = (id - 301) MOD 2: x = x0 + c * 105: y = 426 + ((PN_MAKES + 1) \ 2) * 22 + 26 + r * 22: w = 102
+    END SELECT
+END SUB
+
+FUNCTION PntBtnName$ (id)
+    DIM t$
+    SELECT CASE id
+        CASE 1: t$ = "PENCIL (P)"
+        CASE 2: t$ = "BRUSH (B)"
+        CASE 3: t$ = "LINE (L)"
+        CASE 4: t$ = "BOX (R)"
+        CASE 5: t$ = "FILLED BOX (Sh+R)"
+        CASE 6: t$ = "ELLIPSE (O)"
+        CASE 7: t$ = "FILLED ELL (Sh+O)"
+        CASE 8: t$ = "FILL (F)"
+        CASE 9: t$ = "GRADIENT (G)"
+        CASE 10: t$ = "PICK COLOUR (I)"
+        CASE 11: t$ = "-"
+        CASE 12: t$ = "+"
+        CASE 13: t$ = "MIRROR L-R (M)"
+        CASE 14: t$ = "MIRROR U-D (Sh+M)"
+        CASE 15: t$ = "WRAP (W)"
+        CASE 16: t$ = "TILED (T)"
+        CASE 17: t$ = "GRID (Sh+G)"
+        CASE 18: t$ = "UNDO"
+        CASE 19: t$ = "REDO"
+        CASE 20: t$ = "-"
+        CASE 21: t$ = "+"
+        CASE 22: t$ = "FIT (0)"
+        CASE 23: t$ = "SAVE (Ctrl+S)"
+        CASE 24: t$ = "BACK (Esc)"
+        CASE 25: t$ = "CLEAR (Del)"
+        CASE 26: t$ = "SELECT (S)"
+        CASE 27: t$ = "FLIP L-R"
+        CASE 28: t$ = "FLIP U-D"
+        CASE 29: t$ = "TURN"
+        CASE 30: t$ = "x2"
+        CASE 31: t$ = "1/2"
+        CASE 166: t$ = "PAD"
+        CASE 167: t$ = "REP"
+        CASE 168: t$ = "BNC"
+        CASE 174: t$ = "-"
+        CASE 175: t$ = "+"
+        CASE 170: t$ = "CLEAN"
+        CASE 171: t$ = "RAND"
+        CASE 172: t$ = "-"
+        CASE 173: t$ = "+"
+        CASE 101: t$ = "SWAP X"
+        CASE 150, 152, 154: t$ = "-"
+        CASE 151, 153, 155: t$ = "+"
+        CASE 156: t$ = IIFS$(pntTyping, "OK", "TYPE")
+        CASE 160 TO 164: t$ = MID$("VHDRM", id - 159, 1)
+        CASE 201 TO 200 + PN_MAKES: t$ = PntMakeName$(id - 200)
+        CASE 301 TO 300 + PN_FILTERS: t$ = PntFilterName$(id - 300)
+    END SELECT
+    PntBtnName$ = t$
+END FUNCTION
+
+FUNCTION PntBtnOn (id)
+    SELECT CASE id
+        CASE 1 TO 10: PntBtnOn = (pntTool = id)
+        CASE 13: PntBtnOn = pntMirX
+        CASE 14: PntBtnOn = pntMirY
+        CASE 15: PntBtnOn = pntWrap
+        CASE 16: PntBtnOn = pntTile
+        CASE 17: PntBtnOn = pntGrid
+        CASE 156: PntBtnOn = pntTyping
+        CASE 26: PntBtnOn = (pntTool = PN_SEL)
+        CASE 166 TO 168: PntBtnOn = (pntGSpread = id - 166)
+        CASE 170: PntBtnOn = pntClean
+        CASE 171: PntBtnOn = NOT pntClean
+        CASE 160 TO 164: PntBtnOn = (pntWay$ = MID$("VHDRM", id - 159, 1))
+    END SELECT
+END FUNCTION
+
+FUNCTION PntMakeName$ (k)
+    PntMakeName$ = _TRIM$(MID$("NOISE   GRID    PLATES  BUMPS   WOOD    CARPET  BRICK   SAND    STONE   TILES   STRIPES CHECKER SCRATCH PATCHES ", (k - 1) * 8 + 1, 8))
+END FUNCTION
+
+FUNCTION PntFilterName$ (k)
+    DIM t$
+    SELECT CASE k
+        CASE 1: t$ = "BLUR"
+        CASE 2: t$ = "SHARPEN"
+        CASE 3: t$ = "EMBOSS"
+        CASE 4: t$ = "PIXELATE"
+        CASE 5: t$ = "BRIGHTER"
+        CASE 6: t$ = "DARKER"
+        CASE 7: t$ = "CONTRAST"
+        CASE 8: t$ = "POSTERIZE"
+        CASE 9: t$ = "INVERT"
+        CASE 10: t$ = "GREY"
+    END SELECT
+    PntFilterName$ = t$
+END FUNCTION
+
+' ---------------------------------------------------------------- each frame
+
+SUB PntFrame
+    DIM cx, cy, cw, ch, px AS LONG, py AS LONG, inC, id, x, y, w, h, z0, c AS _UNSIGNED LONG, held
+    PntCanvas cx, cy, cw, ch
+    inC = InRect(mX, mY, cx, cy, cw, ch)
+    px = PntPX&: py = PntPY&
+    ' The wheel: zoom round the pointer
+    IF mWheel <> 0 AND inC THEN
+        z0 = pntZ: pntZ = PntZoomStep(pntZ, -SGN(mWheel))
+        pntOX = (mX - cx) - ((mX - cx) - pntOX) * pntZ / z0: pntOY = (mY - cy) - ((mY - cy) - pntOY) * pntZ / z0
+    END IF
+    ' Moving it: middle drag, or Space and the left
+    IF pntPan THEN
+        IF mB3 OR (mB1 AND _KEYDOWN(32)) THEN
+            pntOX = pntOX + mX - pntPanX: pntOY = pntOY + mY - pntPanY: pntPanX = mX: pntPanY = mY
+        ELSE
+            pntPan = 0
+        END IF
+        EXIT SUB
+    END IF
+    IF (mP3 OR (mP1 AND _KEYDOWN(32))) AND inC THEN pntPan = -1: pntPanX = mX: pntPanY = mY: EXIT SUB
+    ' STR's slider: dragged, the wheel, middle click back to 50
+    IF pntFxDrag THEN
+        IF mB1 THEN PntFxAt ELSE pntFxDrag = 0
+        EXIT SUB
+    END IF
+    PntRect 165, x, y, w, h
+    IF InRect(mX, mY, x - 4, y, w + 8, h) THEN
+        IF mWheel <> 0 THEN pntFx = Clamp(pntFx - SGN(mWheel) * 10, 0, 100): PntFxMsg
+        IF mP3 THEN pntFx = 50: PntFxMsg: EXIT SUB
+        IF mP1 THEN pntFxDrag = -1: PntFxAt: EXIT SUB
+    END IF
+    ' SELECT: a box being dragged out, or what's picked moved
+    IF pntSq THEN
+        IF mB1 THEN PntSelDragTo px, py ELSE PntSelLetGo
+        EXIT SUB
+    END IF
+    ' The gradient: its ends or its line dragged
+    IF pntGd THEN
+        IF mB1 OR mB2 THEN PntGradDrag ELSE pntGd = 0: Msg "Gradient: drag its ends to stretch it, its line to move it; x - +: times across; PAD REP BNC (Ctrl+Z: gone)"
+        EXIT SUB
+    END IF
+    ' A stroke going on
+    IF pntDown THEN
+        held = (pntBtn = 1 AND mB1) OR (pntBtn = 2 AND mB2)
+        c = pntFg: IF pntBtn = 2 THEN c = pntBg
+        SELECT CASE pntTool
+            CASE PN_PENCIL, PN_BRUSH
+                IF px <> pntLX OR py <> pntLY THEN PntLine pntLX, pntLY, px, py, c: pntLX = px: pntLY = py
+            CASE PN_LINE, PN_RECT, PN_RECTF, PN_ELL, PN_ELLF
+                PntRestore pntBack$
+                PntShape px, py, c
+        END SELECT
+        IF NOT held THEN pntDown = 0: pntBack$ = ""
+        EXIT SUB
+    END IF
+    IF NOT (mP1 OR mP2) THEN EXIT SUB
+    ' A press: a button, or the picture
+    FOR id = 1 TO 31
+        PntRect id, x, y, w, h
+        IF w > 0 AND InRect(mX, mY, x, y, w, h) THEN IF mP1 THEN PntClick id
+        IF w > 0 AND InRect(mX, mY, x, y, w, h) THEN EXIT SUB
+    NEXT
+    FOR id = 101 TO 300 + PN_FILTERS
+        PntRect id, x, y, w, h
+        IF w > 0 THEN
+            IF InRect(mX, mY, x, y, w, h) THEN
+                IF id >= 110 AND id <= 141 THEN ' (a colour: left the first, right the second)
+                    IF mP1 THEN pntFg = palCol(id - 110) OR &HFF000000 ELSE pntBg = palCol(id - 110) OR &HFF000000
+                ELSEIF mP1 THEN
+                    PntClick id
+                END IF
+                EXIT SUB
+            END IF
+        END IF
+    NEXT
+    IF NOT inC THEN EXIT SUB
+    IF pntTool = PN_SEL THEN
+        IF mP1 THEN PntSelPress px, py
+        EXIT SUB
+    END IF
+    pntBtn = 1: IF mP2 THEN pntBtn = 2
+    c = pntFg: IF pntBtn = 2 THEN c = pntBg
+    IF kCtrl OR pntTool = PN_PICK THEN ' (a colour picked off the picture)
+        IF px >= 0 AND py >= 0 AND px < pntW AND py < pntH THEN
+            IF pntBtn = 1 THEN pntFg = PntGet~&(px, py) ELSE pntBg = PntGet~&(px, py)
+            Msg "Picked " + HexCol$(PntGet~&(px, py)) + IIFS$(pntBtn = 1, " (left)", " (right)")
+        END IF
+        EXIT SUB
+    END IF
+    SELECT CASE pntTool
+        CASE PN_FILL
+            IF px < 0 OR py < 0 OR px >= pntW OR py >= pntH THEN EXIT SUB
+            PntPush: PntFill px, py, c
+        CASE PN_GRAD
+            PntGradPress px, py
+        CASE PN_PENCIL, PN_BRUSH
+            PntPush: PntStamp px, py, c: pntDown = -1: pntLX = px: pntLY = py
+        CASE ELSE
+            PntPush: pntBack$ = PntSnap$: pntSX = px: pntSY = py: pntDown = -1
+            PntShape px, py, c
+    END SELECT
+END SUB
+
+' The picture's pixel under the pointer (may be off it)
+FUNCTION PntPX&
+    DIM cx, cy, cw, ch
+    PntCanvas cx, cy, cw, ch
+    PntPX& = INT((mX - cx - pntOX) / pntZ)
+END FUNCTION
+
+FUNCTION PntPY&
+    DIM cx, cy, cw, ch
+    PntCanvas cx, cy, cw, ch
+    PntPY& = INT((mY - cy - pntOY) / pntZ)
+END FUNCTION
+
+SUB PntClick (id)
+    DIM v
+    SELECT CASE id
+        CASE 1 TO 10: pntTool = id: PntToolMsg
+        CASE 11: pntSize = Clamp(pntSize - 1, 1, 64)
+        CASE 12: pntSize = Clamp(pntSize + 1, 1, 64)
+        CASE 13: pntMirX = NOT pntMirX
+        CASE 14: pntMirY = NOT pntMirY
+        CASE 15: pntWrap = NOT pntWrap
+        CASE 16: pntTile = NOT pntTile: PntFit
+        CASE 17: pntGrid = NOT pntGrid
+        CASE 18: PntUndo
+        CASE 19: PntRedo
+        CASE 20: PntZoomBy -1
+        CASE 21: PntZoomBy 1
+        CASE 22: PntFit
+        CASE 23: PntSave
+        CASE 24: PntEsc
+        CASE 25: PntClear kShift
+        CASE 26: pntTool = PN_SEL: PntToolMsg
+        CASE 27 TO 31: PntSelXform id - 26
+        CASE 166 TO 168: pntGSpread = id - 166: PntGradAgain: Msg "Past the gradient's ends: " + PntBtnName$(id) + " (PAD: the end colours go on; REP: it starts again; BNC: back and forth)"
+        CASE 174, 175: pntGRep = Clamp(pntGRep + IIF(id = 175, 1, -1), 1, 16): PntGradAgain: Msg "The gradient" + STR$(pntGRep) + " time" + IIFS$(pntGRep = 1, "", "s") + " across (PAD / REP / BNC: how it goes on past its ends; BNC: back and forth)"
+        CASE 170: pntClean = -1: Msg "CLEAN: MAKE uses only the two colours and its own shading - no stray random tints"
+        CASE 171: pntClean = 0: Msg "RAND: MAKE throws in random tints (speckles, each brick or tile a little different)"
+        CASE 172, 173: pntScl = Clamp(pntScl + IIF(id = 173, 1, -1), -2, 2): Msg "SIZE x" + PntSclName$ + ": how big MAKE's parts come out (bricks, tiles, cells, rings...)"
+        CASE 101: SWAP pntFg, pntBg
+        CASE 150 TO 155
+            v = 16: IF kShift THEN v = 1
+            IF (id AND 1) = 0 THEN v = -v
+            SELECT CASE (id - 150) \ 2
+                CASE 0: pntFg = _RGB32(Clamp(_RED32(pntFg) + v, 0, 255), _GREEN32(pntFg), _BLUE32(pntFg))
+                CASE 1: pntFg = _RGB32(_RED32(pntFg), Clamp(_GREEN32(pntFg) + v, 0, 255), _BLUE32(pntFg))
+                CASE 2: pntFg = _RGB32(_RED32(pntFg), _GREEN32(pntFg), Clamp(_BLUE32(pntFg) + v, 0, 255))
+            END SELECT
+        CASE 156
+            IF pntTyping THEN PntHexDone ELSE pntTyping = -1: pntHex$ = "": Msg "Type the left colour: RRGGBB, six hex digits - Enter keeps it, Esc doesn't"
+        CASE 160 TO 164
+            pntWay$ = MID$("VHDRM", id - 159, 1): pntTool = PN_GRAD: PntToolMsg: IF pntGLive THEN PntGradEnds: PntGradAgain
+        CASE 201 TO 200 + PN_MAKES: PntPush: PntMake id - 200, kShift
+        CASE 301 TO 300 + PN_FILTERS: PntPush: PntFilter id - 300
+    END SELECT
+END SUB
+
+SUB PntToolMsg
+    IF pntTool <> PN_SEL THEN PntSelNone
+    IF pntTool <> PN_GRAD THEN pntGLive = 0
+    SELECT CASE pntTool
+        CASE PN_SEL: Msg "SELECT: drag a box. Drag inside it: move (Alt: a copy). Ctrl+C / X / V, Ctrl+A all, Del empties it, FLIP / TURN / x2 / 1/2. Esc / Enter: let go"
+        CASE PN_FILL: Msg "FILL: click - the same colour all round it takes the colour"
+        CASE PN_GRAD: Msg "GRADIENT (" + PntWayName$ + "): click - fills the colour round it; drag - from where you press to where you let go, any angle. Then drag its ends or line: stretch, move. Right: the other way; Shift: the whole picture"
+        CASE PN_PICK: Msg "PICK: click a colour (left or right) - Ctrl+click does it with any tool"
+        CASE PN_LINE, PN_RECT, PN_RECTF, PN_ELL, PN_ELLF: Msg "Drag it out. Shift: straight / square / round"
+        CASE ELSE: Msg "Left: paint, right: the second colour. [ ] size"
+    END SELECT
+END SUB
+
+FUNCTION PntWayName$
+    SELECT CASE pntWay$
+        CASE "V": PntWayName$ = "V: top to bottom"
+        CASE "H": PntWayName$ = "H: left to right"
+        CASE "D": PntWayName$ = "D: top left to bottom right"
+        CASE "R": PntWayName$ = "R: round, the middle out"
+        CASE ELSE: PntWayName$ = "M: mirrored, the second across the middle"
+    END SELECT
+END FUNCTION
+
+SUB PntHexDone
+    pntTyping = 0
+    IF LEN(pntHex$) = 0 THEN Msg "": EXIT SUB
+    pntFg = &HFF000000~& OR VAL("&H" + RIGHT$("000000" + pntHex$, 6) + "&")
+    Msg "Left colour " + HexCol$(pntFg)
+END SUB
+
+SUB PntKey (k&)
+    IF pntTyping THEN
+        SELECT CASE k&
+            CASE 27: pntTyping = 0: Msg ""
+            CASE 13: PntHexDone
+            CASE 8: IF LEN(pntHex$) THEN pntHex$ = LEFT$(pntHex$, LEN(pntHex$) - 1)
+            CASE ELSE
+                IF k& < 256 THEN
+                    IF INSTR("0123456789abcdefABCDEF", CHR$(k&)) > 0 AND LEN(pntHex$) < 6 THEN pntHex$ = pntHex$ + UCASE$(CHR$(k&))
+                END IF
+        END SELECT
+        EXIT SUB
+    END IF
+    IF CtrlIs(k&, "s") THEN PntSave: EXIT SUB
+    IF CtrlIs(k&, "z") THEN
+        IF kShift THEN PntRedo ELSE PntUndo
+        EXIT SUB
+    END IF
+    IF CtrlIs(k&, "y") THEN PntRedo: EXIT SUB
+    IF CtrlIs(k&, "c") THEN PntSelCopy: EXIT SUB
+    IF CtrlIs(k&, "x") THEN PntSelCopy: PntSelEmpty 0: EXIT SUB
+    IF CtrlIs(k&, "v") THEN PntSelPaste: EXIT SUB
+    IF CtrlIs(k&, "a") THEN pntTool = PN_SEL: PntSelNone: pntSelOn = -1: pntQX = 0: pntQY = 0: pntQW = pntW: pntQH = pntH: Msg "All of it picked (SELECT)": EXIT SUB
+    IF CtrlCode(k&) OR kCtrl THEN EXIT SUB
+    IF pntSelOn AND (k& = 27 OR k& = 13) THEN PntSelNone: Msg "Let go": EXIT SUB
+    IF k& <> 27 THEN pntAsk = 0
+    SELECT CASE k&
+        CASE 27: PntEsc
+        CASE 21248: IF pntSelOn THEN PntSelEmpty kShift ELSE PntClear kShift ' (Delete)
+        CASE 115, 83: pntTool = PN_SEL: PntToolMsg
+        CASE 112, 80: pntTool = PN_PENCIL: PntToolMsg
+        CASE 98, 66: pntTool = PN_BRUSH: PntToolMsg
+        CASE 108, 76: pntTool = PN_LINE: PntToolMsg
+        CASE 114: pntTool = PN_RECT: PntToolMsg
+        CASE 82: pntTool = PN_RECTF: PntToolMsg
+        CASE 111: pntTool = PN_ELL: PntToolMsg
+        CASE 79: pntTool = PN_ELLF: PntToolMsg
+        CASE 102, 70: pntTool = PN_FILL: PntToolMsg
+        CASE 103: pntTool = PN_GRAD: PntToolMsg
+        CASE 71: pntGrid = NOT pntGrid
+        CASE 105, 73: pntTool = PN_PICK: PntToolMsg
+        CASE 91: pntSize = Clamp(pntSize - 1, 1, 64)
+        CASE 93: pntSize = Clamp(pntSize + 1, 1, 64)
+        CASE 109: pntMirX = NOT pntMirX
+        CASE 77: pntMirY = NOT pntMirY
+        CASE 119, 87: pntWrap = NOT pntWrap
+        CASE 116, 84: pntTile = NOT pntTile: PntFit
+        CASE 120, 88: SWAP pntFg, pntBg
+        CASE 45, 95: PntZoomBy -1
+        CASE 43, 61: PntZoomBy 1
+        CASE 48, 18176: PntFit
+        CASE 19200: pntOX = pntOX + 32
+        CASE 19712: pntOX = pntOX - 32
+        CASE 18432: pntOY = pntOY + 32
+        CASE 20480: pntOY = pntOY - 32
+    END SELECT
+END SUB
+
+' ---------------------------------------------------------------- zoom
+
+FUNCTION PntZoomStep (z, dir)
+    DIM i, s(11)
+    s(0) = 1: s(1) = 2: s(2) = 3: s(3) = 4: s(4) = 6: s(5) = 8: s(6) = 12: s(7) = 16: s(8) = 24: s(9) = 32: s(10) = 48: s(11) = 64
+    FOR i = 0 TO 11
+        IF s(i) >= z THEN EXIT FOR
+    NEXT
+    IF i > 11 THEN i = 11
+    i = i + dir: IF i < 0 THEN i = 0
+    IF i > 11 THEN i = 11
+    PntZoomStep = s(i)
+END FUNCTION
+
+' Zoom in or out round the canvas's middle
+SUB PntZoomBy (dir)
+    DIM cx, cy, cw, ch, z0
+    PntCanvas cx, cy, cw, ch
+    z0 = pntZ: pntZ = PntZoomStep(pntZ, dir)
+    pntOX = cw / 2 - (cw / 2 - pntOX) * pntZ / z0: pntOY = ch / 2 - (ch / 2 - pntOY) * pntZ / z0
+END SUB
+
+' The biggest zoom it fits at, in the middle (tiled: room for its neighbours)
+SUB PntFit
+    DIM cx, cy, cw, ch, k, z
+    PntCanvas cx, cy, cw, ch
+    k = 1: IF pntTile THEN k = 2.2
+    z = 1
+    DO WHILE PntZoomStep(z, 1) <> z
+        IF pntW * PntZoomStep(z, 1) * k > cw OR pntH * PntZoomStep(z, 1) * k > ch THEN EXIT DO
+        z = PntZoomStep(z, 1)
+    LOOP
+    pntZ = z: pntOX = INT((cw - pntW * z) / 2): pntOY = INT((ch - pntH * z) / 2)
+END SUB
+
+' ---------------------------------------------------------------- pixels
+
+FUNCTION PntGet~& (x AS LONG, y AS LONG)
+    PntGet~& = _MEMGET(pntM, pntM.OFFSET + (y * pntW + x) * 4, _UNSIGNED LONG)
+END FUNCTION
+
+SUB PntPut (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    _MEMPUT pntM, pntM.OFFSET + (y * pntW + x) * 4, c
+END SUB
+
+FUNCTION PntWX& (x AS LONG)
+    PntWX& = ((x MOD pntW) + pntW) MOD pntW
+END FUNCTION
+
+FUNCTION PntWY& (y AS LONG)
+    PntWY& = ((y MOD pntH) + pntH) MOD pntH
+END FUNCTION
+
+' One pixel (wrapped, if WRAP or TILED; off the picture: nothing)
+SUB PntDot1 (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    DIM xx AS LONG, yy AS LONG
+    xx = x: yy = y
+    IF pntWrap OR pntTile THEN xx = PntWX&(x): yy = PntWY&(y)
+    IF xx < 0 OR yy < 0 OR xx >= pntW OR yy >= pntH THEN EXIT SUB
+    PntPut xx, yy, c
+END SUB
+
+' A pixel and its mirrors
+SUB PntDot (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    PntDot1 x, y, c
+    IF pntMirX THEN PntDot1 pntW - 1 - x, y, c
+    IF pntMirY THEN PntDot1 x, pntH - 1 - y, c
+    IF pntMirX AND pntMirY THEN PntDot1 pntW - 1 - x, pntH - 1 - y, c
+END SUB
+
+' The brush (a disc pntSize across; the pencil a pixel)
+SUB PntStamp (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    DIM s, h, r2, i AS LONG, j AS LONG
+    s = pntSize: IF pntTool = PN_PENCIL THEN s = 1
+    IF s <= 1 THEN PntDot x, y, c: EXIT SUB
+    h = (s - 1) / 2: r2 = (s / 2) * (s / 2) + .3
+    FOR j = 0 TO s - 1
+        FOR i = 0 TO s - 1
+            IF (i - h) * (i - h) + (j - h) * (j - h) <= r2 THEN PntDot x - (s - 1) \ 2 + i, y - (s - 1) \ 2 + j, c
+        NEXT
+    NEXT
+END SUB
+
+' Stamps all along a line (Bresenham)
+SUB PntLine (x0 AS LONG, y0 AS LONG, x1 AS LONG, y1 AS LONG, c AS _UNSIGNED LONG)
+    DIM dx AS LONG, dy AS LONG, sx AS LONG, sy AS LONG, e AS LONG, e2 AS LONG, x AS LONG, y AS LONG, n AS LONG
+    dx = ABS(x1 - x0): dy = -ABS(y1 - y0): sx = SGN(x1 - x0): sy = SGN(y1 - y0)
+    IF sx = 0 THEN sx = 1
+    IF sy = 0 THEN sy = 1
+    e = dx + dy: x = x0: y = y0
+    DO
+        PntStamp x, y, c
+        IF x = x1 AND y = y1 THEN EXIT DO
+        n = n + 1: IF n > 20000 THEN EXIT DO
+        e2 = 2 * e
+        IF e2 >= dy THEN e = e + dy: x = x + sx
+        IF e2 <= dx THEN e = e + dx: y = y + sy
+    LOOP
+END SUB
+
+' The shape being dragged, from where it began to (x, y)
+SUB PntShape (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    DIM ax AS LONG, ay AS LONG, bx AS LONG, by AS LONG, dx AS LONG, dy AS LONG, m AS LONG
+    ax = pntSX: ay = pntSY: bx = x: by = y
+    IF kShift THEN ' (straight, square, round)
+        dx = bx - ax: dy = by - ay
+        IF pntTool = PN_LINE THEN
+            IF ABS(dx) > 2 * ABS(dy) THEN
+                by = ay
+            ELSEIF ABS(dy) > 2 * ABS(dx) THEN
+                bx = ax
+            ELSE
+                m = ABS(dx): IF ABS(dy) > m THEN m = ABS(dy)
+                bx = ax + SGN(dx) * m: by = ay + SGN(dy) * m
+            END IF
+        ELSE
+            m = ABS(dx): IF ABS(dy) > m THEN m = ABS(dy)
+            bx = ax + IIF(dx < 0, -m, m): by = ay + IIF(dy < 0, -m, m)
+        END IF
+    END IF
+    SELECT CASE pntTool
+        CASE PN_LINE: PntLine ax, ay, bx, by, c
+        CASE PN_RECT, PN_RECTF: PntBox ax, ay, bx, by, c, pntTool = PN_RECTF
+        CASE PN_ELL, PN_ELLF: PntEllipse ax, ay, bx, by, c, pntTool = PN_ELLF
+    END SELECT
+END SUB
+
+SUB PntBox (ax AS LONG, ay AS LONG, bx AS LONG, by AS LONG, c AS _UNSIGNED LONG, filled)
+    DIM x AS LONG, y AS LONG, s AS LONG
+    IF bx < ax THEN SWAP ax, bx
+    IF by < ay THEN SWAP ay, by
+    s = pntSize: IF s < 1 THEN s = 1
+    FOR y = ay TO by
+        FOR x = ax TO bx
+            IF filled OR x < ax + s OR x > bx - s OR y < ay + s OR y > by - s THEN PntDot x, y, c
+        NEXT
+    NEXT
+END SUB
+
+SUB PntEllipse (ax AS LONG, ay AS LONG, bx AS LONG, by AS LONG, c AS _UNSIGNED LONG, filled)
+    DIM x AS LONG, y AS LONG, cx#, cy#, rx#, ry#, u#, v#, s, ix#, iy#
+    IF bx < ax THEN SWAP ax, bx
+    IF by < ay THEN SWAP ay, by
+    cx# = (ax + bx) / 2: cy# = (ay + by) / 2: rx# = (bx - ax) / 2 + .5: ry# = (by - ay) / 2 + .5
+    s = pntSize: IF s < 1 THEN s = 1
+    ix# = rx# - s: iy# = ry# - s
+    FOR y = ay TO by
+        FOR x = ax TO bx
+            u# = (x - cx#) / rx#: v# = (y - cy#) / ry#
+            IF u# * u# + v# * v# <= 1 THEN
+                IF filled OR ix# <= 0 OR iy# <= 0 THEN
+                    PntDot x, y, c
+                ELSE
+                    u# = (x - cx#) / ix#: v# = (y - cy#) / iy#
+                    IF u# * u# + v# * v# > 1 THEN PntDot x, y, c
+                END IF
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+' The pixels joined to (sx, sy) of its colour (four ways; wrapping if WRAP/TILED): mk() 1 for each, how many
+FUNCTION PntRegion& (sx AS LONG, sy AS LONG, mk() AS _BYTE)
+    DIM n AS LONG, sp AS LONG, x AS LONG, y AS LONG, t AS _UNSIGNED LONG, i AS LONG, k, nx AS LONG, ny AS LONG, cnt AS LONG
+    n = pntW * pntH
+    REDIM mk(n) AS _BYTE
+    DIM stk(n + 4) AS LONG
+    t = PntGet~&(sx, sy)
+    sp = 1: stk(1) = sy * pntW + sx: mk(stk(1)) = 1: cnt = 1
+    DO WHILE sp > 0
+        i = stk(sp): sp = sp - 1: x = i MOD pntW: y = i \ pntW
+        FOR k = 0 TO 3
+            nx = x: ny = y
+            SELECT CASE k
+                CASE 0: nx = x + 1
+                CASE 1: nx = x - 1
+                CASE 2: ny = y + 1
+                CASE 3: ny = y - 1
+            END SELECT
+            IF pntWrap OR pntTile THEN nx = PntWX&(nx): ny = PntWY&(ny)
+            IF nx >= 0 AND ny >= 0 AND nx < pntW AND ny < pntH THEN
+                i = ny * pntW + nx
+                IF mk(i) = 0 THEN
+                    IF PntGet~&(nx, ny) = t THEN mk(i) = 1: cnt = cnt + 1: sp = sp + 1: stk(sp) = i
+                END IF
+            END IF
+        NEXT
+    LOOP
+    PntRegion& = cnt
+END FUNCTION
+
+' FILL at (x, y) - and at its mirrors
+SUB PntFill (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    PntFill1 x, y, c
+    IF pntMirX THEN PntFill1 pntW - 1 - x, y, c
+    IF pntMirY THEN PntFill1 x, pntH - 1 - y, c
+    IF pntMirX AND pntMirY THEN PntFill1 pntW - 1 - x, pntH - 1 - y, c
+END SUB
+
+SUB PntFill1 (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    DIM i AS LONG, n AS LONG
+    REDIM mk(0) AS _BYTE
+    IF x < 0 OR y < 0 OR x >= pntW OR y >= pntH THEN EXIT SUB
+    IF PntGet~&(x, y) = c THEN EXIT SUB
+    n = PntRegion&(x, y, mk())
+    FOR i = 0 TO pntW * pntH - 1
+        IF mk(i) THEN PntPut i MOD pntW, i \ pntW, c
+    NEXT
+END SUB
+
+' GRADIENT: the colour round (x, y) - or all of it - faded first colour to second,
+' NEON-CASTER's way (V H D R M) across the box it takes up
+' The colour an end's handle shows: the colour that end starts with
+FUNCTION pntGBoxC~& (atStart)
+    IF atStart XOR pntGRev THEN pntGBoxC~& = pntFg OR &HFF000000 ELSE pntGBoxC~& = pntBg OR &HFF000000
+END FUNCTION
+
+' A press with GRADIENT: on the last one's end or line (it's moved), else a new one at the colour region here (Shift: the whole picture)
+SUB PntGradPress (px AS LONG, py AS LONG)
+    DIM cx, cy, cw, ch, sx, sy, ex, ey, d, n AS LONG, i AS LONG, qx, qy, l2, t
+    PntCanvas cx, cy, cw, ch
+    IF pntGLive THEN
+        sx = cx + pntOX + pntGSX! * pntZ: sy = cy + pntOY + pntGSY! * pntZ
+        ex = cx + pntOX + pntGEX! * pntZ: ey = cy + pntOY + pntGEY! * pntZ
+        IF ABS(mX - sx) <= 6 AND ABS(mY - sy) <= 6 THEN pntGd = 1: EXIT SUB
+        IF ABS(mX - ex) <= 6 AND ABS(mY - ey) <= 6 THEN pntGd = 2: EXIT SUB
+        l2 = (ex - sx) ^ 2 + (ey - sy) ^ 2
+        IF l2 > 1 THEN
+            t = ((mX - sx) * (ex - sx) + (mY - sy) * (ey - sy)) / l2
+            IF t > 0 AND t < 1 THEN
+                qx = sx + (ex - sx) * t: qy = sy + (ey - sy) * t
+                IF (mX - qx) ^ 2 + (mY - qy) ^ 2 <= 25 THEN pntGd = 3: pntGGX! = (mX - cx - pntOX) / pntZ: pntGGY! = (mY - cy - pntOY) / pntZ: EXIT SUB
+            END IF
+        END IF
+    END IF
+    IF px < 0 OR py < 0 OR px >= pntW OR py >= pntH THEN EXIT SUB
+    n = pntW * pntH
+    IF kShift THEN
+        REDIM pntGMk(n) AS _BYTE
+        FOR i = 0 TO n - 1: pntGMk(i) = 1: NEXT
+    ELSE
+        REDIM pntGMk(0) AS _BYTE
+        i = PntRegion&(px, py, pntGMk())
+    END IF
+    pntGX0 = pntW: pntGY0 = pntH: pntGX1 = -1: pntGY1 = -1
+    FOR i = 0 TO n - 1
+        IF pntGMk(i) THEN
+            IF i MOD pntW < pntGX0 THEN pntGX0 = i MOD pntW
+            IF i \ pntW < pntGY0 THEN pntGY0 = i \ pntW
+            IF i MOD pntW > pntGX1 THEN pntGX1 = i MOD pntW
+            IF i \ pntW > pntGY1 THEN pntGY1 = i \ pntW
+        END IF
+    NEXT
+    IF pntGX1 < 0 THEN EXIT SUB
+    PntPush
+    pntGBase$ = PntSnap$: pntGLive = -1: pntGRev = mP2: IF pntGRep < 1 THEN pntGRep = 1
+    PntGradEnds
+    pntGd = 4: pntGGX! = px + .5: pntGGY! = py + .5 ' (a drag from here sets its ends; a click: fitted to the region, by its way)
+    PntGradAgain
+END SUB
+
+' Its ends fitted to the region's box, by the way (V H D R M)
+SUB PntGradEnds
+    DIM mx!, my!
+    mx! = (pntGX0 + pntGX1 + 1) / 2: my! = (pntGY0 + pntGY1 + 1) / 2
+    SELECT CASE pntWay$
+        CASE "V": pntGSX! = mx!: pntGSY! = pntGY0: pntGEX! = mx!: pntGEY! = pntGY1 + 1
+        CASE "H": pntGSX! = pntGX0: pntGSY! = my!: pntGEX! = pntGX1 + 1: pntGEY! = my!
+        CASE "D": pntGSX! = pntGX0: pntGSY! = pntGY0: pntGEX! = pntGX1 + 1: pntGEY! = pntGY1 + 1
+        CASE "R": pntGSX! = mx!: pntGSY! = my!: pntGEX! = pntGX1 + 1: pntGEY! = pntGY1 + 1
+        CASE ELSE: pntGSX! = mx!: pntGSY! = my!: pntGEX! = mx!: pntGEY! = pntGY1 + 1
+    END SELECT
+END SUB
+
+' A drag: a new one's end (4), an end (1, 2), or all of it (3) - then painted again
+SUB PntGradDrag
+    DIM cx, cy, cw, ch, x!, y!
+    PntCanvas cx, cy, cw, ch
+    x! = (mX - cx - pntOX) / pntZ: y! = (mY - cy - pntOY) / pntZ
+    IF pntGd = 4 OR pntGd = 2 THEN
+        IF pntGd = 4 THEN
+            IF ABS(x! - pntGGX!) + ABS(y! - pntGGY!) < 1.5 THEN EXIT SUB ' (not dragged yet: fitted)
+            pntGSX! = pntGGX!: pntGSY! = pntGGY!: pntGd = 2
+        END IF
+        pntGEX! = x!: pntGEY! = y!
+    ELSEIF pntGd = 1 THEN
+        pntGSX! = x!: pntGSY! = y!
+    ELSE
+        pntGSX! = pntGSX! + x! - pntGGX!: pntGSY! = pntGSY! + y! - pntGGY!
+        pntGEX! = pntGEX! + x! - pntGGX!: pntGEY! = pntGEY! + y! - pntGGY!
+        pntGGX! = x!: pntGGY! = y!
+    END IF
+    PntGradAgain
+END SUB
+
+' The gradient painted again from the picture as it was under it
+SUB PntGradAgain
+    DIM i AS LONG, n AS LONG, px!, py!, dx!, dy!, l2!, t!, u!, a AS _UNSIGNED LONG, b AS _UNSIGNED LONG
+    IF pntGLive = 0 THEN EXIT SUB
+    PntRestore pntGBase$
+    a = pntFg: b = pntBg: IF pntGRev THEN SWAP a, b
+    dx! = pntGEX! - pntGSX!: dy! = pntGEY! - pntGSY!: l2! = dx! * dx! + dy! * dy!: IF l2! < 1E-6 THEN l2! = 1E-6
+    n = pntW * pntH
+    FOR i = 0 TO n - 1
+        IF pntGMk(i) THEN
+            px! = i MOD pntW + .5 - pntGSX!: py! = i \ pntW + .5 - pntGSY!
+            IF pntWay$ = "R" THEN
+                t! = SQR((px! * px! + py! * py!) / l2!)
+            ELSE
+                t! = (px! * dx! + py! * dy!) / l2!
+                IF pntWay$ = "M" THEN t! = ABS(t!)
+            END IF
+            IF pntGSpread = 0 THEN ' (PAD: the ends' colours carried on)
+                IF t! < 0 THEN t! = 0
+                IF t! > 1 THEN t! = 1
+            END IF
+            u! = t! * pntGRep
+            IF pntGSpread = 2 THEN ' (BNC: back and forth)
+                u! = u! - 2 * INT(u! / 2): IF u! > 1 THEN u! = 2 - u!
+            ELSEIF u! <> pntGRep OR pntGSpread <> 0 THEN
+                u! = u! - INT(u!)
+            ELSE
+                u! = 1
+            END IF
+            PntPut i MOD pntW, i \ pntW, PntMix~&(a, b, u!)
+        END IF
+    NEXT
+    pntDirty = -1
+END SUB
+
+' a to b, t of the way (0 to 1)
+FUNCTION PntMix~& (a AS _UNSIGNED LONG, b AS _UNSIGNED LONG, t)
+    DIM k
+    k = t: IF k < 0 THEN k = 0
+    IF k > 1 THEN k = 1
+    PntMix~& = _RGB32(_RED32(a) + (_RED32(b) - _RED32(a)) * k, _GREEN32(a) + (_GREEN32(b) - _GREEN32(a)) * k, _BLUE32(a) + (_BLUE32(b) - _BLUE32(a)) * k)
+END FUNCTION
+
+' c lighter (k over 1) or darker
+FUNCTION PntShade~& (c AS _UNSIGNED LONG, k)
+    PntShade~& = _RGB32(Clamp(_RED32(c) * k, 0, 255), Clamp(_GREEN32(c) * k, 0, 255), Clamp(_BLUE32(c) * k, 0, 255))
+END FUNCTION
+
+' ---------------------------------------------------------------- undo
+
+FUNCTION PntSnap$
+    DIM s$
+    s$ = SPACE$(pntW * pntH * 4)
+    _MEMGET pntM, pntM.OFFSET, s$
+    PntSnap$ = s$
+END FUNCTION
+
+SUB PntRestore (s$)
+    IF LEN(s$) <> pntW * pntH * 4 THEN EXIT SUB
+    _MEMPUT pntM, pntM.OFFSET, s$
+END SUB
+
+' The picture as it is, kept for UNDO (before each stroke, fill or MAKE)
+SUB PntPush
+    DIM i
+    IF pntUN >= PN_UNDO THEN
+        FOR i = 1 TO PN_UNDO - 1: pntU$(i) = pntU$(i + 1): NEXT
+        pntUN = PN_UNDO - 1
+    END IF
+    pntUN = pntUN + 1: pntU$(pntUN) = PntSnap$
+    pntRN = 0: pntDirty = -1: pntAsk = 0: pntGLive = 0
+END SUB
+
+SUB PntUndo
+    PntSelDrop: pntGLive = 0
+    IF pntUN = 0 THEN Msg "Nothing to undo": EXIT SUB
+    IF pntRN < PN_UNDO THEN pntRN = pntRN + 1: pntR$(pntRN) = PntSnap$
+    PntRestore pntU$(pntUN): pntU$(pntUN) = "": pntUN = pntUN - 1: pntDirty = -1
+END SUB
+
+SUB PntRedo
+    PntSelDrop: pntGLive = 0
+    IF pntRN = 0 THEN Msg "Nothing to redo": EXIT SUB
+    IF pntUN < PN_UNDO THEN pntUN = pntUN + 1: pntU$(pntUN) = PntSnap$
+    PntRestore pntR$(pntRN): pntR$(pntRN) = "": pntRN = pntRN - 1: pntDirty = -1
+END SUB
+
+' ---------------------------------------------------------------- MAKE: pictures made from the two colours
+
+' A number 0 to 1 for (x, y), the same each time for the same seed
+FUNCTION PntHash! (x AS LONG, y AS LONG, s AS LONG)
+    DIM h AS _INTEGER64
+    h = (x * 374761393~&& + y * 668265263~&& + s * 2654435761~&&) AND &H7FFFFFFF&&
+    h = ((h XOR (h \ 8192)) * 1274126177) AND &H7FFFFFFF&&
+    h = h XOR (h \ 65536)
+    PntHash! = (h AND &HFFFFFF) / 16777215!
+END FUNCTION
+
+' Smooth noise at (x, y) on a lattice that repeats every px, py (so it tiles)
+FUNCTION PntVNoise! (x!, y!, px AS LONG, py AS LONG, s AS LONG)
+    DIM x0 AS LONG, y0 AS LONG, fx!, fy!, a!, b!, c!, d!, i0 AS LONG, i1 AS LONG, j0 AS LONG, j1 AS LONG
+    x0 = INT(x!): y0 = INT(y!): fx! = x! - x0: fy! = y! - y0
+    fx! = fx! * fx! * (3 - 2 * fx!): fy! = fy! * fy! * (3 - 2 * fy!)
+    i0 = ((x0 MOD px) + px) MOD px: i1 = (i0 + 1) MOD px
+    j0 = ((y0 MOD py) + py) MOD py: j1 = (j0 + 1) MOD py
+    a! = PntHash!(i0, j0, s): b! = PntHash!(i1, j0, s): c! = PntHash!(i0, j1, s): d! = PntHash!(i1, j1, s)
+    PntVNoise! = a! + (b! - a!) * fx! + (c! - a!) * fy! + (a! - b! - c! + d!) * fx! * fy!
+END FUNCTION
+
+' Layers of it (u, v 0 to 1 across the picture; f lattice cells across at the first)
+FUNCTION PntFbm! (u!, v!, f AS LONG, oct, s AS LONG)
+    DIM o, amp!, tot!, sum!, fr AS LONG
+    amp! = .5: fr = f
+    FOR o = 1 TO oct
+        sum! = sum! + amp! * PntVNoise!(u! * fr, v! * fr, fr, fr, s + o * 101)
+        tot! = tot! + amp!: amp! = amp! * .5: fr = fr * 2
+    NEXT
+    PntFbm! = sum! / tot!
+END FUNCTION
+
+SUB PntMake (k, over)
+    DIM x AS LONG, y AS LONG, u!, v!, t!, a AS _UNSIGNED LONG, b AS _UNSIGNED LONG, c AS _UNSIGNED LONG, s AS LONG
+    DIM cs AS LONG, bh AS LONG, bw AS LONG, row AS LONG, xo AS LONG, col AS LONG, lx AS LONG, ly AS LONG, ps AS LONG, rr, h1!, h2!, h3!, i, n
+    DIM cells AS LONG, ci AS LONG, cj AS LONG, di AS LONG, dj AS LONG, gx AS LONG, gy AS LONG, fx!, fy!, d!, d1!, d2!, best AS LONG
+    DIM x0 AS LONG, y0 AS LONG, x1 AS LONG, y1 AS LONG, ang!, ln, rk!, fp AS LONG, hx AS LONG, hy AS LONG
+    a = pntFg: b = pntBg
+    pntSeed = pntSeed + 7919: s = pntSeed
+    rk! = 1: IF pntClean THEN rk! = 0 ' (CLEAN: the stray random tints left out)
+    fp = PntSz&(1) ' (RAND's speckles as big as the parts are scaled)
+    DIM old(pntW * pntH) AS _UNSIGNED LONG
+    IF over THEN
+        FOR y = 0 TO pntH - 1: FOR x = 0 TO pntW - 1: old(y * pntW + x) = PntGet~&(x, y): NEXT: NEXT
+    END IF
+    cells = PntN&(4): IF pntW >= 128 THEN cells = PntN&(6)
+    FOR y = 0 TO pntH - 1
+        FOR x = 0 TO pntW - 1
+            u! = x / pntW: v! = y / pntH: hx = x \ fp: hy = y \ fp
+            SELECT CASE k
+                CASE 1 ' NOISE (CLEAN: smooth, no speckle)
+                    t! = PntHash!(hx, hy, s) * .7 * rk! + PntFbm!(u!, v!, PntN&(4), 3, s) * (1 - .7 * rk!)
+                    c = PntMix~&(b, a, t!)
+                CASE 2 ' GRID
+                    cs = PntSz&(pntW \ 8): IF cs < 4 THEN cs = 4
+                    IF x MOD cs = 0 OR y MOD cs = 0 THEN c = a ELSE c = PntMix~&(b, a, PntHash!(hx, hy, s) * .08 * rk!)
+                CASE 3 ' PLATES: panels, bevelled, riveted
+                    ps = PntSz&(pntW \ 2): IF ps < 8 THEN ps = 8
+                    lx = x MOD ps: ly = y MOD ps: rr = ps \ 16: IF rr < 1 THEN rr = 1
+                    c = PntMix~&(b, a, PntFbm!(u!, v!, PntN&(8), 2, s) * .12 * rk!)
+                    IF lx = 0 OR ly = 0 THEN c = PntShade~&(b, 1.35)
+                    IF lx = ps - 1 OR ly = ps - 1 THEN c = PntShade~&(b, .55)
+                    FOR i = 0 TO 3
+                        gx = rr * 3 + 1: gy = rr * 3 + 1
+                        IF i AND 1 THEN gx = ps - 2 - rr * 3
+                        IF i AND 2 THEN gy = ps - 2 - rr * 3
+                        d! = SQR((lx - gx) ^ 2 + (ly - gy) ^ 2)
+                        IF d! <= rr + .3 THEN
+                            c = a: IF lx < gx OR ly < gy THEN c = PntShade~&(a, 1.3)
+                        END IF
+                    NEXT
+                CASE 4 ' BUMPS: noise lit from the top left
+                    h1! = PntFbm!((x - 1) / pntW, v!, PntN&(6), 4, s): h2! = PntFbm!((x + 1) / pntW, v!, PntN&(6), 4, s)
+                    h3! = PntFbm!(u!, (y - 1) / pntH, PntN&(6), 4, s) - PntFbm!(u!, (y + 1) / pntH, PntN&(6), 4, s)
+                    t! = .5 + ((h1! - h2!) + h3!) * pntW / 16
+                    c = PntMix~&(PntShade~&(b, .6), PntShade~&(PntMix~&(b, a, .5), 1.25), t!)
+                CASE 5 ' WOOD: rings down it, wavering, and grain (CLEAN: no grain)
+                    t! = u! * PntN&(5) + PntFbm!(u!, v!, PntN&(3), 3, s) * 1.6
+                    t! = .5 + .5 * SIN(t! * 6.2831853)
+                    t! = t! * t! * t! * (1 - .25 * rk!) + PntVNoise!(x * .7 / fp, y * .04 / fp, pntW \ fp, 64, s + 5) * .25 * rk!
+                    c = PntMix~&(b, a, t!)
+                CASE 6 ' CARPET: tufts
+                    t! = PntHash!(hx, hy, s) * .45 * rk! + PntFbm!(u!, v!, PntN&(16), 2, s) * (.35 + .45 * (1 - rk!)) + (((x + y) \ fp) AND 1) * .12
+                    c = PntMix~&(b, a, t!)
+                CASE 7 ' BRICK: bricks in the second colour, mortar the first
+                    bh = PntSz&(pntH \ 8): IF bh < 4 THEN bh = 4
+                    bw = PntSz&(pntW \ 4): IF bw < 8 THEN bw = 8
+                    row = y \ bh: xo = x + (row AND 1) * (bw \ 2): col = (xo \ bw) MOD (pntW \ bw + 1)
+                    IF y MOD bh = 0 OR xo MOD bw = 0 THEN
+                        c = PntMix~&(a, b, PntHash!(hx, hy, s) * .2 * rk!)
+                    ELSE
+                        c = PntShade~&(b, 1 + (PntHash!(col, row, s) * .3 - .15) * rk!)
+                        c = PntMix~&(c, PntShade~&(c, .7), (PntFbm!(u!, v!, PntN&(8), 3, s + 1) * .5 + PntHash!(hx, hy, s + 2) * .15) * rk!)
+                    END IF
+                CASE 8 ' SAND: ripples, specks
+                    t! = .5 + .5 * SIN((v! * PntN&(7) + PntFbm!(u!, v!, PntN&(3), 3, s) * .6) * 6.2831853)
+                    c = PntMix~&(b, PntShade~&(b, .8), t! * .5)
+                    t! = PntHash!(hx, hy, s + 3)
+                    IF t! > .93 THEN c = a ELSE IF t! < .05 THEN c = PntShade~&(b, 1.2)
+                CASE 9 ' STONE: cobbles (a cell each), mortar the first colour
+                    fx! = u! * cells: fy! = v! * cells: ci = INT(fx!): cj = INT(fy!)
+                    d1! = 99: d2! = 99: best = 0
+                    FOR dj = -1 TO 1
+                        FOR di = -1 TO 1
+                            gx = ci + di: gy = cj + dj
+                            d! = SQR((gx + .15 + PntHash!(((gx MOD cells) + cells) MOD cells, ((gy MOD cells) + cells) MOD cells, s) * .7 - fx!) ^ 2 + (gy + .15 + PntHash!(((gx MOD cells) + cells) MOD cells, ((gy MOD cells) + cells) MOD cells, s + 9) * .7 - fy!) ^ 2)
+                            IF d! < d1! THEN
+                                d2! = d1!: d1! = d!: best = (((gy MOD cells) + cells) MOD cells) * cells + ((gx MOD cells) + cells) MOD cells
+                            ELSEIF d! < d2! THEN
+                                d2! = d!
+                            END IF
+                        NEXT
+                    NEXT
+                    IF d2! - d1! < .06 THEN
+                        c = a
+                    ELSE
+                        c = PntShade~&(b, 1 + (PntHash!(best, 0, s + 4) * .4 - .2) * rk!)
+                        c = PntMix~&(c, PntShade~&(c, 1.25), (d2! - d1!) * 1.5 - PntFbm!(u!, v!, PntN&(8), 3, s) * .3 * rk!)
+                    END IF
+                CASE 10 ' TILES: square, grout the first colour, a lit edge
+                    cs = PntSz&(pntW \ 4): IF cs < 6 THEN cs = 6
+                    lx = x MOD cs: ly = y MOD cs
+                    IF lx = 0 OR ly = 0 THEN
+                        c = a
+                    ELSEIF lx = 1 OR ly = 1 THEN
+                        c = PntShade~&(b, 1.3)
+                    ELSEIF lx = cs - 1 OR ly = cs - 1 THEN
+                        c = PntShade~&(b, .7)
+                    ELSE
+                        c = PntShade~&(b, 1 + (PntHash!(x \ cs, y \ cs, s) * .12 - .06) * rk!)
+                    END IF
+                CASE 11 ' STRIPES (leaning)
+                    cs = PntSz&(pntW \ 8): IF cs < 2 THEN cs = 2
+                    IF ((x + y) \ cs) AND 1 THEN c = a ELSE c = b
+                CASE 12 ' CHECKER
+                    cs = PntSz&(pntW \ 8): IF cs < 1 THEN cs = 1
+                    IF ((x \ cs) + (y \ cs)) AND 1 THEN c = a ELSE c = b
+                CASE 13 ' SCRATCH: worn (the scratches after)
+                    c = PntMix~&(b, PntShade~&(b, .8), PntFbm!(u!, v!, PntN&(4), 4, s) * rk!)
+                CASE 14 ' PATCHES: blotches of the first colour on the second
+                    t! = PntFbm!(u!, v!, PntN&(3), 4, s)
+                    IF t! < .47 THEN
+                        c = b
+                    ELSEIF t! < .53 THEN
+                        c = PntMix~&(b, a, (t! - .47) / .06)
+                    ELSE
+                        c = a
+                    END IF
+                    c = PntShade~&(c, 1 + (PntHash!(hx, hy, s + 6) * .16 - .08) * rk!)
+            END SELECT
+            IF over THEN c = PntMix~&(old(y * pntW + x), c, pntFx / 100)
+            PntPut x, y, c OR &HFF000000
+        NEXT
+    NEXT
+    IF k = 13 THEN ' (the scratches: thin lines of the first colour, every way)
+        n = pntW \ 2: IF pntScl > 0 THEN n = n \ (2 ^ pntScl)
+        FOR i = 1 TO n
+            x0 = PntHash!(i, 1, s) * pntW: y0 = PntHash!(i, 2, s) * pntH
+            ang! = PntHash!(i, 3, s) * 6.2831853: ln = PntSz&(pntW * (.05 + PntHash!(i, 4, s) * .25))
+            x1 = x0 + COS(ang!) * ln: y1 = y0 + SIN(ang!) * ln
+            PntScratch x0, y0, x1, y1, PntMix~&(b, a, .4 + PntHash!(i, 5, s) * .6 * rk! + .3 * (1 - rk!))
+        NEXT
+    END IF
+    IF over THEN
+        Msg PntMakeName$(k) + " over what was there at" + STR$(pntFx) + "% (STR) - again: another one; Ctrl+Z: as it was"
+    ELSE
+        Msg PntMakeName$(k) + " made from the two colours" + IIFS$(pntClean, " (CLEAN)", "") + ", size x" + PntSclName$ + " (again: another one. Shift: over what's there, by STR; Ctrl+Z: as it was)"
+    END IF
+END SUB
+
+' A size in pixels, scaled by SIZE (x 1/4 to 4)
+FUNCTION PntSz& (n)
+    DIM v&
+    v& = CLNG(n * 2 ^ pntScl): IF v& < 1 THEN v& = 1
+    PntSz& = v&
+END FUNCTION
+
+' A count across the picture (cells, rings - whole, so it still tiles), scaled by SIZE: bigger parts, fewer
+FUNCTION PntN& (n)
+    DIM v&
+    v& = CLNG(n / 2 ^ pntScl): IF v& < 1 THEN v& = 1
+    PntN& = v&
+END FUNCTION
+
+FUNCTION PntSclName$
+    SELECT CASE pntScl
+        CASE -2: PntSclName$ = "1/4"
+        CASE -1: PntSclName$ = "1/2"
+        CASE ELSE: PntSclName$ = LTRIM$(STR$(2 ^ pntScl))
+    END SELECT
+END FUNCTION
+
+' STR from where the pointer is on its slider: on the tens
+SUB PntFxAt
+    DIM x, y, w, h
+    PntRect 165, x, y, w, h
+    pntFx = Clamp(INT((mX - x) / (w - 1) * 10 + .5) * 10, 0, 100)
+    PntFxMsg
+END SUB
+
+SUB PntFxMsg
+    Msg "STR" + STR$(pntFx) + "%: how strongly MAKE with Shift lays its pattern over what's there (middle click: 50)"
+END SUB
+
+' CLEAR: the picture all the second colour (see-through: Shift) - one undo step
+SUB PntClear (seeThrough)
+    DIM x AS LONG, y AS LONG, c AS _UNSIGNED LONG
+    PntPush
+    c = pntBg OR &HFF000000: IF seeThrough THEN c = 0
+    FOR y = 0 TO pntH - 1: FOR x = 0 TO pntW - 1: PntPut x, y, c: NEXT: NEXT
+    Msg "Cleared to " + IIFS$(seeThrough, "see-through (the game leaves those pixels out)", "the second colour " + HexCol$(pntBg) + " (Shift+CLEAR: see-through)") + " - Ctrl+Z: back"
+END SUB
+
+' A one-pixel line, wrapping round the picture
+SUB PntScratch (x0 AS LONG, y0 AS LONG, x1 AS LONG, y1 AS LONG, c AS _UNSIGNED LONG)
+    DIM n, i, x AS LONG, y AS LONG
+    n = ABS(x1 - x0): IF ABS(y1 - y0) > n THEN n = ABS(y1 - y0)
+    IF n < 1 THEN n = 1
+    FOR i = 0 TO n
+        x = PntWX&(x0 + (x1 - x0) * i / n): y = PntWY&(y0 + (y1 - y0) * i / n)
+        PntPut x, y, PntMix~&(PntGet~&(x, y), c, .6)
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- FILTERS: the picture changed as a whole
+
+SUB PntFilter (k)
+    DIM x AS LONG, y AS LONG, n AS LONG, i AS LONG, j AS LONG, r, g, b, al, c AS _UNSIGNED LONG, l, q AS _UNSIGNED LONG, l2
+    n = pntW * pntH
+    DIM src(n) AS _UNSIGNED LONG
+    FOR y = 0 TO pntH - 1: FOR x = 0 TO pntW - 1: src(y * pntW + x) = PntGet~&(x, y): NEXT: NEXT
+    FOR y = 0 TO pntH - 1
+        FOR x = 0 TO pntW - 1
+            c = src(y * pntW + x): al = _ALPHA32(c)
+            r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
+            SELECT CASE k
+                CASE 1, 2 ' BLUR (a 3 x 3 average); SHARPEN (away from it)
+                    r = 0: g = 0: b = 0
+                    FOR j = -1 TO 1
+                        FOR i = -1 TO 1
+                            q = src(PntWY&(y + j) * pntW + PntWX&(x + i))
+                            r = r + _RED32(q): g = g + _GREEN32(q): b = b + _BLUE32(q)
+                        NEXT
+                    NEXT
+                    r = r / 9: g = g / 9: b = b / 9
+                    IF k = 2 THEN r = 2 * _RED32(c) - r: g = 2 * _GREEN32(c) - g: b = 2 * _BLUE32(c) - b
+                CASE 3 ' EMBOSS: lit from the top left
+                    q = src(PntWY&(y - 1) * pntW + PntWX&(x - 1)): l = (_RED32(q) * 3 + _GREEN32(q) * 6 + _BLUE32(q)) / 10
+                    q = src(PntWY&(y + 1) * pntW + PntWX&(x + 1)): l2 = (_RED32(q) * 3 + _GREEN32(q) * 6 + _BLUE32(q)) / 10
+                    r = r + (l - l2): g = g + (l - l2): b = b + (l - l2)
+                CASE 4 ' PIXELATE: 2 x 2 blocks
+                    i = x - (x AND 1): j = y - (y AND 1)
+                    r = 0: g = 0: b = 0
+                    q = src(j * pntW + i): r = r + _RED32(q): g = g + _GREEN32(q): b = b + _BLUE32(q)
+                    q = src(j * pntW + PntWX&(i + 1)): r = r + _RED32(q): g = g + _GREEN32(q): b = b + _BLUE32(q)
+                    q = src(PntWY&(j + 1) * pntW + i): r = r + _RED32(q): g = g + _GREEN32(q): b = b + _BLUE32(q)
+                    q = src(PntWY&(j + 1) * pntW + PntWX&(i + 1)): r = r + _RED32(q): g = g + _GREEN32(q): b = b + _BLUE32(q)
+                    r = r / 4: g = g / 4: b = b / 4
+                CASE 5: r = r + 20: g = g + 20: b = b + 20
+                CASE 6: r = r - 20: g = g - 20: b = b - 20
+                CASE 7: r = (r - 128) * 1.25 + 128: g = (g - 128) * 1.25 + 128: b = (b - 128) * 1.25 + 128
+                CASE 8: r = INT(r / 64) * 85: g = INT(g / 64) * 85: b = INT(b / 64) * 85
+                CASE 9: r = 255 - r: g = 255 - g: b = 255 - b
+                CASE 10: l = (r * 3 + g * 6 + b) / 10: r = l: g = l: b = l
+            END SELECT
+            PntPut x, y, _RGBA32(Clamp(r, 0, 255), Clamp(g, 0, 255), Clamp(b, 0, 255), al)
+        NEXT
+    NEXT
+    Msg PntFilterName$(k) + " (Ctrl+Z: as it was)"
+END SUB
+
+' ---------------------------------------------------------------- drawing
+
+SUB PntDraw
+    DIM cx, cy, cw, ch, x, y, w, h, id, i, j, t$, c AS _UNSIGNED LONG, px AS LONG, py AS LONG, s, x0
+    CLS , cBg
+    PntCanvas cx, cy, cw, ch
+    ' The canvas: a checker (for see-through), the picture (tiled: its neighbours dimmed)
+    FOR y = cy TO cy + ch - 1 STEP 16
+        FOR x = cx TO cx + cw - 1 STEP 16
+            c = IIFC~&(((x - cx) \ 16 + (y - cy) \ 16) AND 1, _RGB32(40, 36, 52), _RGB32(30, 27, 40))
+            w = 16: IF x + w > cx + cw THEN w = cx + cw - x
+            h = 16: IF y + h > cy + ch THEN h = cy + ch - y
+            LINE (x, y)-(x + w - 1, y + h - 1), c, BF
+        NEXT
+    NEXT
+    IF pntTile THEN
+        FOR j = -1 TO 1
+            FOR i = -1 TO 1
+                IF i <> 0 OR j <> 0 THEN PntBlit i * pntW * pntZ, j * pntH * pntZ, -1
+            NEXT
+        NEXT
+    END IF
+    PntBlit 0, 0, 0
+    x = cx + pntOX: y = cy + pntOY: w = pntW * pntZ: h = pntH * pntZ
+    IF pntGrid AND pntZ >= 6 THEN ' (the pixels' edges)
+        FOR i = 0 TO pntW
+            IF x + i * pntZ >= cx AND x + i * pntZ < cx + cw THEN LINE (x + i * pntZ, PntMax(y, cy))-(x + i * pntZ, PntMin(y + h, cy + ch - 1)), _RGBA32(255, 255, 255, 22)
+        NEXT
+        FOR j = 0 TO pntH
+            IF y + j * pntZ >= cy AND y + j * pntZ < cy + ch THEN LINE (PntMax(x, cx), y + j * pntZ)-(PntMin(x + w, cx + cw - 1), y + j * pntZ), _RGBA32(255, 255, 255, 22)
+        NEXT
+    END IF
+    PntClipBox x - 1, y - 1, x + w, y + h, _RGB32(255, 60, 200)
+    IF pntMirX THEN PntClipLine x + w / 2, y, x + w / 2, y + h, _RGBA32(255, 230, 60, 120)
+    IF pntMirY THEN PntClipLine x, y + h / 2, x + w, y + h / 2, _RGBA32(255, 230, 60, 120)
+    ' The brush's size, under the pointer
+    IF InRect(mX, mY, cx, cy, cw, ch) AND pntTool <> PN_FILL AND pntTool <> PN_PICK AND pntTool <> PN_GRAD AND pntTool <> PN_SEL AND NOT kCtrl THEN
+        px = PntPX&: py = PntPY&: s = pntSize: IF pntTool = PN_PENCIL THEN s = 1
+        PntClipBox x + (px - (s - 1) \ 2) * pntZ, y + (py - (s - 1) \ 2) * pntZ, x + (px - (s - 1) \ 2 + s) * pntZ - 1, y + (py - (s - 1) \ 2 + s) * pntZ - 1, _RGBA32(255, 255, 255, 170)
+    END IF
+    IF pntGLive AND pntTool = PN_GRAD THEN ' (the gradient's ends and line)
+        i = x + pntGSX! * pntZ: j = y + pntGSY! * pntZ: px = x + pntGEX! * pntZ: py = y + pntGEY! * pntZ
+        LINE (i, j)-(px, py), _RGB32(10, 8, 18): LINE (i + 1, j)-(px + 1, py), _RGB32(240, 240, 250)
+        LINE (i - 4, j - 4)-(i + 4, j + 4), pntGBoxC~&(-1), BF: LINE (i - 4, j - 4)-(i + 4, j + 4), _RGB32(10, 8, 18), B
+        LINE (px - 4, py - 4)-(px + 4, py + 4), pntGBoxC~&(0), BF: LINE (px - 4, py - 4)-(px + 4, py + 4), _RGB32(10, 8, 18), B
+    END IF
+    IF pntSelOn THEN ' (the box picked: dark outside, light in)
+        PntClipBox x + pntQX * pntZ - 1, y + pntQY * pntZ - 1, x + (pntQX + pntQW) * pntZ, y + (pntQY + pntQH) * pntZ, _RGB32(10, 8, 18)
+        PntClipBox x + pntQX * pntZ, y + pntQY * pntZ, x + (pntQX + pntQW) * pntZ - 1, y + (pntQY + pntQH) * pntZ - 1, IIFC~&(pntFltOn, _RGB32(255, 220, 90), _RGB32(240, 240, 250))
+    END IF
+    LINE (cx - 1, cy - 1)-(cx + cw, cy + ch), cLine, B
+
+    ' The top: what it is
+    t$ = "PAINT  " + PntName$ + "   " + LTRIM$(STR$(pntW)) + "x" + LTRIM$(STR$(pntH)) + "   ZOOM" + STR$(pntZ)
+    IF pntDirty THEN t$ = t$ + "   * NOT SAVED"
+    Txt 8, 7, LEFT$(t$, (scrW - 16) \ 8), IIFC~&(pntDirty, cWarn, cHi)
+
+    ' The left: tools
+    FOR id = 1 TO 31
+        PntRect id, x, y, w, h
+        IF w > 0 THEN Btn x, y, w, h, PntBtnName$(id), PntBtnOn(id)
+    NEXT
+    PntRect 11, x, y, w, h: Txt 8, y + 2, "SIZE" + STR$(pntSize), cText
+    PntRect 20, x, y, w, h
+    PntRect 25, x, y, w, h
+    y = y + 34
+    Txt 6, y, "Shift: straight,", cDim: Txt 6, y + 16, "square, round.", cDim
+    Txt 6, y + 32, "[ ] size  X swap", cDim: Txt 6, y + 48, "Ctrl+Z / Ctrl+Y", cDim
+
+    ' The right: colours, the gradient's way, MAKE, FILTERS
+    x0 = PntRX0
+    LINE (x0, 30)-(x0 + 60, 60), pntFg, BF: LINE (x0, 30)-(x0 + 60, 60), cLine, B
+    LINE (x0 + 66, 30)-(x0 + 126, 60), pntBg, BF: LINE (x0 + 66, 30)-(x0 + 126, 60), cLine, B
+    FOR id = 101 TO 300 + PN_FILTERS
+        PntRect id, x, y, w, h
+        IF w > 0 AND id <> 165 THEN
+            IF id >= 110 AND id <= 141 THEN
+                LINE (x, y)-(x + w - 1, y + h - 1), palCol(id - 110) OR &HFF000000, BF
+                c = cLine: IF (palCol(id - 110) AND &HFFFFFF) = (pntFg AND &HFFFFFF) THEN c = cHi
+                LINE (x, y)-(x + w - 1, y + h - 1), c, B
+            ELSE
+                Btn x, y, w, h, PntBtnName$(id), PntBtnOn(id)
+            END IF
+        END IF
+    NEXT
+    Txt x0, 180, "RED  " + LTRIM$(STR$(_RED32(pntFg))), cText
+    Txt x0, 202, "GRN  " + LTRIM$(STR$(_GREEN32(pntFg))), cText
+    Txt x0, 224, "BLU  " + LTRIM$(STR$(_BLUE32(pntFg))), cText
+    t$ = HexCol$(pntFg): IF pntTyping THEN t$ = pntHex$ + "_"
+    Txt x0, 246, t$, IIFC~&(pntTyping, cHi, cText)
+    Txt x0, 272, "GRADIENT'S WAY", cDim
+    Txt x0, 340, "MAKE (Shift: over it)", cDim
+    PntRect 174, x, y, w, h: Txt x0 + 128, y + 3, "x" + LTRIM$(STR$(pntGRep)), cText
+    PntRect 165, x, y, w, h ' (STR: how strongly Shift lays it over)
+    Txt x0, y + 3, "STR" + STR$(pntFx), cText
+    LINE (x, y + 10)-(x + w - 1, y + 10), cLine
+    FOR i = 0 TO 10
+        LINE (x + i * (w - 1) / 10, y + 6 + IIF(i MOD 5 = 0, -2, 0))-(x + i * (w - 1) / 10, y + 14 - IIF(i MOD 5 = 0, -2, 0)), cDim
+    NEXT
+    i = x + pntFx * (w - 1) / 100
+    LINE (i - 3, y + 2)-(i + 3, y + 18), cHi, BF
+    PntRect 172, x, y, w, h: Txt x0, y + 3, "SIZE x" + PntSclName$, cText
+    PntRect 301, x, y, w, h: Txt x0, y - 18, "FILTERS", cDim
+    PntRect 300 + PN_FILTERS, x, y, w, h
+    y = y + 30
+    IF y + 120 < scrH - BAR_H THEN ' (as it is, and tiled)
+        Txt x0, y, "AS IT IS, AND TILED", cDim
+        PntThumb x0, y + 18, 96, 0
+        PntThumb x0 + 104, y + 18, 96, -1
+    END IF
+
+    ' The message line
+    LINE (0, scrH - BAR_H)-(scrW - 1, scrH - 1), cPanel, BF
+    LINE (0, scrH - BAR_H)-(scrW - 1, scrH - BAR_H), cLine
+    t$ = msgText$
+    IF InRect(mX, mY, cx, cy, cw, ch) THEN
+        px = PntPX&: py = PntPY&
+        IF px >= 0 AND py >= 0 AND px < pntW AND py < pntH THEN t$ = LTRIM$(STR$(px)) + "," + LTRIM$(STR$(py)) + "  " + HexCol$(PntGet~&(px, py)) + "    " + t$
+    END IF
+    Txt 8, scrH - BAR_H + 5, LEFT$(t$, (scrW - 16) \ 8), cText
+END SUB
+
+' The picture drawn at its place in the canvas, moved by (dx, dy), cut to the canvas (dim: a neighbour)
+SUB PntBlit (dx, dy, dimmed)
+    DIM cx, cy, cw, ch, x, y, ix0 AS LONG, iy0 AS LONG, ix1 AS LONG, iy1 AS LONG
+    PntCanvas cx, cy, cw, ch
+    x = cx + pntOX + dx: y = cy + pntOY + dy
+    ix0 = INT((cx - x) / pntZ): IF ix0 < 0 THEN ix0 = 0
+    iy0 = INT((cy - y) / pntZ): IF iy0 < 0 THEN iy0 = 0
+    ix1 = INT((cx + cw - 1 - x) / pntZ): IF ix1 > pntW - 1 THEN ix1 = pntW - 1
+    iy1 = INT((cy + ch - 1 - y) / pntZ): IF iy1 > pntH - 1 THEN iy1 = pntH - 1
+    IF ix1 < ix0 OR iy1 < iy0 THEN EXIT SUB
+    _PUTIMAGE (x + ix0 * pntZ, y + iy0 * pntZ)-(x + (ix1 + 1) * pntZ - 1, y + (iy1 + 1) * pntZ - 1), pntImg&, , (ix0, iy0)-(ix1, iy1)
+    IF dimmed THEN LINE (x + ix0 * pntZ, y + iy0 * pntZ)-(x + (ix1 + 1) * pntZ - 1, y + (iy1 + 1) * pntZ - 1), _RGBA32(10, 6, 20, 120), BF
+END SUB
+
+' The picture small: s across (tiled: 2 x 2 in it)
+SUB PntThumb (x, y, s, tiled)
+    DIM k, w, h
+    k = s / pntW: IF s / pntH < k THEN k = s / pntH
+    IF tiled THEN k = k / 2
+    w = pntW * k: h = pntH * k: IF w < 1 THEN w = 1
+    IF h < 1 THEN h = 1
+    _PUTIMAGE (x, y)-(x + w - 1, y + h - 1), pntImg&
+    IF tiled THEN
+        _PUTIMAGE (x + w, y)-(x + 2 * w - 1, y + h - 1), pntImg&
+        _PUTIMAGE (x, y + h)-(x + w - 1, y + 2 * h - 1), pntImg&
+        _PUTIMAGE (x + w, y + h)-(x + 2 * w - 1, y + 2 * h - 1), pntImg&
+    END IF
+    LINE (x - 1, y - 1)-(x + IIF(tiled, 2 * w, w), y + IIF(tiled, 2 * h, h)), cLine, B
+END SUB
+
+FUNCTION PntMax (a, b)
+    IF a > b THEN PntMax = a ELSE PntMax = b
+END FUNCTION
+
+FUNCTION PntMin (a, b)
+    IF a < b THEN PntMin = a ELSE PntMin = b
+END FUNCTION
+
+' A box's outline, only where it's in the canvas
+SUB PntClipBox (x0, y0, x1, y1, c AS _UNSIGNED LONG)
+    PntClipLine x0, y0, x1, y0, c: PntClipLine x0, y1, x1, y1, c
+    PntClipLine x0, y0, x0, y1, c: PntClipLine x1, y0, x1, y1, c
+END SUB
+
+' A line across or down, cut to the canvas
+SUB PntClipLine (x0, y0, x1, y1, c AS _UNSIGNED LONG)
+    DIM cx, cy, cw, ch, a, b
+    PntCanvas cx, cy, cw, ch
+    IF y0 = y1 THEN
+        IF y0 < cy OR y0 >= cy + ch THEN EXIT SUB
+        a = PntMax(PntMin(x0, x1), cx): b = PntMin(PntMax(x0, x1), cx + cw - 1)
+        IF a <= b THEN LINE (a, y0)-(b, y0), c
+    ELSE
+        IF x0 < cx OR x0 >= cx + cw THEN EXIT SUB
+        a = PntMax(PntMin(y0, y1), cy): b = PntMin(PntMax(y0, y1), cy + ch - 1)
+        IF a <= b THEN LINE (x0, a)-(x0, b), c
+    END IF
+END SUB
+
+' ---------------------------------------------------------------- SELECT: a box of the picture
+
+SUB PntSelPress (px AS LONG, py AS LONG)
+    IF pntSelOn AND px >= pntQX AND py >= pntQY AND px < pntQX + pntQW AND py < pntQY + pntQH THEN
+        PntSelLift kAlt ' (moving it - Alt: a copy, the first left where it was)
+        IF kAlt AND pntFltOn THEN pntBase$ = PntSnap$ ' (the copy's start stays drawn)
+        pntSq = 2: pntSqX = px - pntQX: pntSqY = py - pntQY
+        EXIT SUB
+    END IF
+    PntSelNone
+    pntSq = 1: pntSqX = PntClampX&(px): pntSqY = PntClampY&(py)
+    pntSelOn = -1: pntQX = pntSqX: pntQY = pntSqY: pntQW = 1: pntQH = 1
+END SUB
+
+SUB PntSelDragTo (px AS LONG, py AS LONG)
+    DIM x AS LONG, y AS LONG
+    IF pntSq = 1 THEN
+        x = PntClampX&(px): y = PntClampY&(py)
+        pntQX = pntSqX: pntQW = x - pntSqX + 1: IF x < pntSqX THEN pntQX = x: pntQW = pntSqX - x + 1
+        pntQY = pntSqY: pntQH = y - pntSqY + 1: IF y < pntSqY THEN pntQY = y: pntQH = pntSqY - y + 1
+    ELSE
+        IF px - pntSqX <> pntQX OR py - pntSqY <> pntQY THEN pntQX = px - pntSqX: pntQY = py - pntSqY: PntSelStamp
+    END IF
+END SUB
+
+SUB PntSelLetGo
+    IF pntSq = 1 THEN
+        IF pntQW * pntQH <= 1 THEN pntSelOn = 0 ELSE Msg "Picked" + STR$(pntQW) + " x" + STR$(pntQH) + ": drag inside to move it (Alt: a copy); Ctrl+C / X / V; FLIP, TURN, x2, 1/2; Del empties it"
+    END IF
+    pntSq = 0
+END SUB
+
+FUNCTION PntClampX& (x AS LONG)
+    PntClampX& = Clamp(x, 0, pntW - 1)
+END FUNCTION
+
+FUNCTION PntClampY& (y AS LONG)
+    PntClampY& = Clamp(y, 0, pntH - 1)
+END FUNCTION
+
+' The box's pixels lifted to move (where they were: the second colour; clone: left as they are). One undo step
+SUB PntSelLift (clone)
+    DIM i AS LONG, j AS LONG
+    IF pntSelOn = 0 OR pntFltOn THEN EXIT SUB
+    PntPush
+    pntFW = pntQW: pntFH = pntQH: REDIM pntFl(pntFW * pntFH) AS _UNSIGNED LONG
+    FOR j = 0 TO pntFH - 1
+        FOR i = 0 TO pntFW - 1
+            pntFl(j * pntFW + i) = PntGetIn~&(pntQX + i, pntQY + j)
+            IF clone = 0 THEN PntPutIn pntQX + i, pntQY + j, pntBg OR &HFF000000
+        NEXT
+    NEXT
+    pntBase$ = PntSnap$: pntFltOn = -1
+    PntSelStamp
+END SUB
+
+' The lifted pixels drawn at the box's place over the picture as it was under them
+SUB PntSelStamp
+    DIM i AS LONG, j AS LONG
+    IF pntFltOn = 0 THEN EXIT SUB
+    PntRestore pntBase$
+    FOR j = 0 TO pntFH - 1
+        FOR i = 0 TO pntFW - 1
+            PntPutIn pntQX + i, pntQY + j, pntFl(j * pntFW + i)
+        NEXT
+    NEXT
+    pntDirty = -1
+END SUB
+
+' Set down where it is (the box stays picked)
+SUB PntSelDrop
+    pntFltOn = 0: pntBase$ = ""
+END SUB
+
+SUB PntSelNone
+    PntSelDrop: pntSelOn = 0: pntSq = 0
+END SUB
+
+FUNCTION PntGetIn~& (x AS LONG, y AS LONG)
+    IF x >= 0 AND y >= 0 AND x < pntW AND y < pntH THEN PntGetIn~& = PntGet~&(x, y)
+END FUNCTION
+
+SUB PntPutIn (x AS LONG, y AS LONG, c AS _UNSIGNED LONG)
+    IF x >= 0 AND y >= 0 AND x < pntW AND y < pntH THEN PntPut x, y, c
+END SUB
+
+SUB PntSelCopy
+    DIM i AS LONG, j AS LONG
+    IF pntSelOn = 0 THEN Msg "Pick a box first (S, then drag) - Ctrl+A: all of it": EXIT SUB
+    pntCW = pntQW: pntCH = pntQH: REDIM pntCb(pntCW * pntCH) AS _UNSIGNED LONG
+    FOR j = 0 TO pntCH - 1
+        FOR i = 0 TO pntCW - 1
+            pntCb(j * pntCW + i) = PntGetIn~&(pntQX + i, pntQY + j)
+        NEXT
+    NEXT
+    Msg "Copied" + STR$(pntCW) + " x" + STR$(pntCH) + " - Ctrl+V puts it in (at the pointer), to drag where it goes"
+END SUB
+
+' The box emptied: the second colour (Shift: see-through)
+SUB PntSelEmpty (seeThrough)
+    DIM i AS LONG, j AS LONG, c AS _UNSIGNED LONG
+    IF pntSelOn = 0 THEN EXIT SUB
+    PntSelDrop: PntPush
+    c = pntBg OR &HFF000000: IF seeThrough THEN c = 0
+    FOR j = 0 TO pntQH - 1
+        FOR i = 0 TO pntQW - 1
+            PntPutIn pntQX + i, pntQY + j, c
+        NEXT
+    NEXT
+END SUB
+
+' What was copied, put in at the pointer (off the picture: its top left), lifted - drag it where it goes
+SUB PntSelPaste
+    DIM px AS LONG, py AS LONG, i AS LONG
+    IF pntCW = 0 THEN Msg "Nothing copied yet: SELECT a box, Ctrl+C": EXIT SUB
+    PntSelNone: PntPush
+    px = PntPX&: py = PntPY&
+    IF px < 0 OR py < 0 OR px >= pntW OR py >= pntH THEN px = 0: py = 0
+    pntBase$ = PntSnap$
+    pntFW = pntCW: pntFH = pntCH: REDIM pntFl(pntFW * pntFH) AS _UNSIGNED LONG
+    FOR i = 0 TO pntFW * pntFH - 1: pntFl(i) = pntCb(i): NEXT
+    pntSelOn = -1: pntFltOn = -1: pntQX = px: pntQY = py: pntQW = pntFW: pntQH = pntFH
+    pntTool = PN_SEL
+    PntSelStamp
+    Msg "Pasted: drag it where it goes (SELECT); Enter / Esc sets it down; Ctrl+Z: gone"
+END SUB
+
+' The box's pixels: 1 flipped left-right, 2 up-down, 3 a quarter turn clockwise, 4 twice as big, 5 half (round its middle)
+SUB PntSelXform (k)
+    DIM i AS LONG, j AS LONG, nw AS LONG, nh AS LONG, cxm AS LONG, cym AS LONG
+    IF pntSelOn = 0 THEN Msg "Pick a box first (S, then drag)": EXIT SUB
+    PntSelLift 0
+    nw = pntFW: nh = pntFH
+    SELECT CASE k
+        CASE 3: nw = pntFH: nh = pntFW
+        CASE 4: nw = pntFW * 2: nh = pntFH * 2
+        CASE 5: nw = pntFW \ 2: nh = pntFH \ 2
+    END SELECT
+    IF nw < 1 THEN nw = 1
+    IF nh < 1 THEN nh = 1
+    IF nw > 2048 OR nh > 2048 THEN Msg "That would be too big": EXIT SUB
+    DIM n(nw * nh) AS _UNSIGNED LONG
+    FOR j = 0 TO nh - 1
+        FOR i = 0 TO nw - 1
+            SELECT CASE k
+                CASE 1: n(j * nw + i) = pntFl(j * pntFW + (pntFW - 1 - i))
+                CASE 2: n(j * nw + i) = pntFl((pntFH - 1 - j) * pntFW + i)
+                CASE 3: n(j * nw + i) = pntFl((pntFH - 1 - i) * pntFW + j)
+                CASE ELSE: n(j * nw + i) = pntFl(((j * pntFH) \ nh) * pntFW + (i * pntFW) \ nw)
+            END SELECT
+        NEXT
+    NEXT
+    cxm = pntQX + pntQW \ 2: cym = pntQY + pntQH \ 2
+    REDIM pntFl(nw * nh) AS _UNSIGNED LONG
+    FOR i = 0 TO nw * nh - 1: pntFl(i) = n(i): NEXT
+    pntFW = nw: pntFH = nh: pntQW = nw: pntQH = nh: pntQX = cxm - nw \ 2: pntQY = cym - nh \ 2
+    PntSelStamp
+    Msg PntBtnName$(26 + k) + " (drag it where it goes; Enter / Esc sets it down; Ctrl+Z: as it was)"
+END SUB

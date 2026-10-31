@@ -131,6 +131,71 @@ FUNCTION EdEdgeMeant (a AS LONG, b AS LONG)
     EdEdgeMeant = 0
 END FUNCTION
 
+' Is the mesh's edge a-b one of those clicked?
+FUNCTION EdPkHas (a AS LONG, b AS LONG)
+    DIM i AS LONG
+    FOR i = 1 TO edPkN
+        IF (edPkA(i) = a AND edPkB(i) = b) OR (edPkA(i) = b AND edPkB(i) = a) THEN EdPkHas = -1: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Ctrl+click on an edge (the mesh's points a, b): its whole loop picked - on
+' through each point four edges meet at, straight across (the edge sharing
+' no face with the one coming in), till it comes round or meets a point
+' that isn't four-way. Shift: added to what's picked.
+SUB EdLoopPick (a AS LONG, b AS LONG)
+    DIM f AS LONG, k AS LONG, i AS LONG, prev AS LONG, cur AS LONG, nx AS LONG, dr, d AS LONG, cnt AS LONG, guard AS LONG, j AS LONG
+    EdBegin 0: EmEdgeMap
+    REDIM vf(swN) AS LONG
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            FOR k = 0 TO sfCN(f) - 1: vf(scV(sfC0(f) + k)) = f: NEXT
+        END IF
+    NEXT
+    IF NOT kShift THEN EdSelClear
+    edSelV(a) = -1: edSelV(b) = -1: EdPkMark a, b, -1: cnt = 1
+    FOR dr = 0 TO 1
+        IF dr = 0 THEN prev = a + 1: cur = b + 1 ELSE prev = b + 1: cur = a + 1 ' (the work's points)
+        guard = 0
+        DO
+            d = EdFan&(cur, vf())
+            IF d <> 4 THEN EXIT DO
+            j = -1
+            FOR i = 0 TO 3
+                IF edNb(i) = prev THEN j = i: EXIT FOR
+            NEXT
+            IF j < 0 THEN EXIT DO
+            nx = edNb((j + 2) MOD 4)
+            IF EdPkHas(cur - 1, nx - 1) THEN EXIT DO ' (round: back where it began)
+            edSelV(cur - 1) = -1: edSelV(nx - 1) = -1: EdPkMark cur - 1, nx - 1, -1: cnt = cnt + 1
+            prev = cur: cur = nx
+            guard = guard + 1: IF guard > swN THEN EXIT DO
+        LOOP
+    NEXT
+    Msg LTRIM$(STR$(cnt)) + IIFS$(cnt = 1, " edge picked (its loop stops at both ends: a point where 4 edges don't meet)", " edges picked: the loop") + IIFS$(kShift, " (added)", "") + ". Ctrl+click picks a loop; Shift+Ctrl adds one"
+END SUB
+
+' The points round work point v in turn (edNb), one per face round it: how
+' many - 0 if the faces don't go all the way round (vf: a face each point's in)
+FUNCTION EdFan& (v AS LONG, vf() AS LONG)
+    DIM f AS LONG, f0 AS LONG, g AS LONG, k AS LONG, n AS LONG, c0 AS LONG, kk AS LONG, d AS LONG
+    IF v < 1 OR v > UBOUND(vf) THEN EXIT FUNCTION
+    f = vf(v): f0 = f: IF f = 0 THEN EXIT FUNCTION
+    DO
+        n = sfCN(f): c0 = sfC0(f): kk = -1
+        FOR k = 0 TO n - 1
+            IF scV(c0 + k) = v THEN kk = k: EXIT FOR
+        NEXT
+        IF kk < 0 OR d > 15 THEN EXIT FUNCTION
+        edNb(d) = scV(c0 + (kk + n - 1) MOD n): d = d + 1
+        g = EmEdgeFind&(scV(c0 + (kk + 1) MOD n), v)
+        IF g = 0 THEN EXIT FUNCTION ' (open there)
+        IF g = f0 THEN EXIT DO
+        f = g
+    LOOP
+    EdFan& = d
+END FUNCTION
+
 ' An edge clicked on or off (the mesh's points)
 SUB EdPkMark (a AS LONG, b AS LONG, pk)
     DIM i AS LONG, j AS LONG
@@ -453,12 +518,9 @@ SUB EdPushWork (d#)
     NEXT
 END SUB
 
-' A step for the keys and the wheel: the snap (Shift 4 of them, Alt a quarter)
+' A step for the keys and the wheel: the grid's (Shift 10 of them, Alt a tenth)
 FUNCTION EdStep#
-    DIM st#
-    st# = snapStep: IF st# <= 0 THEN st# = 1 / 64
-    IF kShift THEN st# = st# * 4 ELSE IF kAlt THEN st# = st# / 4
-    EdStep# = st#
+    EdStep# = GridStep#
 END FUNCTION
 
 FUNCTION EdNeed
@@ -475,6 +537,43 @@ END SUB
 SUB EdScaleBy (kx#, ky#, kz#, push)
     IF NOT EdNeed THEN EXIT SUB
     EdBegin push: IF EdMoving& THEN EdScaleWork kx#, ky#, kz#
+    EdCommit
+END SUB
+
+' The moving points d# wider along the world's axis ax (1 X, 2 Y, 3 Z), round
+' their middle; ax 0: all ways alike, d# wider their longest way
+SUB EdGrowBy (ax, d#, push)
+    DIM w AS LONG, x#, y#, z#, a, v#, lo#(3), hi#(3), m#, k#
+    IF NOT EdNeed THEN EXIT SUB
+    EdBegin push
+    IF EdMoving& THEN
+        FOR a = 1 TO 3: lo#(a) = 1E30: hi#(a) = -1E30: NEXT
+        FOR w = 1 TO swN
+            IF edMv(w) THEN
+                EdW w, x#, y#, z#
+                FOR a = 1 TO 3
+                    v# = x#: IF a = 2 THEN v# = y# ELSE IF a = 3 THEN v# = z#
+                    IF v# < lo#(a) THEN lo#(a) = v#
+                    IF v# > hi#(a) THEN hi#(a) = v#
+                NEXT
+            END IF
+        NEXT
+        IF ax = 0 THEN
+            FOR a = 1 TO 3: IF hi#(a) - lo#(a) > m# THEN m# = hi#(a) - lo#(a)
+            NEXT
+        ELSE
+            m# = hi#(ax) - lo#(ax)
+        END IF
+        IF m# > 1E-9 THEN
+            k# = (m# + d#) / m#: IF k# < .01 THEN k# = .01
+            SELECT CASE ax
+                CASE 0: EdScaleWork k#, k#, k#
+                CASE 1: EdScaleWork k#, 1, 1
+                CASE 2: EdScaleWork 1, k#, 1
+                CASE ELSE: EdScaleWork 1, 1, k#
+            END SELECT
+        END IF
+    END IF
     EdCommit
 END SUB
 
@@ -1239,6 +1338,7 @@ SUB EdPress (lx, ly)
         CASE ED_EDGES: h = -1: IF EdEdgeAt(lx, ly) THEN h = edEA
         CASE ELSE: h = EdPointAt&(lx, ly)
     END SELECT
+    IF edMode = ED_EDGES AND kCtrl AND h >= 0 THEN EdLoopPick edEA, edEB: edGen = edGen + 1: ovDirty = -1: EXIT SUB ' (Ctrl: the edge's whole loop)
     IF h >= 0 THEN
         SELECT CASE edMode
             CASE ED_FACES: pk = edSelF(h)
@@ -1351,6 +1451,7 @@ SUB EdDragStart
     FOR w = 1 TO swN
         IF edMv(w) THEN EdW w, x#, y#, z#: edX0(w) = x#: edY0(w) = y#: edZ0(w) = z#
     NEXT
+    dragC = gzC: IF NOT gzOk THEN EdCentre dragC.x, dragC.y, dragC.z ' (SCALE / TURN: round the widget's middle)
     IF dragVert THEN
         dragN.x = cFX: dragN.y = 0: dragN.z = cFZ
         l = SQR(dragN.x * dragN.x + dragN.z * dragN.z): IF l < 1E-6 THEN dragN.x = 0: dragN.z = 1: l = 1
@@ -1362,9 +1463,21 @@ SUB EdDragStart
 END SUB
 
 SUB EdDragUpdate (lx, ly)
-    DIM hit AS V3, ok, dx#, dy#, dz#, w AS LONG, x#, y#, z#, a, ax, ay, az, d#
-    a = DragAxisNow: dragAxis = a
-    IF a THEN ' (along one axis)
+    DIM hit AS V3, ok, dx#, dy#, dz#, w AS LONG, x#, y#, z#, a, ax, ay, az, d#, offA
+    IF tfMode THEN TfEdUpdate lx, ly: EXIT SUB ' (SCALE, TURN)
+    a = DragAxisNow
+    IF a = 0 AND TfCount = 1 THEN a = TfFirst ' (MOVE on one way only)
+    dragAxis = a
+    IF a = 0 AND TfCount = 2 THEN ' (two ways: on the plane they make)
+        offA = 1: IF tfAx(1) THEN offA = 2: IF tfAx(2) THEN offA = 3
+        AxisVec offA, dragN.x, dragN.y, dragN.z
+        RayPlane lx, ly, dragG, dragN, hit, ok
+        IF ok = 0 THEN EXIT SUB
+        dx# = hit.x - dragG.x: dy# = hit.y - dragG.y: dz# = hit.z - dragG.z
+        IF offA = 1 THEN dx# = 0
+        IF offA = 2 THEN dy# = 0
+        IF offA = 3 THEN dz# = 0
+    ELSEIF a THEN ' (along one axis)
         AxisVec a, ax, ay, az
         d# = AxisAt#(lx, ly, dragG, a) - AxisAt#(dragLX0, dragLY0, dragG, a)
         dx# = ax * d#: dy# = ay * d#: dz# = az * d#
@@ -1456,8 +1569,8 @@ FUNCTION EdKey (k&)
             EdNudge k&, st#
         CASE 114: EdTurnBy 2, 15, -1 ' (R)
         CASE 82: EdTurnBy 2, -15, -1 ' (Shift+R)
-        CASE 61, 43: EdScaleBy 1.1, 1.1, 1.1, -1 ' (=, +)
-        CASE 45, 95: EdScaleBy 1 / 1.1, 1 / 1.1, 1 / 1.1, -1 ' (-)
+        CASE 61, 43: EdGrowBy 0, 2 * EdStep#, -1 ' (=, +: a grid step each side, the longest way)
+        CASE 45, 95: EdGrowBy 0, -2 * EdStep#, -1 ' (-)
         CASE ELSE: EdKey = 0
     END SELECT
 END FUNCTION
@@ -1539,22 +1652,20 @@ END SUB
 
 ' The wheel over a field: a step (a run of them one undo step)
 SUB EdFieldWheel (f, dir)
-    DIM push, st#, k#
+    DIM push, st#
     IF typeField = f THEN typeField = 0
     IF f = F_COL OR f = F_SEG THEN EXIT SUB
     push = (f <> edWheelF OR TIMER(0.001) - edWheelT > 1 OR TIMER(0.001) < edWheelT)
     edWheelF = f: edWheelT = TIMER(0.001)
     st# = EdStep#
-    k# = 1.1: IF kShift THEN k# = 1.5 ELSE IF kAlt THEN k# = 1.01
-    IF dir < 0 THEN k# = 1 / k#
     SELECT CASE f
         CASE F_PX: EdMoveBy st# * dir, 0, 0, push
         CASE F_PY: EdMoveBy 0, st# * dir, 0, push
         CASE F_PZ: EdMoveBy 0, 0, st# * dir, push
         CASE F_RX TO F_RZ: EdTurnBy f - F_RX + 1, dir * IIF(kShift, 45, IIF(kAlt, 1, 15)), push
-        CASE F_SX: EdScaleBy k#, 1, 1, push
-        CASE F_SY: EdScaleBy 1, k#, 1, push
-        CASE F_SZ: EdScaleBy 1, 1, k#, push
+        CASE F_SX: EdGrowBy 1, 2 * st# * dir, push ' (a step each side)
+        CASE F_SY: EdGrowBy 2, 2 * st# * dir, push
+        CASE F_SZ: EdGrowBy 3, 2 * st# * dir, push
         CASE F_AMT: EdPushBy st# * dir, push
     END SELECT
 END SUB
@@ -1643,10 +1754,7 @@ SUB EdPanelDraw
         LINE (x, y)-(x + w - 1, y + h - 1), palCol(k), BF
         LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(palCol(k) = c, cHi, cLine), B
     NEXT
-    Txt PX0, 432, "SNAP (OF A CELL)  Alt: none", cDim
-    FOR k = 11 TO 15
-        PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (snapStep = SnapOf(k - 11))
-    NEXT
+    TfDraw
     FOR k = 4 TO 16
         IF k <> 12 THEN EdBtn k, x, y, w, h: Btn x, y, w, h, EdBtnName$(k), 0
     NEXT
@@ -1665,6 +1773,7 @@ END SUB
 SUB EdPanelClick
     DIM k, x, y, w, h, i
     IF bvOn THEN BvClick: EXIT SUB
+    IF TfClick THEN EXIT SUB
     IF EdPicClick THEN EXIT SUB
     IF AlClick(604) THEN EXIT SUB
     FOR k = 1 TO 16
@@ -1690,10 +1799,6 @@ SUB EdPanelClick
             END SELECT
             EXIT SUB
         END IF
-    NEXT
-    FOR k = 11 TO 15
-        PanelBtn k, x, y, w, h
-        IF InRect(mX, mY, x, y, w, h) THEN snapStep = SnapOf(k - 11): Msg "Snap: " + SnapName$(k - 11): EXIT SUB
     NEXT
     FOR i = 0 TO NUM_PAL - 1
         PalRect i, x, y, w, h

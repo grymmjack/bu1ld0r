@@ -104,7 +104,7 @@ END SUB
 ' else ears cut off one by one (a corner whose triangle has no other inside it)
 SUB MkPolyTris (id AS LONG, g AS LONG)
     DIM n AS LONG, k AS LONG, v0 AS LONG, c0 AS LONG, nx#, ny#, nz#, ax, conv, m AS LONG, guard AS LONG
-    DIM i0 AS LONG, i1 AS LONG, i2 AS LONG, a AS LONG, b AS LONG, c AS LONG, cr#, sg#, j AS LONG, ear, q AS LONG
+    DIM i0 AS LONG, i1 AS LONG, i2 AS LONG, a AS LONG, b AS LONG, c AS LONG, cr#, sg#, j AS LONG, ear, q AS LONG, s0 AS LONG
     n = mfCN(g): IF n < 3 THEN EXIT SUB
     IF n > EM_MAXC THEN n = EM_MAXC
     v0 = mbV0(id) + 1: c0 = mfC0(g)
@@ -133,13 +133,24 @@ SUB MkPolyTris (id AS LONG, g AS LONG)
         cr# = (emX(k) - emX(i0)) * (emY(i2) - emY(k)) - (emY(k) - emY(i0)) * (emX(i2) - emX(k))
         IF cr# * sg# < -1E-12 THEN conv = 0: EXIT FOR
     NEXT
-    IF conv THEN
+    IF conv THEN ' (a fan from a corner whose neighbours are corners too: no flat triangle then, no point left out)
+        REDIM pcS(n - 1) AS _BYTE
+        FOR k = 0 TO n - 1
+            i0 = (k + n - 1) MOD n: i2 = (k + 1) MOD n
+            cr# = (emX(k) - emX(i0)) * (emY(i2) - emY(k)) - (emY(k) - emY(i0)) * (emX(i2) - emX(k))
+            pcS(k) = (ABS(cr#) > 1E-12)
+        NEXT
+        s0 = 0
+        FOR k = 0 TO n - 1
+            IF pcS(k) AND pcS((k + n - 1) MOD n) AND pcS((k + 1) MOD n) THEN s0 = k: EXIT FOR
+        NEXT
         FOR k = 1 TO n - 2
+            i1 = (s0 + k) MOD n: i2 = (s0 + k + 1) MOD n
             mkTriE = 0
-            IF k = 1 AND mcE(c0) THEN mkTriE = 1
-            IF mcE(c0 + k) THEN mkTriE = mkTriE OR 2
-            IF k + 1 = n - 1 AND mcE(c0 + n - 1) THEN mkTriE = mkTriE OR 4
-            MkTriC c0, c0 + k, c0 + k + 1, v0, nx#, ny#, nz#
+            IF k = 1 AND mcE(c0 + s0) THEN mkTriE = 1
+            IF mcE(c0 + i1) THEN mkTriE = mkTriE OR 2
+            IF k + 1 = n - 1 AND mcE(c0 + (s0 + n - 1) MOD n) THEN mkTriE = mkTriE OR 4
+            MkTriC c0 + s0, c0 + i1, c0 + i2, v0, nx#, ny#, nz#
         NEXT
         EXIT SUB
     END IF

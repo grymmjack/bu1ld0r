@@ -354,14 +354,16 @@ FUNCTION CsgSubtract& (la AS LONG, lb AS LONG)
     CsgSubtract& = CsgBool&(la, lb, 0)
 END FUNCTION
 
-' Less (keep 0), or only where they overlap (keep: a's faces inside b,
-' and b's inside a as they are - in a's colour)
+' Less (keep 0), or only where they overlap (keep -1: a's faces inside b,
+' and b's inside a as they are - in a's colour), or both together (keep 2:
+' each one's faces outside the other, as they are - MERGE)
 FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     DIM p AS LONG, nx AS LONG, q AS LONG, pp AS LONG, l AS LONG, nl AS LONG, f AS LONG, b AS LONG, cf AS LONG, cb AS LONG
-    DIM plo AS V3, phi AS V3, aNear AS LONG, aFar AS LONG, bNear AS LONG, aP AS LONG, bP AS LONG, na AS LONG, nb AS LONG, i AS LONG, k AS LONG
-    DIM x#, y#, z#, ins, res AS LONG, c AS _UNSIGNED LONG, side
+    DIM plo AS V3, phi AS V3, aNear AS LONG, aFar AS LONG, bNear AS LONG, bFar AS LONG, aP AS LONG, bP AS LONG, na AS LONG, nb AS LONG, i AS LONG, k AS LONG
+    DIM x#, y#, z#, ins, res AS LONG, c AS _UNSIGNED LONG, side, goes
     IF la = 0 OR lb = 0 THEN
         IF keep = 0 THEN CsgBool& = la
+        IF keep = 2 THEN CsgBool& = CsgJoin&(la, lb)
         EXIT FUNCTION
     END IF
     c = cgCol(la)
@@ -370,6 +372,7 @@ FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     CsgRays 0, la: CsgRays 1, lb
     IF BoxesMeet(rgLo(0), rgHi(0), rgLo(1), rgHi(1)) = 0 THEN
         IF keep = 0 THEN CsgBool& = la
+        IF keep = 2 THEN CsgBool& = CsgJoin&(la, lb)
         EXIT FUNCTION
     END IF
     ' a's faces near b, and b's near a (b's others are outside a: gone)
@@ -384,11 +387,12 @@ FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     DO WHILE p
         nx = cgNext(p): cgPar(p) = 0: cgOn(p) = 0
         CsgPolyBox p, plo, phi
-        IF BoxesMeet(plo, phi, rgLo(0), rgHi(0)) THEN cgNext(p) = bNear: bNear = p
+        IF BoxesMeet(plo, phi, rgLo(0), rgHi(0)) THEN cgNext(p) = bNear: bNear = p ELSE cgNext(p) = bFar: bFar = p
         p = nx
     LOOP
     IF aNear = 0 OR bNear = 0 THEN
         IF keep = 0 THEN CsgBool& = CsgJoin&(aNear, aFar)
+        IF keep = 2 THEN CsgBool& = CsgJoin&(CsgJoin&(aNear, aFar), CsgJoin&(bNear, bFar))
         EXIT FUNCTION
     END IF
     ' Which near faces meet which; each that meets any split by their planes
@@ -422,15 +426,27 @@ FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     FOR side = 0 TO 1
         p = aP: IF side THEN p = bP
         DO WHILE p
-            IF side = 0 THEN
-                IF cgOn(p) THEN CsgMid p, -.0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
-                ins = CsgInside(x#, y#, z#, 1)
+            IF keep = 2 THEN ' (MERGE: what's inside the other goes; on its surface, a's stays if just out from it is outside b - one copy of a face both share, none where they touch back to back - b's only if outside a either side)
+                IF side = 0 THEN
+                    IF cgOn(p) THEN CsgMid p, .0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
+                    goes = CsgInside(x#, y#, z#, 1)
+                ELSE
+                    IF cgOn(p) THEN CsgMid p, .0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
+                    goes = CsgInside(x#, y#, z#, 0)
+                    IF goes = 0 AND cgOn(p) <> 0 THEN CsgMid p, -.0002, x#, y#, z#: goes = CsgInside(x#, y#, z#, 0)
+                END IF
             ELSE
-                IF cgOn(p) THEN CsgMid p, .0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
-                ins = CsgInside(x#, y#, z#, 0)
-                IF ins AND cgOn(p) <> 0 THEN CsgMid p, -.0002, x#, y#, z#: ins = CsgInside(x#, y#, z#, 0)
+                IF side = 0 THEN
+                    IF cgOn(p) THEN CsgMid p, -.0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
+                    ins = CsgInside(x#, y#, z#, 1)
+                ELSE
+                    IF cgOn(p) THEN CsgMid p, .0002, x#, y#, z# ELSE CsgMid p, 0, x#, y#, z#
+                    ins = CsgInside(x#, y#, z#, 0)
+                    IF ins AND cgOn(p) <> 0 THEN CsgMid p, -.0002, x#, y#, z#: ins = CsgInside(x#, y#, z#, 0)
+                END IF
+                goes = (ins = ((side = 0) AND (keep = 0)))
             END IF
-            IF ins = ((side = 0) AND (keep = 0)) THEN ' (it goes)
+            IF goes THEN ' (it goes)
                 q = p
                 DO WHILE q
                     IF csGone(q) THEN EXIT DO
@@ -442,7 +458,8 @@ FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
     NEXT
     ' What's left: a's far faces, and of each piece kept the first face it was
     ' split from that lost nothing (once) - b's turned in
-    res = aFar: IF keep THEN res = 0 ' (a's far faces are outside b)
+    res = aFar: IF keep <> 0 AND keep <> 2 THEN res = 0 ' (a's far faces are outside b)
+    IF keep = 2 THEN res = CsgJoin&(aFar, bFar) ' (and b's outside a)
     FOR side = 0 TO 1
         p = aP: IF side THEN p = bP
         DO WHILE p
@@ -455,7 +472,7 @@ FUNCTION CsgBool& (la AS LONG, lb AS LONG, keep)
                 LOOP
                 IF csDone(q) = 0 THEN
                     csDone(q) = 1
-                    IF side THEN cgCol(q) = c: cgTex(q) = 0: IF keep = 0 THEN CsgFlip q ' (walls: the solid's colour, no picture)
+                    IF side AND keep <> 2 THEN cgCol(q) = c: cgTex(q) = 0: IF keep = 0 THEN CsgFlip q ' (walls: the solid's colour, no picture)
                     cgNext(q) = res: res = q
                 END IF
             END IF

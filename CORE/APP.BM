@@ -34,11 +34,12 @@ SUB AppStart
             CASE "--tidy": tidyView = -1 ' (the view tidied, as T)
             CASE "--shot": i = i + 1: argShot$ = COMMAND$(i)
             CASE "--quit": argQuit = -1
+            CASE "--keylog": i = i + 1: argKeyLog$ = COMMAND$(i) ' (each key taken: a line - the key, the numpad's, the view after: tests)
             CASE "--bench": i = i + 1: argBench = VAL(COMMAND$(i)) ' (the model made N times: bench.txt says how long)
             CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
             CASE ELSE
                 k$ = LCASE$(RIGHT$(a$, 4))
-                IF k$ = ".bld" OR k$ = ".obj" THEN argOpen$ = a$
+                IF k$ = ".bld" OR k$ = ".obj" OR k$ = ".svg" THEN argOpen$ = a$
         END SELECT
     NEXT
     IF LEN(neonDir$) AND RIGHT$(neonDir$, 1) <> "/" THEN neonDir$ = neonDir$ + "/"
@@ -340,10 +341,15 @@ END SUB
 
 ' A number as a file or field shows it: up to 4 decimals, no trailing zeros, 0.5 not .5
 FUNCTION Fmt$ (v)
-    DIM n AS LONG, s$, w$, f$
-    n = CLNG(v * 10000)
+    DIM n AS _INTEGER64, s$, w$, f$, d, m AS _INTEGER64
+    ' (7 figures - what a SINGLE holds: 6 places under 10, so a 64th of a cell is 0.015625)
+    d = 6: IF ABS(v) >= 10 THEN d = 5
+    IF ABS(v) >= 100 THEN d = 4
+    IF ABS(v) >= 1000 THEN d = 3
+    m = 10 ^ d
+    n = _ROUND(CDBL(v) * m)
     IF n < 0 THEN s$ = "-": n = -n
-    w$ = LTRIM$(STR$(n \ 10000)): f$ = RIGHT$("000" + LTRIM$(STR$(n MOD 10000)), 4)
+    w$ = LTRIM$(STR$(n \ m)): f$ = RIGHT$(STRING$(d, "0") + LTRIM$(STR$(n MOD m)), d)
     DO WHILE RIGHT$(f$, 1) = "0" AND LEN(f$): f$ = LEFT$(f$, LEN(f$) - 1): LOOP
     IF LEN(f$) THEN f$ = s$ + w$ + "." + f$ ELSE f$ = s$ + w$
     IF f$ = "-0" THEN f$ = "0"

@@ -1,0 +1,314 @@
+''
+' bu1ld0r - MODEL/FONT.BM
+' =============================================================================
+' TrueType outlines (see FONT.BI)
+'
+
+' ---------------------------------------------------------------- reading the file (big-endian; o from 0)
+
+FUNCTION FtU8& (o AS LONG)
+    IF o < 0 OR o >= LEN(ftD$) THEN EXIT FUNCTION
+    FtU8& = ASC(ftD$, o + 1)
+END FUNCTION
+
+FUNCTION FtU16& (o AS LONG)
+    IF o < 0 OR o + 2 > LEN(ftD$) THEN EXIT FUNCTION
+    FtU16& = ASC(ftD$, o + 1) * 256& + ASC(ftD$, o + 2)
+END FUNCTION
+
+FUNCTION FtS16& (o AS LONG)
+    DIM v AS LONG
+    v = FtU16&(o): IF v >= 32768 THEN v = v - 65536
+    FtS16& = v
+END FUNCTION
+
+FUNCTION FtU32# (o AS LONG)
+    FtU32# = FtU16&(o) * 65536# + FtU16&(o + 2)
+END FUNCTION
+
+FUNCTION FtF2# (o AS LONG) ' (2.14 fixed: a composite's scale)
+    FtF2# = FtS16&(o) / 16384#
+END FUNCTION
+
+' Font file p$ read (once): -1 if its outlines can be used
+FUNCTION FontLoad (p$)
+    DIM n AS LONG, i AS LONG, o AS LONG, tg$, t AS LONG, hd AS LONG, mx AS LONG, hh AS LONG, cm AS LONG
+    DIM pl AS LONG, en AS LONG, so AS LONG, f AS LONG, sc, best
+    IF p$ = ftPath$ THEN FontLoad = ftOk: EXIT FUNCTION
+    ftOk = 0: ftPath$ = p$: ftD$ = ""
+    IF NOT _FILEEXISTS(p$) THEN EXIT FUNCTION
+    ftD$ = _READFILE$(p$) ' (read only: a system font can't be opened FOR BINARY, which wants to write)
+    IF LEN(ftD$) < 12 THEN EXIT FUNCTION
+    o = 0: IF LEFT$(ftD$, 4) = "ttcf" THEN o = FtU32#(12) ' (a collection: its first font)
+    n = FtU16&(o + 4)
+    hd = 0: mx = 0: hh = 0: cm = 0: ftHmtx = 0: ftLoca = 0: ftGlyf = 0
+    FOR i = 0 TO n - 1
+        tg$ = MID$(ftD$, o + 12 + i * 16 + 1, 4): t = FtU32#(o + 12 + i * 16 + 8)
+        SELECT CASE tg$
+            CASE "head": hd = t
+            CASE "maxp": mx = t
+            CASE "hhea": hh = t
+            CASE "hmtx": ftHmtx = t
+            CASE "loca": ftLoca = t
+            CASE "glyf": ftGlyf = t
+            CASE "cmap": cm = t
+        END SELECT
+    NEXT
+    IF hd = 0 OR mx = 0 OR hh = 0 OR ftHmtx = 0 OR ftLoca = 0 OR ftGlyf = 0 OR cm = 0 THEN EXIT FUNCTION
+    ftUpem = FtU16&(hd + 18): IF ftUpem <= 0 THEN ftUpem = 1000
+    ftLocLong = (FtS16&(hd + 50) <> 0)
+    ftNG = FtU16&(mx + 4): ftNHM = FtU16&(hh + 34): IF ftNHM < 1 THEN ftNHM = 1
+    ftAsc = FtS16&(hh + 4): ftDsc = FtS16&(hh + 6)
+    ' Which character map: Unicode's (format 12, else 4), else a symbol font's
+    ftCm = 0: ftCmF = 0: ftSym = 0: best = 0
+    n = FtU16&(cm + 2)
+    FOR i = 0 TO n - 1
+        pl = FtU16&(cm + 4 + i * 8): en = FtU16&(cm + 6 + i * 8): so = cm + FtU32#(cm + 8 + i * 8)
+        f = FtU16&(so): sc = 0
+        IF f = 12 AND ((pl = 3 AND en = 10) OR pl = 0) THEN sc = 4
+        IF f = 4 AND ((pl = 3 AND en = 1) OR pl = 0) THEN sc = 3
+        IF f = 4 AND pl = 3 AND en = 0 THEN sc = 2
+        IF sc > best THEN best = sc: ftCm = so: ftCmF = f: ftSym = (sc = 2)
+    NEXT
+    IF ftCm = 0 THEN EXIT FUNCTION
+    ftOk = -1: FontLoad = -1
+END FUNCTION
+
+' The glyph character c& is (0: the font hasn't it)
+FUNCTION FontGlyph& (c&)
+    DIM g AS LONG
+    g = FontGlyphOf&(c&)
+    IF g = 0 AND ftSym THEN g = FontGlyphOf&(c& + &HF000&) ' (symbol fonts sit at F000 on)
+    FontGlyph& = g
+END FUNCTION
+
+FUNCTION FontGlyphOf& (c&)
+    DIM sx2 AS LONG, s AS LONG, e AS LONG, st AS LONG, dl AS LONG, ra AS LONG, ro AS LONG, g AS LONG, ng#, i AS LONG, a#, b#
+    IF ftCmF = 4 THEN
+        sx2 = FtU16&(ftCm + 6)
+        FOR s = 0 TO sx2 \ 2 - 1
+            e = FtU16&(ftCm + 14 + s * 2)
+            IF e >= c& THEN
+                st = FtU16&(ftCm + 16 + sx2 + s * 2)
+                IF st > c& THEN EXIT FUNCTION
+                dl = FtU16&(ftCm + 16 + 2 * sx2 + s * 2)
+                ra = ftCm + 16 + 3 * sx2 + s * 2: ro = FtU16&(ra)
+                IF ro = 0 THEN
+                    g = (c& + dl) AND 65535
+                ELSE
+                    g = FtU16&(ra + ro + 2 * (c& - st)): IF g THEN g = (g + dl) AND 65535
+                END IF
+                FontGlyphOf& = g: EXIT FUNCTION
+            END IF
+        NEXT
+    ELSEIF ftCmF = 12 THEN
+        ng# = FtU32#(ftCm + 12)
+        FOR i = 0 TO ng# - 1
+            a# = FtU32#(ftCm + 16 + i * 12): b# = FtU32#(ftCm + 20 + i * 12)
+            IF c& >= a# AND c& <= b# THEN FontGlyphOf& = FtU32#(ftCm + 24 + i * 12) + c& - a#: EXIT FUNCTION
+        NEXT
+    END IF
+END FUNCTION
+
+' Glyph g's advance (font units)
+FUNCTION FontAdv& (g AS LONG)
+    DIM i AS LONG
+    i = g: IF i >= ftNHM THEN i = ftNHM - 1
+    FontAdv& = FtU16&(ftHmtx + 4 * i)
+END FUNCTION
+
+' ---------------------------------------------------------------- outlines
+
+' Glyph g's outlines as rings (svR0... - svEN the character), each point
+' (x, y) put through x' = m0 x + m2 y + m4, y' = m1 x + m3 y + m5
+SUB FontRings (g AS LONG, m0#, m1#, m2#, m3#, m4#, m5#, depth)
+    DIM o AS LONG, ln AS LONG, a#, b#, nc AS LONG, np AS LONG, il AS LONG, fo AS LONG, i AS LONG, k AS LONG, r AS LONG, f AS LONG
+    DIM x AS LONG, y AS LONG, d AS LONG, c AS LONG, s AS LONG, e AS LONG, fl AS LONG, gi AS LONG, a1#, a2#, sa#, sb#, scc#, sd#
+    IF g < 0 OR g >= ftNG OR depth > 6 THEN EXIT SUB
+    IF ftLocLong THEN
+        a# = FtU32#(ftLoca + 4 * g): b# = FtU32#(ftLoca + 4 * g + 4)
+    ELSE
+        a# = 2 * FtU16&(ftLoca + 2 * g): b# = 2 * FtU16&(ftLoca + 2 * g + 2)
+    END IF
+    ln = b# - a#: IF ln <= 0 THEN EXIT SUB ' (a space)
+    o = ftGlyf + a#
+    nc = FtS16&(o)
+    IF nc >= 0 THEN
+        IF nc = 0 THEN EXIT SUB
+        np = FtU16&(o + 10 + 2 * (nc - 1)) + 1: IF np < 1 OR np > 20000 THEN EXIT SUB
+        il = FtU16&(o + 10 + 2 * nc): fo = o + 12 + 2 * nc + il
+        REDIM fgF(np - 1) AS LONG, fgX#(np - 1), fgY#(np - 1)
+        i = 0
+        DO WHILE i < np ' (flags, some repeated)
+            f = FtU8&(fo): fo = fo + 1: fgF(i) = f: i = i + 1
+            IF f AND 8 THEN
+                r = FtU8&(fo): fo = fo + 1
+                FOR k = 1 TO r
+                    IF i < np THEN fgF(i) = f: i = i + 1
+                NEXT
+            END IF
+        LOOP
+        x = 0
+        FOR i = 0 TO np - 1
+            f = fgF(i)
+            IF f AND 2 THEN
+                d = FtU8&(fo): fo = fo + 1: IF (f AND 16) = 0 THEN d = -d
+            ELSEIF (f AND 16) = 0 THEN
+                d = FtS16&(fo): fo = fo + 2
+            ELSE
+                d = 0
+            END IF
+            x = x + d: fgX#(i) = x
+        NEXT
+        y = 0
+        FOR i = 0 TO np - 1
+            f = fgF(i)
+            IF f AND 4 THEN
+                d = FtU8&(fo): fo = fo + 1: IF (f AND 32) = 0 THEN d = -d
+            ELSEIF (f AND 32) = 0 THEN
+                d = FtS16&(fo): fo = fo + 2
+            ELSE
+                d = 0
+            END IF
+            y = y + d: fgY#(i) = y
+        NEXT
+        FOR i = 0 TO np - 1 ' (into place)
+            a# = fgX#(i): b# = fgY#(i)
+            fgX#(i) = m0# * a# + m2# * b# + m4#: fgY#(i) = m1# * a# + m3# * b# + m5#
+        NEXT
+        svM#(0) = 1: svM#(1) = 0: svM#(2) = 0: svM#(3) = 1: svM#(4) = 0: svM#(5) = 0
+        s = 0
+        FOR c = 0 TO nc - 1
+            e = FtU16&(o + 10 + 2 * c)
+            IF e >= s AND e < np THEN FontContour s, e
+            s = e + 1
+        NEXT
+    ELSE ' (a composite: other glyphs, each moved, maybe scaled)
+        fo = o + 10
+        DO
+            fl = FtU16&(fo): gi = FtU16&(fo + 2): fo = fo + 4
+            IF fl AND 1 THEN
+                a1# = FtS16&(fo): a2# = FtS16&(fo + 2): fo = fo + 4
+            ELSE
+                a1# = FtU8&(fo): a2# = FtU8&(fo + 1): fo = fo + 2
+                IF a1# >= 128 THEN a1# = a1# - 256
+                IF a2# >= 128 THEN a2# = a2# - 256
+            END IF
+            IF (fl AND 2) = 0 THEN a1# = 0: a2# = 0 ' (points matched, not offsets: left where they are)
+            sa# = 1: sb# = 0: scc# = 0: sd# = 1
+            IF fl AND 8 THEN
+                sa# = FtF2#(fo): sd# = sa#: fo = fo + 2
+            ELSEIF fl AND 64 THEN
+                sa# = FtF2#(fo): sd# = FtF2#(fo + 2): fo = fo + 4
+            ELSEIF fl AND 128 THEN
+                sa# = FtF2#(fo): sb# = FtF2#(fo + 2): scc# = FtF2#(fo + 4): sd# = FtF2#(fo + 6): fo = fo + 8
+            END IF
+            FontRings gi, m0# * sa# + m2# * sb#, m1# * sa# + m3# * sb#, m0# * scc# + m2# * sd#, m1# * scc# + m3# * sd#, m0# * a1# + m2# * a2# + m4#, m1# * a1# + m3# * a2# + m5#, depth + 1
+        LOOP WHILE (fl AND 32) <> 0 AND fo < LEN(ftD$)
+    END IF
+END SUB
+
+' Points s to e of the glyph (fgX/fgY, fgF bit 1: on the curve) as a ring:
+' two off the curve in a row have one on it between them
+SUB FontContour (s AS LONG, e AS LONG)
+    DIM n AS LONG, j0 AS LONG, k AS LONG, i AS LONG, cx#, cy#, hasC, qx#, qy#, sx#, sy#, mx#, my#, steps, last AS LONG
+    n = e - s + 1: IF n < 2 THEN EXIT SUB
+    j0 = -1
+    FOR i = s TO e
+        IF fgF(i) AND 1 THEN j0 = i: EXIT FOR
+    NEXT
+    SvStart
+    IF j0 >= 0 THEN
+        sx# = fgX#(j0): sy# = fgY#(j0): last = n
+    ELSE ' (none on it: start between the last and the first)
+        sx# = (fgX#(e) + fgX#(s)) / 2: sy# = (fgY#(e) + fgY#(s)) / 2: j0 = s - 1: last = n
+    END IF
+    SvAddL sx#, sy#
+    cx# = sx#: cy# = sy#: hasC = 0: steps = 6
+    FOR k = 1 TO last
+        i = s + ((j0 - s + k) MOD n + n) MOD n
+        IF fgF(i) AND 1 THEN
+            IF hasC THEN FontQuad cx#, cy#, qx#, qy#, fgX#(i), fgY#(i), steps ELSE SvAddL fgX#(i), fgY#(i)
+            cx# = fgX#(i): cy# = fgY#(i): hasC = 0
+        ELSE
+            IF hasC THEN
+                mx# = (qx# + fgX#(i)) / 2: my# = (qy# + fgY#(i)) / 2
+                FontQuad cx#, cy#, qx#, qy#, mx#, my#, steps
+                cx# = mx#: cy# = my#
+            END IF
+            qx# = fgX#(i): qy# = fgY#(i): hasC = -1
+        END IF
+    NEXT
+    IF hasC THEN FontQuad cx#, cy#, qx#, qy#, sx#, sy#, steps
+    SvRingEnd
+END SUB
+
+SUB FontQuad (ax#, ay#, bx#, by#, cx#, cy#, n)
+    DIM k, t#, u#
+    FOR k = 1 TO n
+        t# = k / n: u# = 1 - t#
+        SvAddL u# * u# * ax# + 2 * u# * t# * bx# + t# * t# * cx#, u# * u# * ay# + 2 * u# * t# * by# + t# * t# * cy#
+    NEXT
+END SUB
+
+' Text t$ as rings, h# cells to the em: character i's are svRE i, x along from 0,
+' the baseline y 0. w# its width
+SUB FontText (t$, h#, w#)
+    DIM i, c&, g AS LONG, x#, sc#
+    svPN = 0: svRC = 0: svEN = 0: svRing = 0: w# = 0
+    IF ftOk = 0 THEN EXIT SUB
+    sc# = h# / ftUpem
+    FOR i = 1 TO LEN(t$)
+        c& = ASC(t$, i): svEN = i
+        g = FontGlyph&(c&)
+        FontRings g, sc#, 0, 0, sc#, x#, 0, 0
+        x# = x# + FontAdv&(g) * sc#
+    NEXT
+    w# = x#
+END SUB
+
+' ---------------------------------------------------------------- the fonts there are
+
+' Every .ttf / .ttc (and .otf: if its outlines are glyf ones) in DRAW's fonts,
+' bu1ld0r's fonts/, the user's and the system's - listed by name
+SUB FontScan
+    DIM h$, i, j
+    ftN = 0
+    h$ = ENVIRON$("HOME")
+    FontScanDir "fonts/"
+    FontScanDir h$ + "/git/DRAW/ASSETS/FONTS/"
+    FontScanDir h$ + "/.local/share/fonts/"
+    FontScanDir h$ + "/.fonts/"
+    FontScanDir "/usr/share/fonts/"
+    FontScanDir "/usr/local/share/fonts/"
+    FOR i = 1 TO ftN - 1 ' (by name)
+        FOR j = i + 1 TO ftN
+            IF UCASE$(ftName$(j)) < UCASE$(ftName$(i)) THEN SWAP ftName$(i), ftName$(j): SWAP ftFile$(i), ftFile$(j)
+        NEXT
+    NEXT
+END SUB
+
+SUB FontScanDir (root$)
+    DIM dq$(400), qN, q, d$, f$, e$, nm$, i
+    IF NOT _DIREXISTS(root$) THEN EXIT SUB
+    qN = 1: dq$(1) = "": q = 0
+    DO WHILE q < qN ' (a folder's names first: _FILES$ can't be asked about two at once)
+        q = q + 1: d$ = dq$(q)
+        f$ = _FILES$(root$ + d$)
+        DO WHILE LEN(f$)
+            IF RIGHT$(f$, 1) = "/" THEN
+                IF f$ <> "./" AND f$ <> "../" AND qN < 400 THEN qN = qN + 1: dq$(qN) = d$ + f$
+            ELSE
+                e$ = LCASE$(RIGHT$(f$, 4))
+                IF (e$ = ".ttf" OR e$ = ".ttc" OR e$ = ".otf") AND ftN < FT_MAX AND LEFT$(f$, 1) <> "." THEN
+                    nm$ = LEFT$(f$, LEN(f$) - 4)
+                    FOR i = 1 TO ftN ' (the same font in two places: once)
+                        IF ftName$(i) = nm$ THEN nm$ = "": EXIT FOR
+                    NEXT
+                    IF LEN(nm$) THEN ftN = ftN + 1: ftName$(ftN) = nm$: ftFile$(ftN) = root$ + d$ + f$
+                END IF
+            END IF
+            f$ = _FILES$
+        LOOP
+    LOOP
+END SUB

@@ -12,9 +12,10 @@
 ' part of what's left; then the hole goes
 SUB HoleApply
     DIM h, q, cnt, gone, i, j, hasOne, t0 AS LONG, t1 AS LONG, t2 AS LONG, m1 AS LONG, m2 AS LONG, la AS LONG, lb AS LONG, id AS LONG
-    DIM lo AS V3, hi AS V3, hlo AS V3, hhi AS V3
+    DIM lo AS V3, hi AS V3, hlo AS V3, hhi AS V3, picked
     FOR h = 1 TO pN
         IF pSel(h) AND pHole(h) THEN hasOne = -1
+        IF pSel(h) AND pHole(h) = 0 THEN picked = -1 ' (solid parts selected too: those are what's cut, wherever listed)
     NEXT
     IF hasOne = 0 THEN Msg "Select a hole (C makes one), then APPLY cuts it for good": EXIT SUB
     UndoPush
@@ -23,8 +24,8 @@ SUB HoleApply
     DO WHILE h <= pN
         IF pSel(h) AND pHole(h) THEN
             t0 = tN: usN = 0: MeshItem h, h: t1 = tN: TriBounds t0 + 1, t1, hlo, hhi
-            FOR q = 1 TO h - 1
-                IF pHole(q) = 0 AND del(q) = 0 AND (pGrp(h) = 0 OR pGrp(h) = pGrp(q)) THEN
+            FOR q = 1 TO pN
+                IF pHole(q) = 0 AND del(q) = 0 AND ((picked AND pSel(q)) OR (picked = 0 AND HoleCuts(h, q))) THEN
                     tN = t1: usN = 0: MeshItem q, q: t2 = tN
                     TriBounds t1 + 1, t2, lo, hi
                     IF pKeep(h) OR BoxesMeet(lo, hi, hlo, hhi) THEN
@@ -56,10 +57,54 @@ SUB HoleApply
     pN = j
     ModelChanged
     IF cnt = 0 THEN
-        Msg "Applied: it reached no solid part before it in the list, so it just went (Ctrl+Z: back)"
+        Msg "Applied: it reached no solid part (it cuts its group's, else the ones listed before it - or select the parts to cut with it), so it just went (Ctrl+Z: back)"
     ELSE
         Msg "Cut for good: " + LTRIM$(STR$(cnt)) + " part" + IIFS$(cnt = 1, "", "s") + " made mesh parts" + IIFS$(gone > 0, " (" + LTRIM$(STR$(gone)) + " with nothing left: gone)", "") + ". E edits their faces. Ctrl+Z: as it was"
     END IF
+END SUB
+
+' MERGE (M): the selected solid parts made one mesh part - their union:
+' each one's faces outside the others, the overlaps gone (a face two share
+' kept once). It takes the first one's place in the list, group and name;
+' unturned, sized to fit. One undo step.
+SUB SelMerge
+    DIM q, n, first, i, j, t0 AS LONG, a0 AS LONG, t1 AS LONG, m1 AS LONG, m2 AS LONG, acc AS LONG, l AS LONG, id AS LONG
+    DIM lo AS V3, hi AS V3
+    FOR q = 1 TO pN
+        IF pSel(q) AND pHole(q) = 0 THEN n = n + 1
+    NEXT
+    IF n < 2 THEN Msg "MERGE: select two solid parts or more (Shift+click, or drag a box round them) - they become one": EXIT SUB
+    UndoPush
+    REDIM del(MAX_PARTS) AS _BYTE
+    t0 = tN
+    CsgMark m1, m2
+    FOR q = 1 TO pN
+        IF pSel(q) AND pHole(q) = 0 THEN
+            a0 = tN: usN = 0: MeshItem q, q
+            l = CsgFromTris&(a0 + 1, tN, 0): tN = a0
+            IF first = 0 THEN first = q: acc = l ELSE acc = CsgBool&(acc, l, 2): del(q) = -1
+        END IF
+    NEXT
+    t1 = tN: CsgEmit acc
+    CsgRelease m1, m2
+    IF tN = t1 THEN tN = t0: Msg "MERGE: nothing came of it": EXIT SUB
+    TriBounds t1 + 1, tN, lo, hi
+    pRX(first) = 0: pRY(first) = 0: pRZ(first) = 0
+    pSX(first) = hi.x - lo.x: pSY(first) = hi.y - lo.y: pSZ(first) = hi.z - lo.z
+    IF pSX(first) < .001 THEN pSX(first) = .001
+    IF pSY(first) < .001 THEN pSY(first) = .001
+    IF pSZ(first) < .001 THEN pSZ(first) = .001
+    pX(first) = (lo.x + hi.x) / 2: pY(first) = lo.y: pZ(first) = (lo.z + hi.z) / 2
+    id = EmFromTris&(t1 + 1, tN, first, 0)
+    MakeMeshPart first, id
+    tN = t0
+    j = 0
+    FOR i = 1 TO pN
+        IF del(i) = 0 THEN j = j + 1: PartCopy i, j: pSel(j) = (i = first)
+    NEXT
+    pN = j
+    ModelChanged
+    Msg "Merged " + LTRIM$(STR$(n)) + " parts into one mesh part (E edits its faces). Ctrl+Z: as they were"
 END SUB
 
 ' UNLINK: each selected prefab use replaced by its prefab's parts, as
@@ -355,3 +400,39 @@ FUNCTION UseLinesRenamed$ (t$, o$, r$)
     LOOP
     UseLinesRenamed$ = o2$ + MID$(t$, last)
 END FUNCTION
+
+' A box dragged round parts in the view (lx, ly its other corner): each part
+' whose middle is in it, and shown, is selected (Shift had kept the others;
+' a group: all of it, Alt: just the one)
+SUB SelRectEnd (lx, ly)
+    DIM x0, y0, x1, y1, t AS LONG, p, n, sx, sy, vx, vy, vz, cx#, cy#, cz#
+    x0 = selRX0: x1 = lx: IF x1 < x0 THEN SWAP x0, x1
+    y0 = selRY0: y1 = ly: IF y1 < y0 THEN SWAP y0, y1
+    selRect = 0
+    IF x1 - x0 < 3 AND y1 - y0 < 3 THEN EXIT SUB ' (a click on nothing)
+    IF meshDirty THEN MeshBuild
+    DIM lo(pN) AS V3, hi(pN) AS V3, seen(pN)
+    FOR t = 1 TO holeTN
+        p = tPart(t)
+        IF p >= 1 AND p <= pN THEN
+            IF seen(p) = 0 THEN seen(p) = -1: lo(p) = tA(t): hi(p) = tA(t)
+            BoxGrow lo(p), hi(p), tA(t): BoxGrow lo(p), hi(p), tB(t): BoxGrow lo(p), hi(p), tC(t)
+        END IF
+    NEXT
+    FOR p = 1 TO pN
+        IF seen(p) THEN
+            cx# = (lo(p).x + hi(p).x) / 2: cy# = (lo(p).y + hi(p).y) / 2: cz# = (lo(p).z + hi(p).z) / 2
+            CamSpace cx#, cy#, cz#, vx, vy, vz
+            IF vz > .01 THEN
+                sx = cMidX + vx / vz * cFoc: sy = cMidY - vy / vz * cFoc
+                IF sx >= x0 AND sx <= x1 AND sy >= y0 AND sy <= y1 THEN
+                    IF pSel(p) = 0 THEN n = n + 1
+                    pSel(p) = -1
+                    IF NOT kAlt THEN GroupSelect p
+                END IF
+            END IF
+        END IF
+    NEXT
+    ovDirty = -1: listFollow = -1
+    IF n THEN Msg "Selected" + STR$(SelCount) + IIFS$(SelCount = 1, " part", " parts") + " (drag one to move them all; Shift + box: adds)" ELSE Msg "No part's middle in the box"
+END SUB

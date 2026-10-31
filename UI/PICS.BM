@@ -525,12 +525,21 @@ END FUNCTION
 ' none on them: a new one made, the face's shape and colour, put on them all
 ' first. It's watched: each time DRAW saves it, the model shows it.
 SUB PicEditInDraw
-    DIM id AS LONG, f AS LONG, g AS LONG, ref$, k, w AS LONG, x#, y#, z#, nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
-    DIM a#, b#, a0#, a1#, b0#, b1#, iw, ih, img&, d, n$, c AS _UNSIGNED LONG, f0 AS LONG, cnt AS LONG, e$
-    IF edPart = 0 OR edMode <> ED_FACES THEN Msg "In E, pick faces (2: FACES), then EDIT IN DRAW": EXIT SUB
-    IF NOT EdNeed THEN EXIT SUB
-    e$ = DrawExe$
-    IF LEN(e$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
+    DIM ref$, cnt AS LONG
+    IF LEN(DrawExe$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
+    ref$ = PicOfPicked$(cnt): IF LEN(ref$) = 0 THEN EXIT SUB
+    DrawOpen ref$
+    Msg "pictures/" + ref$ + ".png opened in DRAW" + IIFS$(cnt > 0, " (new: on the " + LTRIM$(STR$(cnt)) + " picked face" + IIFS$(cnt = 1, ")", "s)"), "") + " - save it there (Ctrl+S) and it shows here"
+END SUB
+
+' The picture of the faces picked in E (the first with one) - none: a new one, as
+' wide and tall as the first face is, in its colour, put on them all (cnt: how many)
+FUNCTION PicOfPicked$ (cnt AS LONG)
+    DIM id AS LONG, f AS LONG, g AS LONG, ref$, k, x#, y#, z#, nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+    DIM a#, b#, a0#, a1#, b0#, b1#, iw, ih, f0 AS LONG
+    cnt = 0
+    IF edPart = 0 OR edMode <> ED_FACES THEN Msg "In E, pick faces (2: FACES) first": EXIT FUNCTION
+    IF NOT EdNeed THEN EXIT FUNCTION
     id = pMesh(edPart)
     FOR f = 0 TO edFN - 1 ' (one of them has a picture: that one)
         IF edSelF(f) THEN
@@ -538,12 +547,12 @@ SUB PicEditInDraw
             IF mfTex(g) > 0 THEN ref$ = picRef$(mfTex(g)): EXIT FOR
         END IF
     NEXT
-    IF LEN(ref$) = 0 THEN ' (none: a new picture, as wide and tall as the first face is, in its colour)
+    IF LEN(ref$) = 0 THEN
         EdBegin -1
         FOR f = 1 TO sfN
             IF sfLive(f) AND wsF(f) THEN f0 = f: EXIT FOR
         NEXT
-        IF f0 = 0 THEN EdCommit: EXIT SUB
+        IF f0 = 0 THEN EdCommit: EXIT FUNCTION
         EdNormW f0, nx#, ny#, nz#
         PicAxes nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
         a0# = 1E+30: a1# = -1E+30: b0# = 1E+30: b1# = -1E+30
@@ -560,27 +569,17 @@ SUB PicEditInDraw
         IF a# >= b# THEN iw = 64: ih = INT(64 * b# / a# + .5) ELSE ih = 64: iw = INT(64 * a# / b# + .5)
         IF iw < 8 THEN iw = 8
         IF ih < 8 THEN ih = 8
-        IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
-        IF NOT _DIREXISTS(PicDir$ + binPicDir$) THEN binPicDir$ = ""
-        n$ = SafeName$(mdlName$): IF LEN(n$) = 0 THEN n$ = "model"
-        k = 1: ref$ = binPicDir$ + n$ + "-face"
-        DO WHILE _FILEEXISTS(PicDir$ + ref$ + ".png")
-            k = k + 1: ref$ = binPicDir$ + n$ + "-face" + LTRIM$(STR$(k))
-        LOOP
-        c = sfCol(f0) OR &HFF000000
-        img& = _NEWIMAGE(iw, ih, 32): d = _DEST: _DEST img&: CLS , c: _DEST d
-        _SAVEIMAGE PicDir$ + ref$ + ".png", img&: _FREEIMAGE img&
+        ref$ = PicNewFile$(iw, ih, sfCol(f0))
+        IF LEN(ref$) = 0 THEN EdCommit: EXIT FUNCTION
         k = PicFind(ref$)
-        IF k <= 0 OR picW(k) = 0 THEN EdCommit: Msg "Couldn't make pictures/" + ref$ + ".png": EXIT SUB
+        IF k <= 0 OR picW(k) = 0 THEN EdCommit: Msg "Couldn't make pictures/" + ref$ + ".png": EXIT FUNCTION
         FOR f = 1 TO sfN
             IF sfLive(f) AND wsF(f) THEN sfTex(f) = k: PicFit f: cnt = cnt + 1
         NEXT
         EdCommit
-        IF binTab = 1 THEN BinList
     END IF
-    DrawOpen ref$
-    Msg "pictures/" + ref$ + ".png opened in DRAW" + IIFS$(cnt > 0, " (new: on the " + LTRIM$(STR$(cnt)) + " picked face" + IIFS$(cnt = 1, ")", "s)"), "") + " - save it there (Ctrl+S) and it shows here"
-END SUB
+    PicOfPicked$ = ref$
+END FUNCTION
 
 ' Picture ref$ opened in DRAW (watched: each save shows here)
 SUB DrawOpen (ref$)
@@ -874,6 +873,7 @@ SUB EdPicBtn (k, x, y, w, h)
     IF k >= PT_LEFT AND k <= PT_DOWN THEN y = 700 + 4 * 26: x = PX0 + (k - PT_LEFT) * 59: w = 54
     IF k = PT_NONE THEN y = 700 + 5 * 26: x = PX0
     IF k = PT_DRAW THEN y = 700 + 5 * 26: x = PX0 + 118
+    IF k = PT_PAINT THEN y = 700 + 6 * 26: x = PX0: w = 230
 END SUB
 
 FUNCTION EdPicBtnName$ (k)
@@ -892,35 +892,38 @@ FUNCTION EdPicBtnName$ (k)
         CASE PT_DEFORM: EdPicBtnName$ = "DEFORM"
         CASE PT_MOVE: EdPicBtnName$ = "MOVE IT  P"
         CASE PT_DRAW: EdPicBtnName$ = "EDIT IN DRAW"
+        CASE PT_PAINT: EdPicBtnName$ = "PAINT IT  Ctrl+P"
     END SELECT
 END FUNCTION
 
 FUNCTION EdPicShown
-    EdPicShown = (edMode = ED_FACES AND 700 + 6 * 26 < scrH - BAR_H)
+    EdPicShown = (edMode = ED_FACES AND 700 + 7 * 26 < scrH - BAR_H)
 END FUNCTION
 
 SUB EdPicDraw
     DIM k, x, y, w, h
     IF NOT EdPicShown THEN EXIT SUB
     Txt PX0, 682, "PICTURE (on the picked faces)", cDim
-    FOR k = 1 TO PT_DRAW
+    FOR k = 1 TO PT_PAINT
         EdPicBtn k, x, y, w, h: Btn x, y, w, h, EdPicBtnName$(k), (k = PT_MOVE AND pvOn)
     NEXT
-    IF pvOn AND 700 + 6 * 26 + 50 < scrH - BAR_H THEN
-        Txt PX0, 862, "Drag a picked face: slide", cHi
-        Txt PX0, 878, "Wheel: size  Shift: turn", cHi
-        Txt PX0, 894, "Alt: off its pixels", cDim
+    IF pvOn AND 700 + 7 * 26 + 50 < scrH - BAR_H THEN
+        Txt PX0, 888, "Drag a picked face: slide", cHi
+        Txt PX0, 904, "Wheel: size  Shift: turn", cHi
+        Txt PX0, 920, "Alt: off its pixels", cDim
     END IF
 END SUB
 
 FUNCTION EdPicClick
     DIM k, x, y, w, h
     IF NOT EdPicShown THEN EXIT FUNCTION
-    FOR k = 1 TO PT_DRAW
+    FOR k = 1 TO PT_PAINT
         EdPicBtn k, x, y, w, h
         IF InRect(mX, mY, x, y, w, h) THEN
             IF k = PT_MOVE THEN
                 PvToggle
+            ELSEIF k = PT_PAINT THEN
+                PntFromPointer
             ELSEIF k = PT_DRAW THEN
                 PicEditInDraw
             ELSE
@@ -949,9 +952,10 @@ END SUB
 SUB DropTake (f$)
     DIM e$, ref$, lx, ly
     IF _DIREXISTS(f$) THEN binTab = 1: PicGoTo f$: EXIT SUB ' (a folder: its pictures in the bin)
+    IF RefAt(mX, mY) THEN RefSet refSel, f$: EXIT SUB ' (on REF's controls: a reference picture)
     e$ = LCASE$(RIGHT$(f$, 4))
     SELECT CASE e$
-        CASE ".bld", ".obj"
+        CASE ".bld", ".obj", ".svg"
             ModelLoad f$
         CASE ".png"
             ref$ = PicBring$(f$): IF LEN(ref$) = 0 THEN EXIT SUB
@@ -973,3 +977,141 @@ FUNCTION FileSame (a$, b$)
     fh = FREEFILE: OPEN b$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
     FileSame = (s$ = t$)
 END FUNCTION
+
+' ---------------------------------------------------------------- copying a face's look (E: Ctrl+C / Ctrl+V)
+
+' The face E copies from: the first picked, else the one under the pointer (-1 none; from 0)
+FUNCTION FaceLookSrc&
+    DIM f AS LONG
+    FOR f = 0 TO edFN - 1
+        IF edSelF(f) THEN FaceLookSrc& = f: EXIT FUNCTION
+    NEXT
+    FaceLookSrc& = EdFaceAt&(mX - vX0, mY - vY0)
+END FUNCTION
+
+' A face's picture as it lies on it - its spots as planes across the face (its
+' PicAxes, from its box's corner), so another face gets it as big, as turned and
+' as far along - or, no picture, its colour
+SUB FaceLookCopy
+    DIM f AS LONG, k AS LONG, w AS LONG, n AS LONG, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#, a#, b#
+    DIM sa#, sb#, saa#, sab#, sbb#, su#, sau#, sbu#, sv#, sav#, sbv#, det#
+    f = FaceLookSrc&: IF f < 0 THEN Msg "Pick a face (or point at one), then Ctrl+C copies its picture as it lies": EXIT SUB
+    EdBegin 0: f = f + 1
+    lookCol = sfCol(f): lookTex = sfTex(f)
+    IF lookTex > 0 THEN
+        FaceFrame f, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#
+        n = sfCN(f)
+        FOR k = 0 TO n - 1 ' (least squares: u = c0 + c1 a + c2 b, v the same)
+            w = scV(sfC0(f) + k)
+            a# = swX(w) * rx# + swY(w) * ry# + swZ(w) * rz# - a0#: b# = swX(w) * ux# + swY(w) * uy# + swZ(w) * uz# - b0#
+            sa# = sa# + a#: sb# = sb# + b#: saa# = saa# + a# * a#: sab# = sab# + a# * b#: sbb# = sbb# + b# * b#
+            su# = su# + scTU(sfC0(f) + k): sau# = sau# + a# * scTU(sfC0(f) + k): sbu# = sbu# + b# * scTU(sfC0(f) + k)
+            sv# = sv# + scTV(sfC0(f) + k): sav# = sav# + a# * scTV(sfC0(f) + k): sbv# = sbv# + b# * scTV(sfC0(f) + k)
+        NEXT
+        det# = n * (saa# * sbb# - sab# * sab#) - sa# * (sa# * sbb# - sab# * sb#) + sb# * (sa# * sab# - saa# * sb#)
+        IF ABS(det#) < 1E-15 THEN lookTex = 0: Msg "That face's picture can't be read off it (squashed to a line)": EXIT SUB
+        Solve3 n, sa#, sb#, sa#, saa#, sab#, sb#, sab#, sbb#, su#, sau#, sbu#, det#, lookU#(0), lookU#(1), lookU#(2)
+        Solve3 n, sa#, sb#, sa#, saa#, sab#, sb#, sab#, sbb#, sv#, sav#, sbv#, det#, lookV#(0), lookV#(1), lookV#(2)
+        Msg "Copied: the picture " + picRef$(lookTex) + " as it lies on that face - Ctrl+V: on the picked faces (Shift: every face)"
+    ELSE
+        Msg "Copied: that face's colour (no picture on it) - Ctrl+V: on the picked faces (Shift: every face)"
+    END IF
+    lookHave = -1
+END SUB
+
+' Work face f's axes (PicAxes) and its box's corner along them
+SUB FaceFrame (f AS LONG, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#)
+    DIM k AS LONG, w AS LONG, a#, b#
+    PicAxes CDBL(sfNx(f)), CDBL(sfNy(f)), CDBL(sfNz(f)), rx#, ry#, rz#, ux#, uy#, uz#
+    a0# = 1E+30: b0# = 1E+30
+    FOR k = 0 TO sfCN(f) - 1
+        w = scV(sfC0(f) + k)
+        a# = swX(w) * rx# + swY(w) * ry# + swZ(w) * rz#: b# = swX(w) * ux# + swY(w) * uy# + swZ(w) * uz#
+        IF a# < a0# THEN a0# = a#
+        IF b# < b0# THEN b0# = b#
+    NEXT
+END SUB
+
+' 3 x 3 by Cramer's rule (rows m0 m1 m2 / m3 m4 m5 / m6 m7 m8, right side r0 r1 r2, det given)
+SUB Solve3 (m0#, m1#, m2#, m3#, m4#, m5#, m6#, m7#, m8#, r0#, r1#, r2#, det#, x0#, x1#, x2#)
+    x0# = (r0# * (m4# * m8# - m5# * m7#) - m1# * (r1# * m8# - m5# * r2#) + m2# * (r1# * m7# - m4# * r2#)) / det#
+    x1# = (m0# * (r1# * m8# - m5# * r2#) - r0# * (m3# * m8# - m5# * m6#) + m2# * (m3# * r2# - r1# * m6#)) / det#
+    x2# = (m0# * (m4# * r2# - r1# * m7#) - m1# * (m3# * r2# - r1# * m6#) + r0# * (m3# * m7# - m4# * m6#)) / det#
+END SUB
+
+' The look copied put on E's picked faces (none picked: the one under the pointer), or all: every face
+SUB FaceLookPaste (all)
+    DIM f AS LONG, k AS LONG, w AS LONG, n AS LONG, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#, a#, b#, under AS LONG, hit
+    IF lookHave = 0 THEN Msg "Nothing copied yet: pick a face, Ctrl+C": EXIT SUB
+    under = -1
+    IF all = 0 THEN
+        FOR f = 0 TO edFN - 1
+            IF edSelF(f) THEN hit = -1
+        NEXT
+        IF hit = 0 THEN under = EdFaceAt&(mX - vX0, mY - vY0): IF under < 0 THEN Msg "Pick faces (or point at one) for Ctrl+V - Ctrl+Shift+V: every face": EXIT SUB
+    END IF
+    EdBegin -1
+    FOR f = 1 TO sfN
+        hit = all
+        IF all = 0 THEN
+            IF under >= 0 THEN hit = (f = under + 1) ELSE IF f <= UBOUND(wsF) THEN hit = (wsF(f) <> 0)
+        END IF
+        IF sfLive(f) AND hit THEN
+            n = n + 1
+            sfCol(f) = lookCol: sfTex(f) = lookTex
+            IF lookTex > 0 THEN
+                FaceFrame f, rx#, ry#, rz#, ux#, uy#, uz#, a0#, b0#
+                FOR k = 0 TO sfCN(f) - 1
+                    w = scV(sfC0(f) + k)
+                    a# = swX(w) * rx# + swY(w) * ry# + swZ(w) * rz# - a0#: b# = swX(w) * ux# + swY(w) * uy# + swZ(w) * uz# - b0#
+                    scTU(sfC0(f) + k) = lookU#(0) + lookU#(1) * a# + lookU#(2) * b#
+                    scTV(sfC0(f) + k) = lookV#(0) + lookV#(1) * a# + lookV#(2) * b#
+                NEXT
+            END IF
+        END IF
+    NEXT
+    EdCommit
+    Msg "Put on" + STR$(n) + IIFS$(n = 1, " face", " faces") + " (Ctrl+Z: as they were)"
+END SUB
+
+' ---------------------------------------------------------------- copying parts (Ctrl+C / Ctrl+X / Ctrl+V)
+
+SUB SelCopy
+    DIM i, n
+    IF SelCount = 0 THEN Msg "Select parts first: Ctrl+C copies them (in E: a face's picture)": EXIT SUB
+    clipParts$ = ""
+    FOR i = 1 TO pN
+        IF pSel(i) THEN
+            clipParts$ = clipParts$ + PartLine$(i)
+            IF pKind(i) = K_MESH THEN clipParts$ = clipParts$ + "  mesh=" + LTRIM$(STR$(pMesh(i)))
+            clipParts$ = clipParts$ + CHR$(10): n = n + 1
+        END IF
+    NEXT
+    Msg "Copied" + STR$(n) + IIFS$(n = 1, " part", " parts") + " - Ctrl+V puts copies in (a grid step along)"
+END SUB
+
+' The copied parts put in, two grid steps along x, selected; their groups new ones
+SUB SelPaste
+    DIM n AS LONG, i, j, st, g, og(64), ng(64), m, k
+    IF LEN(clipParts$) = 0 THEN Msg "Nothing copied yet: select parts, Ctrl+C": EXIT SUB
+    UndoPush
+    n = PartsFromText&(clipParts$, pN, MAX_PARTS - pN)
+    IF n = 0 THEN Msg "No room for them": EXIT SUB
+    st = snapStep: IF st <= 0 THEN st = 1 / 32
+    g = GroupNew
+    SelNone
+    FOR i = pN + 1 TO pN + n
+        pSel(i) = -1: pX(i) = VAL(Fmt$(pX(i) + st * 2))
+        IF pGrp(i) THEN ' (each group copied: a new one)
+            k = 0
+            FOR j = 1 TO m
+                IF og(j) = pGrp(i) THEN k = j
+            NEXT
+            IF k = 0 AND m < 64 THEN m = m + 1: og(m) = pGrp(i): ng(m) = g: g = g + 1: k = m
+            IF k THEN pGrp(i) = ng(k)
+        END IF
+    NEXT
+    pN = pN + n
+    ModelChanged
+    Msg "Pasted" + STR$(n) + IIFS$(n = 1, " part", " parts") + ": selected (drag them where they go)"
+END SUB

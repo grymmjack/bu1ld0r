@@ -10,3 +10,10 @@ DIM SHARED gzAxis ' (the arrow grabbed: 1 x, 2 y, 3 z - 0 none)
 DIM SHARED gzHover, gzOk, gzL, gzC AS V3 ' (the arrow under the pointer; the widget's middle and its arrows' length, in the world)
 DIM SHARED dragAxis ' (the axis the drag keeps to now)
 DIM SHARED dragLX0, dragLY0 ' (where in the view the drag began)
+' TRANSFORM (the panel): what a drag does - tfMode 0 MOVE, 1 SCALE, 2 TURN - and
+' on which axes (tfAx(1..3) x y z: any of them on); the widget shows just those
+DIM SHARED tfMode, tfAx(3)
+DIM SHARED dragC AS V3, dragLo AS V3, dragHi AS V3 ' (a drag's middle - the widget's - and the selection's box, as it began)
+DIM SHARED dragSX0(MAX_PARTS), dragSY0(MAX_PARTS), dragSZ0(MAX_PARTS), dragRX0(MAX_PARTS), dragRY0(MAX_PARTS), dragRZ0(MAX_PARTS)
+DIM SHARED dragNat#(MAX_PARTS, 3) ' (SCALE: a mesh part's / use's own size each way, so its size lands on the grid)
+DIM SHARED tfPivOn, tfPiv AS V3, gzLo AS V3, gzHi AS V3, tfPivKey$ ' (the pivot: SCALE from it, TURN round it - Ctrl+Alt+click; the selection's box; whose it is)

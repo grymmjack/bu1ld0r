@@ -1,0 +1,905 @@
+''
+' bu1ld0r - MODEL/SVG.BM
+' =============================================================================
+' An SVG as a model (see SVG.BI): read, each filled shape's outlines
+' (svPX/svPY, rings svR0/svRN, shapes svRE), fitted, then each shape a
+' mesh part - its faces' outlines with their holes bridged in, cut into
+' triangles (ears), front and back, and walls round every outline.
+'
+
+SUB SvgImport (p$)
+    DIM fh, s$, i AS LONG, j AS LONG, n AS LONG, nm$, tg$, q$, ch$, skipD, closing, selfC, f$
+    f$ = p$
+    IF NOT _FILEEXISTS(f$) THEN f$ = appDir$ + "models/" + p$
+    IF NOT _FILEEXISTS(f$) THEN Msg "No such file: " + p$: EXIT SUB
+    fh = FREEFILE: OPEN f$ FOR BINARY AS #fh: s$ = SPACE$(LOF(fh)): GET #fh, , s$: CLOSE #fh
+    svPN = 0: svRC = 0: svEN = 0: svRing = 0: svTop = 0: svDeep = 0: svFull = 0
+    svT#(0, 0) = 1: svT#(0, 1) = 0: svT#(0, 2) = 0: svT#(0, 3) = 1: svT#(0, 4) = 0: svT#(0, 5) = 0
+    svFill(0) = _RGB32(0, 0, 0): svNone(0) = 0: svHid(0) = 0: svOp(0) = 1: svSrc$ = s$
+    i = 1: n = LEN(s$)
+    DO
+        i = INSTR(i, s$, "<"): IF i = 0 THEN EXIT DO
+        IF MID$(s$, i, 4) = "<!--" THEN
+            j = INSTR(i + 4, s$, "-->"): IF j = 0 THEN EXIT DO
+            i = j + 3: _CONTINUE
+        END IF
+        IF MID$(s$, i, 9) = "<![CDATA[" THEN
+            j = INSTR(i + 9, s$, "]]>"): IF j = 0 THEN EXIT DO
+            i = j + 3: _CONTINUE
+        END IF
+        j = i + 1: q$ = "" ' (its end: a > not in quotes)
+        DO WHILE j <= n
+            ch$ = MID$(s$, j, 1)
+            IF LEN(q$) THEN
+                IF ch$ = q$ THEN q$ = ""
+            ELSEIF ch$ = CHR$(34) OR ch$ = "'" THEN
+                q$ = ch$
+            ELSEIF ch$ = ">" THEN
+                EXIT DO
+            END IF
+            j = j + 1
+        LOOP
+        tg$ = MID$(s$, i + 1, j - i - 1): i = j + 1
+        IF LEN(tg$) = 0 THEN _CONTINUE
+        ch$ = LEFT$(tg$, 1)
+        IF ch$ = "!" OR ch$ = "?" THEN _CONTINUE
+        closing = (ch$ = "/"): selfC = (RIGHT$(tg$, 1) = "/")
+        nm$ = SvTagName$(tg$)
+        IF closing THEN
+            IF skipD > 0 THEN
+                IF SvSkipName(nm$) THEN skipD = skipD - 1
+            ELSEIF SvGroupName(nm$) THEN
+                IF svDeep > 0 THEN
+                    svDeep = svDeep - 1
+                ELSEIF svTop > 0 THEN
+                    svTop = svTop - 1
+                END IF
+            END IF
+        ELSEIF skipD > 0 THEN
+            IF SvSkipName(nm$) AND NOT selfC THEN skipD = skipD + 1
+        ELSEIF SvSkipName(nm$) THEN
+            IF NOT selfC THEN skipD = 1
+        ELSEIF SvGroupName(nm$) THEN
+            IF NOT selfC THEN SvPush tg$
+        ELSE
+            SvShape nm$, tg$
+        END IF
+    LOOP
+    i = _INSTRREV(f$, "/"): nm$ = MID$(f$, i + 1): nm$ = LEFT$(nm$, LEN(nm$) - 4)
+    svSrc$ = ""
+    SvBuild nm$, f$
+END SUB
+
+FUNCTION SvTagName$ (tg$)
+    DIM i AS LONG, n$, ch$
+    i = 1: IF LEFT$(tg$, 1) = "/" THEN i = 2
+    DO WHILE i <= LEN(tg$)
+        ch$ = MID$(tg$, i, 1)
+        IF ch$ = " " OR ch$ = "/" OR ch$ = CHR$(9) OR ch$ = CHR$(10) OR ch$ = CHR$(13) THEN EXIT DO
+        n$ = n$ + ch$: i = i + 1
+    LOOP
+    n$ = LCASE$(n$)
+    i = INSTR(n$, ":"): IF i THEN n$ = MID$(n$, i + 1) ' (svg:path)
+    SvTagName$ = n$
+END FUNCTION
+
+' What isn't drawn (its insides skipped), and what holds others
+FUNCTION SvSkipName (n$)
+    SELECT CASE n$
+        CASE "defs", "clippath", "mask", "symbol", "pattern", "marker", "lineargradient", "radialgradient", "style", "title", "desc", "metadata", "text", "filter", "script", "foreignobject"
+            SvSkipName = -1
+    END SELECT
+END FUNCTION
+
+FUNCTION SvGroupName (n$)
+    SELECT CASE n$
+        CASE "g", "svg", "a", "switch"
+            SvGroupName = -1
+    END SELECT
+END FUNCTION
+
+' A group: its transform on its parent's, its fill if it says one
+SUB SvPush (tg$)
+    DIM k, col AS _UNSIGNED LONG, none, hid, op
+    IF svTop >= 32 THEN svDeep = svDeep + 1: EXIT SUB
+    FOR k = 0 TO 5: svM#(k) = svT#(svTop, k): NEXT
+    SvXform SvAttr$(tg$, "transform")
+    col = svFill(svTop): none = svNone(svTop): hid = svHid(svTop): op = svOp(svTop)
+    SvOwnFill tg$, col, none, hid, op
+    svTop = svTop + 1
+    FOR k = 0 TO 5: svT#(svTop, k) = svM#(k): NEXT
+    svFill(svTop) = col: svNone(svTop) = none: svHid(svTop) = hid: svOp(svTop) = op
+END SUB
+
+' Its fill (none, a colour), hidden (display, visibility, a filter - a glow or a shadow) and how see-through
+SUB SvOwnFill (tg$, col AS _UNSIGNED LONG, none, hid, op)
+    DIM v$
+    v$ = SvProp$(tg$, "opacity"): IF LEN(v$) THEN op = op * VAL(v$)
+    v$ = SvProp$(tg$, "fill-opacity"): IF LEN(v$) THEN op = op * VAL(v$)
+    IF LEN(SvProp$(tg$, "filter")) THEN hid = -1
+    v$ = SvStyle$(tg$, "fill"): IF LEN(v$) = 0 THEN v$ = SvAttr$(tg$, "fill")
+    v$ = LCASE$(_TRIM$(v$))
+    IF v$ = "none" OR v$ = "transparent" THEN
+        none = -1
+    ELSEIF LEN(v$) AND v$ <> "inherit" THEN
+        col = SvColour~&(v$): none = 0
+    END IF
+    v$ = SvStyle$(tg$, "display"): IF LEN(v$) = 0 THEN v$ = SvAttr$(tg$, "display")
+    IF LCASE$(_TRIM$(v$)) = "none" THEN hid = -1
+    v$ = SvStyle$(tg$, "visibility"): IF LEN(v$) = 0 THEN v$ = SvAttr$(tg$, "visibility")
+    IF LCASE$(_TRIM$(v$)) = "hidden" THEN hid = -1
+END SUB
+
+FUNCTION SvProp$ (tg$, nm$)
+    DIM v$
+    v$ = SvStyle$(tg$, nm$): IF LEN(v$) = 0 THEN v$ = SvAttr$(tg$, nm$)
+    SvProp$ = _TRIM$(v$)
+END FUNCTION
+
+' An attribute's value ("" if it hasn't one)
+FUNCTION SvAttr$ (tg$, nm$)
+    DIM l$, k AS LONG, b$, q$, e AS LONG
+    l$ = LCASE$(tg$)
+    k = 0
+    DO
+        k = INSTR(k + 1, l$, nm$ + "="): IF k = 0 THEN EXIT FUNCTION
+        IF k > 1 THEN
+            b$ = MID$(l$, k - 1, 1)
+            IF b$ = " " OR b$ = CHR$(9) OR b$ = CHR$(10) OR b$ = CHR$(13) THEN EXIT DO
+        END IF
+    LOOP
+    k = k + LEN(nm$) + 1
+    q$ = MID$(tg$, k, 1)
+    IF q$ = CHR$(34) OR q$ = "'" THEN
+        e = INSTR(k + 1, tg$, q$): IF e = 0 THEN e = LEN(tg$) + 1
+        SvAttr$ = MID$(tg$, k + 1, e - k - 1)
+    ELSE
+        e = INSTR(k, tg$, " "): IF e = 0 THEN e = LEN(tg$) + 1
+        SvAttr$ = MID$(tg$, k, e - k)
+    END IF
+END FUNCTION
+
+' A property in its style="a: b; c: d"
+FUNCTION SvStyle$ (tg$, pr$)
+    DIM st$, l$, k AS LONG, b$, e AS LONG
+    st$ = SvAttr$(tg$, "style"): IF LEN(st$) = 0 THEN EXIT FUNCTION
+    l$ = LCASE$(st$)
+    k = 0
+    DO
+        k = INSTR(k + 1, l$, pr$): IF k = 0 THEN EXIT FUNCTION
+        b$ = " ": IF k > 1 THEN b$ = MID$(l$, k - 1, 1)
+        IF b$ = " " OR b$ = ";" OR b$ = CHR$(9) OR b$ = CHR$(10) THEN
+            e = k + LEN(pr$)
+            DO WHILE MID$(l$, e, 1) = " ": e = e + 1: LOOP
+            IF MID$(l$, e, 1) = ":" THEN EXIT DO
+        END IF
+    LOOP
+    k = e + 1
+    e = INSTR(k, st$, ";"): IF e = 0 THEN e = LEN(st$) + 1
+    SvStyle$ = _TRIM$(MID$(st$, k, e - k))
+END FUNCTION
+
+FUNCTION SvColour~& (v$)
+    DIM r, g, b, h$, k AS LONG, i AS LONG, a$, pc
+    IF LEFT$(v$, 1) = "#" THEN
+        h$ = MID$(v$, 2)
+        IF LEN(h$) = 3 OR LEN(h$) = 4 THEN
+            r = VAL("&H" + MID$(h$, 1, 1) + MID$(h$, 1, 1)): g = VAL("&H" + MID$(h$, 2, 1) + MID$(h$, 2, 1)): b = VAL("&H" + MID$(h$, 3, 1) + MID$(h$, 3, 1))
+        ELSE
+            r = VAL("&H" + MID$(h$, 1, 2)): g = VAL("&H" + MID$(h$, 3, 2)): b = VAL("&H" + MID$(h$, 5, 2))
+        END IF
+        SvColour~& = _RGB32(r, g, b): EXIT FUNCTION
+    END IF
+    IF LEFT$(v$, 4) = "rgb(" OR LEFT$(v$, 5) = "rgba(" THEN
+        a$ = MID$(v$, INSTR(v$, "(") + 1): pc = INSTR(a$, "%") > 0
+        i = 1
+        r = SvNum#(a$, i): g = SvNum#(a$, i): b = SvNum#(a$, i)
+        IF pc THEN r = r * 2.55: g = g * 2.55: b = b * 2.55
+        SvColour~& = _RGB32(r, g, b): EXIT FUNCTION
+    END IF
+    SELECT CASE v$
+        CASE "black", "currentcolor": r = 0: g = 0: b = 0
+        CASE "white": r = 255: g = 255: b = 255
+        CASE "red": r = 255: g = 0: b = 0
+        CASE "green": r = 0: g = 128: b = 0
+        CASE "lime": r = 0: g = 255: b = 0
+        CASE "blue": r = 0: g = 0: b = 255
+        CASE "yellow": r = 255: g = 255: b = 0
+        CASE "cyan", "aqua": r = 0: g = 255: b = 255
+        CASE "magenta", "fuchsia": r = 255: g = 0: b = 255
+        CASE "gray", "grey": r = 128: g = 128: b = 128
+        CASE "silver", "lightgray", "lightgrey": r = 200: g = 200: b = 200
+        CASE "darkgray", "darkgrey": r = 169: g = 169: b = 169
+        CASE "maroon": r = 128: g = 0: b = 0
+        CASE "navy": r = 0: g = 0: b = 128
+        CASE "olive": r = 128: g = 128: b = 0
+        CASE "purple": r = 128: g = 0: b = 128
+        CASE "teal": r = 0: g = 128: b = 128
+        CASE "orange": r = 255: g = 165: b = 0
+        CASE "brown": r = 165: g = 42: b = 42
+        CASE "pink": r = 255: g = 192: b = 203
+        CASE "gold": r = 255: g = 215: b = 0
+        CASE ELSE
+            IF LEFT$(v$, 5) = "url(#" THEN
+                SvColour~& = SvGradCol~&(MID$(v$, 6, INSTR(v$, ")") - 6), 0): EXIT FUNCTION
+            END IF
+            r = 150: g = 150: b = 150 ' (a name not known)
+    END SELECT
+    SvColour~& = _RGB32(r, g, b)
+END FUNCTION
+
+' A gradient's colour: its stops' average (or those of the one it takes them from)
+FUNCTION SvGradCol~& (id$, depth)
+    DIM k AS LONG, e AS LONG, tg$, nm$, n, r&, g&, b&, c AS _UNSIGNED LONG, v$, h$, j AS LONG
+    SvGradCol~& = _RGB32(150, 150, 150)
+    IF depth > 3 OR LEN(id$) = 0 THEN EXIT FUNCTION
+    k = INSTR(svSrc$, "id=" + CHR$(34) + id$ + CHR$(34)): IF k = 0 THEN k = INSTR(svSrc$, "id='" + id$ + "'")
+    IF k = 0 THEN EXIT FUNCTION
+    k = _INSTRREV(k, svSrc$, "<"): e = INSTR(k, svSrc$, ">"): IF k = 0 OR e = 0 THEN EXIT FUNCTION
+    tg$ = MID$(svSrc$, k + 1, e - k - 1)
+    nm$ = SvTagName$(tg$)
+    IF RIGHT$(nm$, 8) <> "gradient" THEN
+        IF nm$ = "solidcolor" THEN SvGradCol~& = SvColour~&(LCASE$(SvProp$(tg$, "solid-color")))
+        EXIT FUNCTION
+    END IF
+    h$ = SvAttr$(tg$, "xlink:href"): IF LEN(h$) = 0 THEN h$ = SvAttr$(tg$, "href")
+    IF RIGHT$(tg$, 1) <> "/" THEN
+        j = e
+        DO
+            k = INSTR(j, svSrc$, "<"): IF k = 0 THEN EXIT DO
+            e = INSTR(k, svSrc$, ">"): IF e = 0 THEN EXIT DO
+            tg$ = MID$(svSrc$, k + 1, e - k - 1): j = e + 1
+            IF LEFT$(tg$, 1) = "/" THEN EXIT DO
+            IF SvTagName$(tg$) = "stop" THEN
+                v$ = LCASE$(SvProp$(tg$, "stop-color")): IF LEN(v$) = 0 THEN v$ = "black"
+                IF LEFT$(v$, 4) <> "url(" THEN
+                    c = SvColour~&(v$): r& = r& + _RED32(c): g& = g& + _GREEN32(c): b& = b& + _BLUE32(c): n = n + 1
+                END IF
+            END IF
+        LOOP
+    END IF
+    IF n > 0 THEN
+        SvGradCol~& = _RGB32(r& / n, g& / n, b& / n)
+    ELSEIF LEFT$(h$, 1) = "#" THEN
+        SvGradCol~& = SvGradCol~&(MID$(h$, 2), depth + 1)
+    END IF
+END FUNCTION
+
+' Numbers in a list: separators (spaces, commas) skipped; i moves past it
+SUB SvSkip (d$, i AS LONG)
+    DIM ch$
+    DO WHILE i <= LEN(d$)
+        ch$ = MID$(d$, i, 1)
+        IF ch$ <> " " AND ch$ <> "," AND ch$ <> CHR$(9) AND ch$ <> CHR$(10) AND ch$ <> CHR$(13) THEN EXIT DO
+        i = i + 1
+    LOOP
+END SUB
+
+FUNCTION SvNum# (d$, i AS LONG)
+    DIM st AS LONG, ch$, dig, dot
+    SvSkip d$, i
+    IF i > LEN(d$) THEN EXIT FUNCTION
+    st = i
+    ch$ = MID$(d$, i, 1)
+    IF ch$ = "-" OR ch$ = "+" THEN i = i + 1
+    DO WHILE i <= LEN(d$)
+        ch$ = MID$(d$, i, 1)
+        IF ch$ >= "0" AND ch$ <= "9" THEN
+            dig = -1
+        ELSEIF ch$ = "." AND dot = 0 THEN
+            dot = -1
+        ELSE
+            EXIT DO
+        END IF
+        i = i + 1
+    LOOP
+    IF dig AND (ch$ = "e" OR ch$ = "E") THEN
+        ch$ = MID$(d$, i + 1, 1)
+        IF (ch$ >= "0" AND ch$ <= "9") OR ch$ = "-" OR ch$ = "+" THEN
+            i = i + 2
+            DO WHILE i <= LEN(d$)
+                ch$ = MID$(d$, i, 1): IF ch$ < "0" OR ch$ > "9" THEN EXIT DO
+                i = i + 1
+            LOOP
+        END IF
+    END IF
+    IF dig = 0 THEN i = st + 1: EXIT FUNCTION ' (not a number: stepped over)
+    SvNum# = VAL(MID$(d$, st, i - st))
+END FUNCTION
+
+FUNCTION SvFlag (d$, i AS LONG)
+    SvSkip d$, i
+    SvFlag = (MID$(d$, i, 1) = "1"): i = i + 1
+END FUNCTION
+
+' transform="translate(..) rotate(..) ..." put on svM#
+SUB SvXform (t$)
+    DIM i AS LONG, o AS LONG, c AS LONG, nm$, a$, v#(5), n, j AS LONG, cs#, sn#
+    i = 1
+    DO
+        o = INSTR(i, t$, "("): IF o = 0 THEN EXIT DO
+        c = INSTR(o, t$, ")"): IF c = 0 THEN EXIT DO
+        nm$ = LCASE$(_TRIM$(MID$(t$, i, o - i)))
+        IF LEFT$(nm$, 1) = "," THEN nm$ = _TRIM$(MID$(nm$, 2))
+        a$ = MID$(t$, o + 1, c - o - 1)
+        n = 0: j = 1
+        DO
+            SvSkip a$, j
+            IF j > LEN(a$) OR n > 5 THEN EXIT DO
+            v#(n) = SvNum#(a$, j): n = n + 1
+        LOOP
+        SELECT CASE nm$
+            CASE "matrix"
+                IF n >= 6 THEN SvMulBy v#(0), v#(1), v#(2), v#(3), v#(4), v#(5)
+            CASE "translate"
+                IF n = 1 THEN v#(1) = 0
+                SvMulBy 1, 0, 0, 1, v#(0), v#(1)
+            CASE "scale"
+                IF n = 1 THEN v#(1) = v#(0)
+                SvMulBy v#(0), 0, 0, v#(1), 0, 0
+            CASE "rotate"
+                cs# = COS(v#(0) * _PI / 180): sn# = SIN(v#(0) * _PI / 180)
+                IF n >= 3 THEN SvMulBy 1, 0, 0, 1, v#(1), v#(2)
+                SvMulBy cs#, sn#, -sn#, cs#, 0, 0
+                IF n >= 3 THEN SvMulBy 1, 0, 0, 1, -v#(1), -v#(2)
+            CASE "skewx"
+                SvMulBy 1, 0, TAN(v#(0) * _PI / 180), 1, 0, 0
+            CASE "skewy"
+                SvMulBy 1, TAN(v#(0) * _PI / 180), 0, 1, 0, 0
+        END SELECT
+        i = c + 1
+    LOOP
+END SUB
+
+SUB SvMulBy (a#, b#, c#, d#, e#, f#)
+    DIM m#(5), k
+    FOR k = 0 TO 5: m#(k) = svM#(k): NEXT
+    svM#(0) = m#(0) * a# + m#(2) * b#: svM#(1) = m#(1) * a# + m#(3) * b#
+    svM#(2) = m#(0) * c# + m#(2) * d#: svM#(3) = m#(1) * c# + m#(3) * d#
+    svM#(4) = m#(0) * e# + m#(2) * f# + m#(4): svM#(5) = m#(1) * e# + m#(3) * f# + m#(5)
+END SUB
+
+' A shape: its outlines, through its transform
+SUB SvShape (nm$, tg$)
+    DIM k, col AS _UNSIGNED LONG, none, hid, op, r0 AS LONG, x#, y#, w#, h#, rx#, ry#, rxs$, rys$, a
+    SELECT CASE nm$
+        CASE "path", "rect", "circle", "ellipse", "polygon", "polyline"
+        CASE ELSE: EXIT SUB
+    END SELECT
+    FOR k = 0 TO 5: svM#(k) = svT#(svTop, k): NEXT
+    SvXform SvAttr$(tg$, "transform")
+    col = svFill(svTop): none = svNone(svTop): hid = svHid(svTop): op = svOp(svTop)
+    SvOwnFill tg$, col, none, hid, op
+    IF none OR hid OR op < .5 THEN EXIT SUB ' (a see-through highlight left out)
+    svEN = svEN + 1
+    IF svEN > UBOUND(svECol) THEN REDIM _PRESERVE svECol(svEN * 2 + 16) AS _UNSIGNED LONG
+    svECol(svEN) = col
+    r0 = svRC: svRing = 0: svCurX# = 0: svCurY# = 0
+    SELECT CASE nm$
+        CASE "path"
+            SvPath SvAttr$(tg$, "d")
+        CASE "rect"
+            x# = VAL(SvAttr$(tg$, "x")): y# = VAL(SvAttr$(tg$, "y")): w# = VAL(SvAttr$(tg$, "width")): h# = VAL(SvAttr$(tg$, "height"))
+            rxs$ = SvAttr$(tg$, "rx"): rys$ = SvAttr$(tg$, "ry")
+            rx# = VAL(rxs$): ry# = VAL(rys$)
+            IF LEN(rxs$) = 0 THEN rx# = ry#
+            IF LEN(rys$) = 0 THEN ry# = rx#
+            IF rx# > w# / 2 THEN rx# = w# / 2
+            IF ry# > h# / 2 THEN ry# = h# / 2
+            IF w# > 0 AND h# > 0 THEN
+                SvStart
+                IF rx# <= 0 OR ry# <= 0 THEN
+                    SvAddL x#, y#: SvAddL x# + w#, y#: SvAddL x# + w#, y# + h#: SvAddL x#, y# + h#
+                ELSE
+                    SvArcPts x# + w# - rx#, y# + ry#, rx#, ry#, -90, 0, 6
+                    SvArcPts x# + w# - rx#, y# + h# - ry#, rx#, ry#, 0, 90, 6
+                    SvArcPts x# + rx#, y# + h# - ry#, rx#, ry#, 90, 180, 6
+                    SvArcPts x# + rx#, y# + ry#, rx#, ry#, 180, 270, 6
+                END IF
+            END IF
+        CASE "circle", "ellipse"
+            x# = VAL(SvAttr$(tg$, "cx")): y# = VAL(SvAttr$(tg$, "cy"))
+            IF nm$ = "circle" THEN
+                rx# = VAL(SvAttr$(tg$, "r")): ry# = rx#
+            ELSE
+                rx# = VAL(SvAttr$(tg$, "rx")): ry# = VAL(SvAttr$(tg$, "ry"))
+            END IF
+            IF rx# > 0 AND ry# > 0 THEN
+                SvStart
+                SvArcPts x#, y#, rx#, ry#, 0, 360 - 360 / 32, 31
+            END IF
+        CASE "polygon", "polyline"
+            SvPoints SvAttr$(tg$, "points")
+    END SELECT
+    SvRingEnd
+    IF svRC = r0 THEN svEN = svEN - 1
+END SUB
+
+' Points round an ellipse from angle a0 to a1 (degrees), n steps
+SUB SvArcPts (cx#, cy#, rx#, ry#, a0#, a1#, n)
+    DIM k, a#
+    FOR k = 0 TO n
+        a# = (a0# + (a1# - a0#) * k / n) * _PI / 180
+        SvAddL cx# + rx# * COS(a#), cy# + ry# * SIN(a#)
+    NEXT
+END SUB
+
+SUB SvPoints (p$)
+    DIM i AS LONG, x#, y#
+    i = 1
+    SvStart
+    DO
+        SvSkip p$, i
+        IF i > LEN(p$) THEN EXIT DO
+        x# = SvNum#(p$, i): y# = SvNum#(p$, i)
+        SvAddL x#, y#
+    LOOP
+END SUB
+
+' The path's d: each subpath an outline (curves in straight steps)
+SUB SvPath (d$)
+    DIM i AS LONG, c$, cmd$, u$, rel, ox#, oy#, x#, y#, x1#, y1#, x2#, y2#, rx#, ry#, ph#, fa, fs, sx#, sy#, lcx#, lcy#, lk$, kind$
+    i = 1
+    DO
+        SvSkip d$, i
+        IF i > LEN(d$) THEN EXIT DO
+        c$ = MID$(d$, i, 1)
+        IF INSTR("MmLlHhVvCcSsQqTtAaZz", c$) THEN
+            cmd$ = c$: i = i + 1
+        ELSEIF cmd$ = "" OR cmd$ = "Z" OR cmd$ = "z" THEN
+            EXIT DO
+        END IF
+        u$ = UCASE$(cmd$): rel = (cmd$ <> u$)
+        ox# = 0: oy# = 0: IF rel THEN ox# = svCurX#: oy# = svCurY#
+        kind$ = ""
+        SELECT CASE u$
+            CASE "M"
+                x# = ox# + SvNum#(d$, i): y# = oy# + SvNum#(d$, i)
+                SvStart: SvAddL x#, y#
+                sx# = x#: sy# = y#
+                IF rel THEN cmd$ = "l" ELSE cmd$ = "L"
+            CASE "Z"
+                SvRingEnd: svCurX# = sx#: svCurY# = sy#
+            CASE "L"
+                x# = ox# + SvNum#(d$, i): y# = oy# + SvNum#(d$, i): SvLine x#, y#
+            CASE "H"
+                x# = ox# + SvNum#(d$, i): SvLine x#, svCurY#
+            CASE "V"
+                y# = oy# + SvNum#(d$, i): SvLine svCurX#, y#
+            CASE "C", "S"
+                IF u$ = "C" THEN
+                    x1# = ox# + SvNum#(d$, i): y1# = oy# + SvNum#(d$, i)
+                ELSEIF lk$ = "C" THEN
+                    x1# = 2 * svCurX# - lcx#: y1# = 2 * svCurY# - lcy#
+                ELSE
+                    x1# = svCurX#: y1# = svCurY#
+                END IF
+                x2# = ox# + SvNum#(d$, i): y2# = oy# + SvNum#(d$, i)
+                x# = ox# + SvNum#(d$, i): y# = oy# + SvNum#(d$, i)
+                SvCubic x1#, y1#, x2#, y2#, x#, y#
+                lcx# = x2#: lcy# = y2#: kind$ = "C"
+            CASE "Q", "T"
+                IF u$ = "Q" THEN
+                    x1# = ox# + SvNum#(d$, i): y1# = oy# + SvNum#(d$, i)
+                ELSEIF lk$ = "Q" THEN
+                    x1# = 2 * svCurX# - lcx#: y1# = 2 * svCurY# - lcy#
+                ELSE
+                    x1# = svCurX#: y1# = svCurY#
+                END IF
+                x# = ox# + SvNum#(d$, i): y# = oy# + SvNum#(d$, i)
+                SvCubic svCurX# + (x1# - svCurX#) * 2 / 3, svCurY# + (y1# - svCurY#) * 2 / 3, x# + (x1# - x#) * 2 / 3, y# + (y1# - y#) * 2 / 3, x#, y#
+                lcx# = x1#: lcy# = y1#: kind$ = "Q"
+            CASE "A"
+                rx# = SvNum#(d$, i): ry# = SvNum#(d$, i): ph# = SvNum#(d$, i)
+                fa = SvFlag(d$, i): fs = SvFlag(d$, i)
+                x# = ox# + SvNum#(d$, i): y# = oy# + SvNum#(d$, i)
+                SvArc rx#, ry#, ph#, fa, fs, x#, y#
+        END SELECT
+        lk$ = kind$
+    LOOP
+END SUB
+
+SUB SvLine (x#, y#)
+    DIM px#, py#
+    IF svRing = 0 THEN px# = svCurX#: py# = svCurY#: SvStart: SvAddL px#, py#
+    SvAddL x#, y#
+END SUB
+
+SUB SvCubic (x1#, y1#, x2#, y2#, x#, y#)
+    DIM k, t#, m#, x0#, y0#, n
+    x0# = svCurX#: y0# = svCurY#: n = 12
+    FOR k = 1 TO n
+        t# = k / n: m# = 1 - t#
+        SvLine m# * m# * m# * x0# + 3 * m# * m# * t# * x1# + 3 * m# * t# * t# * x2# + t# * t# * t# * x#, m# * m# * m# * y0# + 3 * m# * m# * t# * y1# + 3 * m# * t# * t# * y2# + t# * t# * t# * y#
+    NEXT
+END SUB
+
+' An arc, from the pen to x, y (the SVG way: radii, turn, which of the four)
+SUB SvArc (rxi#, ryi#, ph#, fa, fs, x#, y#)
+    DIM x0#, y0#, rx#, ry#, cp#, sp#, x1#, y1#, lm#, num#, den#, sq#, cx1#, cy1#, cx#, cy#, t1#, dt#, ux#, uy#, vx#, vy#, n, k, t#
+    x0# = svCurX#: y0# = svCurY#
+    rx# = ABS(rxi#): ry# = ABS(ryi#)
+    IF rx# = 0 OR ry# = 0 OR (x0# = x# AND y0# = y#) THEN SvLine x#, y#: EXIT SUB
+    cp# = COS(ph# * _PI / 180): sp# = SIN(ph# * _PI / 180)
+    x1# = cp# * (x0# - x#) / 2 + sp# * (y0# - y#) / 2
+    y1# = -sp# * (x0# - x#) / 2 + cp# * (y0# - y#) / 2
+    lm# = x1# * x1# / (rx# * rx#) + y1# * y1# / (ry# * ry#)
+    IF lm# > 1 THEN rx# = rx# * SQR(lm#): ry# = ry# * SQR(lm#)
+    num# = rx# * rx# * ry# * ry# - rx# * rx# * y1# * y1# - ry# * ry# * x1# * x1#
+    den# = rx# * rx# * y1# * y1# + ry# * ry# * x1# * x1#
+    sq# = 0: IF num# > 0 AND den# > 0 THEN sq# = SQR(num# / den#)
+    IF fa = fs THEN sq# = -sq#
+    cx1# = sq# * rx# * y1# / ry#: cy1# = -sq# * ry# * x1# / rx#
+    cx# = cp# * cx1# - sp# * cy1# + (x0# + x#) / 2
+    cy# = sp# * cx1# + cp# * cy1# + (y0# + y#) / 2
+    ux# = (x1# - cx1#) / rx#: uy# = (y1# - cy1#) / ry#
+    vx# = (-x1# - cx1#) / rx#: vy# = (-y1# - cy1#) / ry#
+    t1# = _ATAN2(uy#, ux#)
+    dt# = _ATAN2(vy#, vx#) - t1#
+    IF fs = 0 AND dt# > 0 THEN dt# = dt# - 2 * _PI
+    IF fs <> 0 AND dt# < 0 THEN dt# = dt# + 2 * _PI
+    n = INT(ABS(dt#) / (_PI / 12)) + 1: IF n < 4 THEN n = 4
+    FOR k = 1 TO n
+        IF k = n THEN
+            SvLine x#, y#
+        ELSE
+            t# = t1# + dt# * k / n
+            SvLine cp# * rx# * COS(t#) - sp# * ry# * SIN(t#) + cx#, sp# * rx# * COS(t#) + cp# * ry# * SIN(t#) + cy#
+        END IF
+    NEXT
+END SUB
+
+' Outlines: one begun, a point on it (through svM#), one ended
+SUB SvStart
+    SvRingEnd
+    svRC = svRC + 1
+    IF svRC > UBOUND(svR0) THEN
+        REDIM _PRESERVE svR0(svRC * 2 + 16) AS LONG: REDIM _PRESERVE svRN(svRC * 2 + 16) AS LONG: REDIM _PRESERVE svRE(svRC * 2 + 16) AS LONG
+    END IF
+    svR0(svRC) = svPN + 1: svRN(svRC) = 0: svRE(svRC) = svEN: svRing = svRC
+END SUB
+
+SUB SvAddL (x#, y#)
+    DIM wx#, wy#
+    IF svRing = 0 THEN SvStart
+    wx# = svM#(0) * x# + svM#(2) * y# + svM#(4): wy# = svM#(1) * x# + svM#(3) * y# + svM#(5)
+    svCurX# = x#: svCurY# = y#
+    IF svRN(svRing) > 0 THEN
+        IF ABS(svPX(svPN) - wx#) < 1E-9 AND ABS(svPY(svPN) - wy#) < 1E-9 THEN EXIT SUB
+    END IF
+    svPN = svPN + 1
+    IF svPN > UBOUND(svPX) THEN REDIM _PRESERVE svPX(svPN * 2 + 256) AS DOUBLE: REDIM _PRESERVE svPY(svPN * 2 + 256) AS DOUBLE
+    svPX(svPN) = wx#: svPY(svPN) = wy#: svRN(svRing) = svRN(svRing) + 1
+END SUB
+
+SUB SvRingEnd
+    DIM r AS LONG
+    r = svRing: IF r = 0 THEN EXIT SUB
+    svRing = 0
+    IF svRN(r) >= 2 THEN
+        IF ABS(svPX(svPN) - svPX(svR0(r))) < 1E-9 AND ABS(svPY(svPN) - svPY(svR0(r))) < 1E-9 THEN svRN(r) = svRN(r) - 1: svPN = svPN - 1
+    END IF
+    IF svRN(r) < 3 THEN svPN = svR0(r) - 1: svRC = svRC - 1
+END SUB
+
+' ------------------------------------------------------------ making it
+
+SUB SvBuild (n$, p$)
+    DIM lx#, ly#, hx#, hy#, k#, mx#, sz#, v AS LONG, r AS LONG, q AS LONG, e AS LONG, w AS LONG, j AS LONG, a#, i, id AS LONG, made, g
+    DIM lo AS V3, hi AS V3, t AS LONG, best#
+    IF svRC = 0 THEN Msg "No filled shapes in " + p$ + " (lines only? bu1ld0r takes fills)": EXIT SUB
+    lx# = 1E+30: ly# = 1E+30: hx# = -1E+30: hy# = -1E+30
+    FOR v = 1 TO svPN
+        IF svPX(v) < lx# THEN lx# = svPX(v)
+        IF svPX(v) > hx# THEN hx# = svPX(v)
+        IF svPY(v) < ly# THEN ly# = svPY(v)
+        IF svPY(v) > hy# THEN hy# = svPY(v)
+    NEXT
+    sz# = hx# - lx#: IF hy# - ly# > sz# THEN sz# = hy# - ly#
+    IF sz# <= 0 THEN Msg "Nothing to see in " + p$: EXIT SUB
+    k# = 1 / sz#: mx# = (lx# + hx#) / 2
+    FOR v = 1 TO svPN ' (1 across, standing on y 0, y up; x mirrored, so it reads right from the front, -z)
+        svPX(v) = (mx# - svPX(v)) * k#: svPY(v) = (hy# - svPY(v)) * k#
+    NEXT
+    SvPrep 8E-4
+    ' Layers: a shape over an earlier one it overlaps is a step nearer the front (-z)
+    DIM bx0#(svEN), by0#(svEN), bx1#(svEN), by1#(svEN), lay(svEN) AS LONG, top AS LONG, st#
+    FOR e = 1 TO svEN: bx0#(e) = 1E+30: by0#(e) = 1E+30: bx1#(e) = -1E+30: by1#(e) = -1E+30: NEXT
+    FOR r = 1 TO svRC
+        e = svRE(r)
+        FOR j = 0 TO svRN(r) - 1
+            v = svR0(r) + j
+            IF svPX(v) < bx0#(e) THEN bx0#(e) = svPX(v)
+            IF svPX(v) > bx1#(e) THEN bx1#(e) = svPX(v)
+            IF svPY(v) < by0#(e) THEN by0#(e) = svPY(v)
+            IF svPY(v) > by1#(e) THEN by1#(e) = svPY(v)
+        NEXT
+    NEXT
+    FOR e = 1 TO svEN
+        lay(e) = 0
+        FOR q = 1 TO e - 1
+            IF bx0#(q) < bx1#(e) AND bx1#(q) > bx0#(e) AND by0#(q) < by1#(e) AND by1#(q) > by0#(e) THEN
+                IF lay(q) + 1 > lay(e) THEN lay(e) = lay(q) + 1
+            END IF
+        NEXT
+        IF lay(e) > top THEN top = lay(e)
+    NEXT
+    st# = SV_THICK * .2: IF top > 0 THEN IF st# * top > .5 THEN st# = .5 / top
+    ModelNew
+    mdlName$ = n$: mdlTidy = 0
+    g = 0: IF svEN > 1 THEN g = 1
+    FOR e = 1 TO svEN
+        tN = 0
+        FOR r = 1 TO svRC
+            IF svRE(r) = e AND svRN(r) > 0 AND (svRD(r) MOD 2) = 0 THEN SvSolid r, svECol(e), -SV_THICK / 2 - lay(e) * st#, SV_THICK / 2 - lay(e) * st#
+        NEXT
+        IF tN > 0 AND pN < MAX_PARTS - 2 THEN
+            lo.x = 1E+30: lo.y = 1E+30: lo.z = 1E+30: hi.x = -1E+30: hi.y = -1E+30: hi.z = -1E+30
+            FOR t = 1 TO tN
+                SvGrow lo, hi, tA(t): SvGrow lo, hi, tB(t): SvGrow lo, hi, tC(t)
+            NEXT
+            pN = pN + 1: i = pN
+            PartFresh i, K_MESH, VAL(Fmt$((lo.x + hi.x) / 2)), VAL(Fmt$(lo.y)), VAL(Fmt$((lo.z + hi.z) / 2))
+            pSX(i) = 1: pSY(i) = 1: pSZ(i) = 1: pGrp(i) = g
+            id = EmFromTris&(1, tN, i, -1)
+            MakeMeshPart i, id
+            made = made + 1
+        END IF
+    NEXT
+    tN = 0
+    mdlPf$ = "": undoN = 0: redoN = 0
+    ModelChanged: MeshGc
+    ViewFrameAll
+    Msg "Opened " + p$ + " - " + _TRIM$(STR$(made)) + " shape" + IIFS$(made = 1, "", "s") + ", made thick" + IIFS$(svFull, " (too many triangles: some left out)", "") + ". Ctrl+S saves it as models/" + n$ + ".bld"
+END SUB
+
+' Points in line with their neighbours let go of (a wall there and none in the face would leave a gap), and needles
+' The outlines readied: points nearer than tol# to the last let go of, in-line ones
+' dropped (SvStraighten), each one's area (svRA), and what it's inside - of its own
+' shape's (svRE): how deep (svRD: odd a hole) and the smallest round it (svRP)
+SUB SvPrep (tol#)
+    DIM r AS LONG, q AS LONG, w AS LONG, v AS LONG, j AS LONG, a#, best#
+    REDIM svRA(svRC) AS DOUBLE, svRD(svRC) AS LONG, svRP(svRC) AS LONG
+    FOR r = 1 TO svRC ' (points too near the last let go of; its area)
+        w = svR0(r)
+        FOR j = 1 TO svRN(r) - 1
+            v = svR0(r) + j
+            IF ABS(svPX(v) - svPX(w)) > tol# OR ABS(svPY(v) - svPY(w)) > tol# THEN w = w + 1: svPX(w) = svPX(v): svPY(w) = svPY(v)
+        NEXT
+        svRN(r) = w - svR0(r) + 1
+        IF svRN(r) > 1 THEN
+            IF ABS(svPX(w) - svPX(svR0(r))) <= tol# AND ABS(svPY(w) - svPY(svR0(r))) <= tol# THEN svRN(r) = svRN(r) - 1
+        END IF
+        SvStraighten r
+        a# = 0
+        FOR j = 0 TO svRN(r) - 1
+            v = svR0(r) + j: w = svR0(r) + (j + 1) MOD svRN(r)
+            a# = a# + svPX(v) * svPY(w) - svPX(w) * svPY(v)
+        NEXT
+        svRA(r) = a# / 2
+        IF svRN(r) < 3 OR ABS(svRA(r)) < 1E-9 THEN svRN(r) = 0
+    NEXT
+    FOR r = 1 TO svRC ' (what it's inside: its depth; the smallest one, its parent)
+        svRD(r) = 0: svRP(r) = 0: best# = 1E+30
+        IF svRN(r) > 0 THEN
+            FOR q = 1 TO svRC
+                IF q <> r AND svRE(q) = svRE(r) AND svRN(q) > 0 THEN
+                    IF ABS(svRA(q)) > ABS(svRA(r)) THEN
+                        IF SvInRing(svPX(svR0(r)), svPY(svR0(r)), q) THEN
+                            svRD(r) = svRD(r) + 1
+                            IF ABS(svRA(q)) < best# THEN best# = ABS(svRA(q)): svRP(r) = q
+                        END IF
+                    END IF
+                END IF
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+SUB SvStraighten (r AS LONG)
+    DIM n AS LONG, j AS LONG, w AS LONG, v AS LONG, pv AS LONG, nv AS LONG, did AS LONG, skp, keep, ax#, ay#, bx#, by#, l#
+    DO
+        did = 0
+        n = svRN(r): IF n < 4 THEN EXIT DO
+        w = svR0(r) - 1: skp = 0
+        FOR j = 0 TO n - 1
+            v = svR0(r) + j: pv = svR0(r) + (j + n - 1) MOD n: nv = svR0(r) + (j + 1) MOD n
+            keep = -1
+            IF skp = 0 AND did < n - 3 THEN
+                ax# = svPX(v) - svPX(pv): ay# = svPY(v) - svPY(pv): bx# = svPX(nv) - svPX(v): by# = svPY(nv) - svPY(v)
+                l# = SQR(ax# * ax# + ay# * ay#) * SQR(bx# * bx# + by# * by#)
+                IF l# = 0 OR ABS(ax# * by# - ay# * bx#) <= 1E-7 * l# THEN keep = 0
+                IF ax# * bx# + ay# * by# < 0 AND ABS(ax# * by# - ay# * bx#) <= .05 * l# THEN keep = 0 ' (a needle, back on itself)
+            END IF
+            skp = 0
+            IF keep THEN
+                w = w + 1: svPX(w) = svPX(v): svPY(w) = svPY(v)
+            ELSE
+                did = did + 1: skp = -1
+            END IF
+        NEXT
+        svRN(r) = w - svR0(r) + 1
+    LOOP UNTIL did = 0
+END SUB
+
+SUB SvGrow (lo AS V3, hi AS V3, p AS V3)
+    IF p.x < lo.x THEN lo.x = p.x
+    IF p.y < lo.y THEN lo.y = p.y
+    IF p.z < lo.z THEN lo.z = p.z
+    IF p.x > hi.x THEN hi.x = p.x
+    IF p.y > hi.y THEN hi.y = p.y
+    IF p.z > hi.z THEN hi.z = p.z
+END SUB
+
+FUNCTION SvInRing (x#, y#, r AS LONG)
+    DIM j AS LONG, a AS LONG, b AS LONG, c
+    FOR j = 0 TO svRN(r) - 1
+        a = svR0(r) + j: b = svR0(r) + (j + 1) MOD svRN(r)
+        IF (svPY(a) > y#) <> (svPY(b) > y#) THEN
+            IF x# < svPX(a) + (y# - svPY(a)) * (svPX(b) - svPX(a)) / (svPY(b) - svPY(a)) THEN c = NOT c
+        END IF
+    NEXT
+    SvInRing = c
+END FUNCTION
+
+' One outline and its holes: front and back faces, walls round each
+SUB SvSolid (o AS LONG, col AS _UNSIGNED LONG, zf#, zb#)
+    DIM h#, j AS LONG, r AS LONG, nh, hl(0 TO 1000) AS LONG, hm#(0 TO 1000), a, b, s AS LONG, tm#
+    SvRingTo o, 1
+    nh = 0
+    FOR r = 1 TO svRC
+        IF svRP(r) = o AND svRN(r) > 0 AND (svRD(r) MOD 2) = 1 AND nh < 1000 THEN
+            nh = nh + 1: hl(nh) = r: hm#(nh) = -1E+30
+            FOR j = 0 TO svRN(r) - 1
+                IF svPX(svR0(r) + j) > hm#(nh) THEN hm#(nh) = svPX(svR0(r) + j)
+            NEXT
+        END IF
+    NEXT
+    FOR a = 1 TO nh - 1 ' (rightmost first)
+        FOR b = a + 1 TO nh
+            IF hm#(b) > hm#(a) THEN SWAP hm#(a), hm#(b): SWAP hl(a), hl(b)
+        NEXT
+    NEXT
+    FOR a = 1 TO nh: SvBridge hl(a): NEXT
+    SvEars zf#, zb#, col
+    SvWalls o, 1, zf#, zb#, col
+    FOR a = 1 TO nh: SvWalls hl(a), -1, zf#, zb#, col: NEXT
+END SUB
+
+' The outline into svWX/svWY, anticlockwise (way 1) or clockwise (-1)
+SUB SvRingTo (r AS LONG, way)
+    DIM j AS LONG, n AS LONG
+    n = svRN(r): svWN = n
+    IF n > UBOUND(svWX) THEN REDIM svWX(n * 2) AS DOUBLE, svWY(n * 2) AS DOUBLE
+    FOR j = 0 TO n - 1
+        IF SGN(svRA(r)) = way THEN
+            svWX(j) = svPX(svR0(r) + j): svWY(j) = svPY(svR0(r) + j)
+        ELSE
+            svWX(j) = svPX(svR0(r) + n - 1 - j): svWY(j) = svPY(svR0(r) + n - 1 - j)
+        END IF
+    NEXT
+END SUB
+
+' A hole joined into the outline: a cut from its rightmost point to a point of the outline it can see
+SUB SvBridge (r AS LONG)
+    DIM hn AS LONG, j AS LONG, k AS LONG, hm AS LONG, mx#, my#, x1#, y1#, x2#, y2#, ix#, best#, bi AS LONG, pk AS LONG, t#, bt#, d#, bd#, n AS LONG
+    hn = svRN(r): hm = 0
+    FOR j = 0 TO hn - 1 ' (its rightmost point)
+        IF svPX(svR0(r) + j) > svPX(svR0(r) + hm) THEN hm = j
+    NEXT
+    mx# = svPX(svR0(r) + hm): my# = svPY(svR0(r) + hm)
+    best# = 1E+30: bi = -1
+    FOR j = 0 TO svWN - 1 ' (the nearest edge right of it)
+        k = (j + 1) MOD svWN
+        x1# = svWX(j): y1# = svWY(j): x2# = svWX(k): y2# = svWY(k)
+        IF (y1# <= my# AND y2# > my#) OR (y2# <= my# AND y1# > my#) THEN
+            ix# = x1# + (my# - y1#) * (x2# - x1#) / (y2# - y1#)
+            IF ix# >= mx# - 1E-12 AND ix# < best# THEN best# = ix#: bi = j
+        END IF
+    NEXT
+    IF bi < 0 THEN EXIT SUB
+    k = (bi + 1) MOD svWN
+    pk = bi: IF svWX(k) > svWX(bi) THEN pk = k
+    bt# = 1E+30: bd# = 1E+30
+    FOR j = 0 TO svWN - 1 ' (a point inside the triangle hole - hit - end sees it at a smaller angle)
+        IF j <> pk AND svWX(j) > mx# THEN
+            IF SvInTri(svWX(j), svWY(j), mx#, my#, best#, my#, svWX(pk), svWY(pk)) THEN
+                t# = ABS(svWY(j) - my#) / (svWX(j) - mx#): d# = (svWX(j) - mx#) ^ 2 + (svWY(j) - my#) ^ 2
+                IF t# < bt# - 1E-12 OR (ABS(t# - bt#) <= 1E-12 AND d# < bd#) THEN bt# = t#: bd# = d#: pk = j
+            END IF
+        END IF
+    NEXT
+    n = svWN + hn + 2
+    IF n > UBOUND(svVX) THEN REDIM svVX(n * 2) AS DOUBLE, svVY(n * 2) AS DOUBLE
+    k = 0
+    FOR j = 0 TO pk: svVX(k) = svWX(j): svVY(k) = svWY(j): k = k + 1: NEXT
+    FOR j = 0 TO hn ' (the hole, clockwise, round to its first point again)
+        IF svRA(r) < 0 THEN
+            svVX(k) = svPX(svR0(r) + (hm + j) MOD hn): svVY(k) = svPY(svR0(r) + (hm + j) MOD hn)
+        ELSE
+            svVX(k) = svPX(svR0(r) + (hm - j + hn * 2) MOD hn): svVY(k) = svPY(svR0(r) + (hm - j + hn * 2) MOD hn)
+        END IF
+        k = k + 1
+    NEXT
+    svVX(k) = svWX(pk): svVY(k) = svWY(pk): k = k + 1
+    FOR j = pk + 1 TO svWN - 1: svVX(k) = svWX(j): svVY(k) = svWY(j): k = k + 1: NEXT
+    IF k > UBOUND(svWX) THEN REDIM svWX(k * 2) AS DOUBLE, svWY(k * 2) AS DOUBLE
+    FOR j = 0 TO k - 1: svWX(j) = svVX(j): svWY(j) = svVY(j): NEXT
+    svWN = k
+END SUB
+
+FUNCTION SvInTri (px#, py#, ax#, ay#, bx#, by#, cx#, cy#)
+    DIM d1#, d2#, d3#
+    d1# = (bx# - ax#) * (py# - ay#) - (by# - ay#) * (px# - ax#)
+    d2# = (cx# - bx#) * (py# - by#) - (cy# - by#) * (px# - bx#)
+    d3# = (ax# - cx#) * (py# - cy#) - (ay# - cy#) * (px# - cx#)
+    SvInTri = (d1# >= 0 AND d2# >= 0 AND d3# >= 0) OR (d1# <= 0 AND d2# <= 0 AND d3# <= 0)
+END FUNCTION
+
+' svW cut into triangles (ears), each made twice: the back (zb) and the front (zf)
+SUB SvEars (zf#, zb#, col AS _UNSIGNED LONG)
+    DIM n AS LONG, nx(svWN) AS LONG, pv(svWN) AS LONG, i AS LONG, a AS LONG, c AS LONG, v AS LONG, cr#, ear, nLeft AS LONG, guard AS LONG
+    n = svWN: IF n < 3 THEN EXIT SUB
+    FOR i = 0 TO n - 1: nx(i) = (i + 1) MOD n: pv(i) = (i + n - 1) MOD n: NEXT
+    nLeft = n: i = 0: guard = 0
+    DO WHILE nLeft > 3
+        a = pv(i): c = nx(i)
+        cr# = (svWX(i) - svWX(a)) * (svWY(c) - svWY(a)) - (svWY(i) - svWY(a)) * (svWX(c) - svWX(a))
+        ear = 0
+        IF cr# > 1E-14 THEN
+            ear = 1
+            v = nx(c)
+            DO WHILE v <> a
+                IF SvSame(v, a) = 0 AND SvSame(v, i) = 0 AND SvSame(v, c) = 0 THEN
+                    IF SvInTri(svWX(v), svWY(v), svWX(a), svWY(a), svWX(i), svWY(i), svWX(c), svWY(c)) THEN ear = 0: EXIT DO
+                END IF
+                v = nx(v)
+            LOOP
+        ELSEIF cr# > -1E-14 THEN
+            ear = 2 ' (in line: let go of, no triangle)
+        END IF
+        IF ear = 0 AND guard > nLeft THEN ' (none found round it all: take this one anyway)
+            ear = 2: IF cr# > 0 THEN ear = 1
+        END IF
+        IF ear THEN
+            IF ear = 1 THEN SvCapTri a, i, c, zf#, zb#, col
+            nx(a) = c: pv(c) = a: nLeft = nLeft - 1: i = a: guard = 0
+        ELSE
+            i = nx(i): guard = guard + 1
+        END IF
+    LOOP
+    a = pv(i): c = nx(i)
+    cr# = (svWX(i) - svWX(a)) * (svWY(c) - svWY(a)) - (svWY(i) - svWY(a)) * (svWX(c) - svWX(a))
+    IF cr# > 1E-14 THEN SvCapTri a, i, c, zf#, zb#, col
+END SUB
+
+FUNCTION SvSame (p AS LONG, q AS LONG)
+    SvSame = (ABS(svWX(p) - svWX(q)) < 1E-9 AND ABS(svWY(p) - svWY(q)) < 1E-9)
+END FUNCTION
+
+SUB SvCapTri (a AS LONG, b AS LONG, c AS LONG, zf#, zb#, col AS _UNSIGNED LONG)
+    SvTri svWX(a), svWY(a), zb#, svWX(b), svWY(b), zb#, svWX(c), svWY(c), zb#, col
+    SvTri svWX(a), svWY(a), zf#, svWX(c), svWY(c), zf#, svWX(b), svWY(b), zf#, col
+END SUB
+
+' Walls round an outline: way 1 anticlockwise (an outside), -1 a hole
+SUB SvWalls (r AS LONG, way, zf#, zb#, col AS _UNSIGNED LONG)
+    DIM j AS LONG, k AS LONG, n AS LONG
+    SvRingTo r, way
+    n = svWN
+    FOR j = 0 TO n - 1
+        k = (j + 1) MOD n
+        SvTri svWX(j), svWY(j), zf#, svWX(k), svWY(k), zf#, svWX(k), svWY(k), zb#, col
+        SvTri svWX(j), svWY(j), zf#, svWX(k), svWY(k), zb#, svWX(j), svWY(j), zb#, col
+    NEXT
+END SUB
+
+SUB SvTri (ax#, ay#, az#, bx#, by#, bz#, cx#, cy#, cz#, col AS _UNSIGNED LONG)
+    IF tN >= MAX_TRI - 2 THEN svFull = -1: EXIT SUB
+    tN = tN + 1
+    tA(tN).x = ax#: tA(tN).y = ay#: tA(tN).z = az#
+    tB(tN).x = bx#: tB(tN).y = by#: tB(tN).z = bz#
+    tC(tN).x = cx#: tC(tN).y = cy#: tC(tN).z = cz#
+    tEdge(tN) = 7: tTex(tN) = 0: tCol(tN) = col
+    tU(3 * tN) = 0: tU(3 * tN + 1) = 0: tU(3 * tN + 2) = 0: tW(3 * tN) = 0: tW(3 * tN + 1) = 0: tW(3 * tN + 2) = 0
+END SUB

@@ -23,18 +23,24 @@ END SUB
 
 ' A shape's (or prefab r$'s) picture for the bin: part 0 made that, drawn on its own
 SUB RenderIcon (k, r$, img&)
-    DIM sTX, sTY, sTZ, sYaw, sPitch, sDist, t0 AS LONG, t AS LONG, d, lo AS V3, hi AS V3, p AS V3, j, r
-    sTX = camTX: sTY = camTY: sTZ = camTZ: sYaw = camYaw: sPitch = camPitch: sDist = camDist
+    DIM sTX, sTY, sTZ, sYaw, sPitch, sDist, sOrtho, t0 AS LONG, t AS LONG, d, lo AS V3, hi AS V3, p AS V3, j, r, pass, ext
+    sTX = camTX: sTY = camTY: sTZ = camTZ: sYaw = camYaw: sPitch = camPitch: sDist = camDist: sOrtho = camOrtho: camOrtho = 0
     PartFresh 0, k, 0, 0, 0
     IF k = K_USE THEN
         pRef$(0) = r$
     ELSE
         pSX(0) = 1: pSY(0) = 1: pSZ(0) = 1: pCol(0) = _RGB32(0, 200, 230)
         IF k = K_TUBE THEN pSY(0) = .5
+        IF k >= K_DIE THEN ' (the newer shapes: as they're made, the biggest way 1)
+            r = kindSX(k): IF kindSY(k) > r THEN r = kindSY(k)
+            IF kindSZ(k) > r THEN r = kindSZ(k)
+            pSX(0) = kindSX(k) / r: pSY(0) = kindSY(k) / r: pSZ(0) = kindSZ(k) / r
+        END IF
+        IF FitKind(k) THEN pAmt(0) = kindAmt(k): ShapeFit 0, 0, 1 ' (its own proportions)
     END IF
     t0 = tN: MeshPart 0
     camTX = 0: camTY = .45: camTZ = 0: camYaw = 35: camPitch = 24: camDist = 2.7
-    IF k = K_USE AND tN > t0 THEN ' (a prefab: framed to fill the picture)
+    IF tN > t0 AND k <> K_BOX THEN ' (a prefab: framed to fill the picture; a shape centred)
         lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
         FOR t = t0 + 1 TO tN
             FOR j = 0 TO 2
@@ -53,27 +59,74 @@ SUB RenderIcon (k, r$, img&)
         NEXT
         camTX = (lo.x + hi.x) / 2: camTY = (lo.y + hi.y) / 2: camTZ = (lo.z + hi.z) / 2
         r = SQR((hi.x - lo.x) ^ 2 + (hi.y - lo.y) ^ 2 + (hi.z - lo.z) ^ 2) / 2: IF r < .01 THEN r = .01
-        camDist = r / DSin(camFov / 2) * 1.05
+        IF k = K_USE THEN camDist = r / DSin(camFov / 2) * 1.05
     END IF
-    CamBasis 64, 64
-    LightFromCamera .45, .6
-    RenderBegin img&, 64, 64
-    d = _DEST: _DEST img&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
-    rOrtho = 0: rCull = -1: rGhost = 0
-    FOR t = t0 + 1 TO tN: RasterTri t: NEXT
-    RenderEnd
+    FOR pass = 1 TO 3 ' (a shape: drawn again until as big as the box's)
+        CamBasis 64, 64
+        LightFromCamera .45, .6
+        RenderBegin img&, 64, 64
+        d = _DEST: _DEST img&: CLS , _RGBA32(0, 0, 0, 0): _DEST d
+        rOrtho = 0: rCull = -1: rGhost = 0
+        FOR t = t0 + 1 TO tN: RasterTri t: NEXT
+        RenderEnd
+        IF k > NUM_KINDS THEN EXIT FOR
+        ext = IconExtent(img&)
+        IF k = K_BOX THEN binFill = ext: EXIT FOR
+        IF ext < 1 OR binFill < 1 OR ABS(ext - binFill) <= 1 THEN EXIT FOR
+        camDist = camDist * ext / binFill
+    NEXT
     tN = t0
-    camTX = sTX: camTY = sTY: camTZ = sTZ: camYaw = sYaw: camPitch = sPitch: camDist = sDist
+    camTX = sTX: camTY = sTY: camTZ = sTZ: camYaw = sYaw: camPitch = sPitch: camDist = sDist: camOrtho = sOrtho
     viewDirty = -1: ghostKey$ = "" ' (part 0, the ghost, was used: it's made again)
     IF ghostOn THEN GhostRemake
 END SUB
+
+' How big an icon came out: its drawn pixels' box, the longer way
+FUNCTION IconExtent (img&)
+    DIM x, y, x0, y0, x1, y1, s&, w
+    x0 = 999: y0 = 999: x1 = -1: y1 = -1
+    s& = _SOURCE: _SOURCE img&
+    FOR y = 0 TO _HEIGHT(img&) - 1
+        FOR x = 0 TO _WIDTH(img&) - 1
+            IF _ALPHA32(POINT(x, y)) > 0 THEN
+                IF x < x0 THEN x0 = x
+                IF x > x1 THEN x1 = x
+                IF y < y0 THEN y0 = y
+                IF y > y1 THEN y1 = y
+            END IF
+        NEXT
+    NEXT
+    _SOURCE s&
+    w = x1 - x0 + 1: IF y1 - y0 + 1 > w THEN w = y1 - y0 + 1
+    IF x1 < 0 THEN w = 0
+    IconExtent = w
+END FUNCTION
 
 ' ---------------------------------------------------------------- layout
 
 ' The six shapes: 3 across, 2 down
 SUB BinTile (k, x, y, w, h)
-    x = 6 + ((k - 1) MOD 3) * 48: y = 50 + ((k - 1) \ 3) * 50: w = 44: h = 46
+    DIM c
+    c = BinShapeCols
+    x = 6 + ((k - 1) MOD c) * 48: y = 50 + ((k - 1) \ c) * 50: w = 44: h = 46
 END SUB
+
+' The shapes' tiles across: as many as the bin's width holds
+FUNCTION BinShapeCols
+    DIM c
+    c = (BIN_W - 6) \ 48: IF c < 1 THEN c = 1
+    BinShapeCols = c
+END FUNCTION
+
+' Where the tabs' tiles start: under the shapes, the tabs and the path
+FUNCTION BI_Y0
+    BI_Y0 = 50 + ((NUM_KINDS + 2 + BinShapeCols - 1) \ BinShapeCols) * 50 + 44 ' (the shapes, the pen, text)
+END FUNCTION
+
+' The tabs' line (their names, then the path under them)
+FUNCTION BinTabY
+    BinTabY = BI_Y0 - 42
+END FUNCTION
 
 ' Item i of the folder: 2 across from BI_Y0 (w 0: scrolled out of sight)
 SUB BinItemRect (i, x, y, w, h)
@@ -120,6 +173,7 @@ END SUB
 SUB BinList
     DIM f$, i, a
     IF binTab = 1 THEN PicBinList: EXIT SUB
+    IF binTab = 2 THEN MdlBinList: EXIT SUB
     biN = 0
     IF NOT _DIREXISTS(PfDir$ + binDir$) THEN binDir$ = ""
     IF LEN(binDir$) THEN biN = 1: biKind(1) = BI_UP: biName$(1) = "..": biRef$(1) = PfFolder$(LEFT$(binDir$, LEN(binDir$) - 1))
@@ -142,13 +196,132 @@ SUB BinList
     binTop = Clamp(binTop, 0, BinMaxTop)
 END SUB
 
+' MODELS: models/'s .bld files by name, each pictured as it's wanted (BinIconsDue)
+SUB MdlBinList
+    DIM f$, i
+    FOR i = 1 TO MAX_BI
+        IF biIcon&(i) < -1 THEN _FREEIMAGE biIcon&(i)
+        biIcon&(i) = 0
+    NEXT
+    biN = 0
+    f$ = _FILES$(appDir$ + "models/")
+    DO WHILE LEN(f$)
+        IF LCASE$(RIGHT$(f$, 4)) = ".bld" AND RIGHT$(f$, 1) <> "/" AND biN < MAX_BI THEN
+            biN = biN + 1: biKind(biN) = BI_MDL: biName$(biN) = LEFT$(f$, LEN(f$) - 4): biRef$(biN) = biName$(biN)
+        END IF
+        f$ = _FILES$
+    LOOP
+    BinSort 1, biN
+    binTop = Clamp(binTop, 0, BinMaxTop)
+END SUB
+
+' A model in models/ pictured as the bin shows a prefab: its parts read in after
+' the library's, a prefab for a moment ("*" + its name: no file's)
+SUB ModelIcon (n$, img&)
+    DIM fh, t$, n AS LONG
+    IF NOT _FILEEXISTS(ModelPath$(n$)) OR pfN >= MAX_PF THEN EXIT SUB
+    fh = FREEFILE: OPEN ModelPath$(n$) FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    n = PartsFromText&(t$, PF_BASE + pfTop, MAX_PFP - pfTop)
+    IF n = 0 THEN EXIT SUB
+    pfName$(pfN + 1) = "*" + n$: pfFirst(pfN + 1) = PF_BASE + pfTop: pfCnt(pfN + 1) = n: pfIcon&(pfN + 1) = 0
+    pfN = pfN + 1
+    RenderIcon K_USE, "*" + n$, img&
+    pfN = pfN - 1: pfName$(pfN + 1) = ""
+    MeshGcDue
+END SUB
+
+' A model clicked in MODELS (or picked in OPEN): opened - not saved, it asks first
+SUB MdlBinOpen (n$)
+    IF mdlDirty THEN
+        askOn = -1: askArg$ = n$
+        Msg "The model open isn't saved: SAVE FIRST, OPEN ANYWAY (its changes lost), or CANCEL"
+        EXIT SUB
+    END IF
+    ModelLoad n$
+END SUB
+
+' The question asked when a model would be opened over unsaved work: a box in the view
+SUB AskRect (k, x, y, w, h)
+    x = vX0 + (vW - 420) \ 2: y = vY0 + vH \ 3: w = 420: h = 110
+    IF k THEN y = y + 70: h = 26: w = 128: x = x + 10 + (k - 1) * 134 ' (1 SAVE FIRST, 2 OPEN ANYWAY, 3 CANCEL)
+END SUB
+
+SUB AskDraw
+    DIM x, y, w, h, k
+    AskRect 0, x, y, w, h
+    LINE (x, y)-(x + w - 1, y + h - 1), _RGBA32(12, 10, 22, 245), BF
+    LINE (x, y)-(x + w - 1, y + h - 1), cWarn, B
+    Txt x + 12, y + 12, "OPEN " + UCASE$(askArg$) + "?", cHi
+    Txt x + 12, y + 34, "What's open now isn't saved (" + mdlName$ + ").", cText
+    FOR k = 1 TO 3
+        AskRect k, x, y, w, h
+        Btn x, y, w, h, AskName$(k), 0
+    NEXT
+END SUB
+
+FUNCTION AskName$ (k)
+    SELECT CASE k
+        CASE 1: AskName$ = "SAVE FIRST"
+        CASE 2: AskName$ = "OPEN ANYWAY"
+        CASE ELSE: AskName$ = "CANCEL"
+    END SELECT
+END FUNCTION
+
+SUB AskFrame
+    DIM x, y, w, h, k
+    IF NOT mP1 THEN EXIT SUB
+    FOR k = 1 TO 3
+        AskRect k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN AskAnswer k: EXIT SUB
+    NEXT
+    AskRect 0, x, y, w, h
+    IF NOT InRect(mX, mY, x, y, w, h) THEN AskAnswer 3
+END SUB
+
+' 1 save, then open; 2 open; 3 neither (Esc)
+SUB AskAnswer (k)
+    askOn = 0
+    SELECT CASE k
+        CASE 1
+            ModelSave
+            IF mdlDirty THEN Msg "Not saved - " + askArg$ + " not opened": EXIT SUB
+            ModelLoad askArg$
+        CASE 2: ModelLoad askArg$
+        CASE ELSE: Msg "Not opened"
+    END SELECT
+END SUB
+
+' A model dragged from MODELS into the view: put down whole (its parts read in as
+' a prefab for now, "*NAME", so the ghost shows it), then made the model's own
+' parts, one group - nothing open is lost
+SUB MdlPlaceStart (n$)
+    DIM fh, t$, n AS LONG
+    MdlPlaceEnd
+    IF NOT _FILEEXISTS(ModelPath$(n$)) OR pfN >= MAX_PF THEN EXIT SUB
+    fh = FREEFILE: OPEN ModelPath$(n$) FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    n = PartsFromText&(t$, PF_BASE + pfTop, MAX_PFP - pfTop)
+    IF n = 0 THEN Msg n$ + " has no parts": EXIT SUB
+    mdlTmpPf = pfN + 1: mdlTmpTop = pfTop
+    pfName$(mdlTmpPf) = "*" + n$: pfFirst(mdlTmpPf) = PF_BASE + pfTop: pfCnt(mdlTmpPf) = n: pfIcon&(mdlTmpPf) = 0
+    pfN = mdlTmpPf: pfTop = pfTop + n
+    PlaceStart K_USE, "*" + n$
+    Msg "Let go where " + n$ + " goes: its parts join this model (one group - G: ungroup). Esc: not now"
+END SUB
+
+' The model being put down let go of (placing ended)
+SUB MdlPlaceEnd
+    IF mdlTmpPf = 0 THEN EXIT SUB
+    IF pfN = mdlTmpPf THEN pfName$(pfN) = "": pfN = pfN - 1: pfTop = mdlTmpTop
+    mdlTmpPf = 0: MeshGcDue
+END SUB
+
 SUB BinSort (a, b)
     DIM i, j, t$, k
     FOR i = a + 1 TO b
         j = i
         DO WHILE j > a
             IF LCASE$(biName$(j - 1)) <= LCASE$(biName$(j)) THEN EXIT DO
-            SWAP biName$(j - 1), biName$(j): SWAP biRef$(j - 1), biRef$(j): SWAP biKind(j - 1), biKind(j)
+            SWAP biName$(j - 1), biName$(j): SWAP biRef$(j - 1), biRef$(j): SWAP biKind(j - 1), biKind(j): SWAP biIcon&(j - 1), biIcon&(j)
             j = j - 1
         LOOP
     NEXT
@@ -175,24 +348,36 @@ SUB BinClick
     FOR k = 1 TO NUM_KINDS
         BinTile k, x, y, w, h
         IF InRect(mX, mY, x, y, w, h) THEN
+            IF penOn THEN PenStop
+            IF txOn THEN TxStop
             IF placeKind = k THEN PlaceStop ELSE PlaceStart k, ""
             EXIT SUB
         END IF
     NEXT
-    IF mY >= 152 AND mY < 170 THEN ' (the tabs: PREFABS, PICTURES)
-        k = 0: IF mX >= 74 THEN k = 1
+    BinTile NUM_KINDS + 1, x, y, w, h ' (the pen)
+    IF InRect(mX, mY, x, y, w, h) THEN PenToggle: EXIT SUB
+    BinTile NUM_KINDS + 2, x, y, w, h ' (text)
+    IF InRect(mX, mY, x, y, w, h) THEN TxToggle: EXIT SUB
+    IF mY >= BinTabY AND mY < BinTabY + 18 THEN ' (the tabs: PREFABS, PICTURES, MODELS)
+        k = 0: IF mX >= 70 THEN k = 1
+        IF mX >= 142 THEN k = 2
         IF k <> binTab THEN binTab = k: binTop = 0: BinList
+        IF binTab = 2 THEN Msg "Models: your models in models/ - click one to open it (SAVE puts the model open here)"
         IF binTab = 1 THEN Msg "Pictures: drag one onto a face, or click it then click faces. The path under the tabs: click it to go to any folder (paste one: Ctrl+V). Right-click a picture: EDIT IN DRAW, kaleidotron. Shift + wheel: bigger or smaller"
         EXIT SUB
     END IF
     BinBtn x, y, w, h
-    IF InRect(mX, mY, x, y, w, h) THEN
+    IF InRect(mX, mY, x, y, w, h) AND binTab <> 2 THEN
         IF binTab = 1 AND LEN(binPicExt$) > 0 THEN Msg "Back in PICTURES first: + FOLDER makes one in pictures/": EXIT SUB
         TypeStart F_DIR, "", -1
         Msg "The new folder's name (in " + IIFS$(binTab = 1, "pictures/" + binPicDir$, "prefabs/" + binDir$) + "), then Enter. Esc: not now"
         EXIT SUB
     END IF
     i = BinItemAt(mX, mY): IF i = 0 THEN EXIT SUB
+    IF binTab = 2 THEN ' (let go on it: opened; dragged into the view: put in this model)
+        IF biKind(i) = BI_MDL THEN mdlPress$ = biRef$(i): mdlPressI = i
+        EXIT SUB
+    END IF
     IF binTab = 1 THEN
         SELECT CASE biKind(i)
             CASE BI_UP, BI_DIR: PicFolderOpen biRef$(i)
@@ -249,12 +434,13 @@ END FUNCTION
 
 FUNCTION BinMenuItems
     BinMenuItems = 2: IF binMenuKind = 2 AND LEN(binMenuRef$) = 0 THEN BinMenuItems = 1
+    IF binMenuKind = 1 THEN BinMenuItems = 3
 END FUNCTION
 
 FUNCTION BinMenuItem$ (k)
     SELECT CASE binMenuKind
         CASE 0: BinMenuItem$ = IIFS$(k = 1, "EDIT IT", "RENAME / MOVE")
-        CASE 1: BinMenuItem$ = IIFS$(k = 1, "EDIT IN DRAW", "OPEN IN KALEIDOTRON")
+        CASE 1: BinMenuItem$ = IIFS$(k = 1, "PAINT IT", IIFS$(k = 2, "EDIT IN DRAW", "OPEN IN KALEIDOTRON"))
         CASE 2
             IF BinMenuItems = 1 THEN BinMenuItem$ = "OPEN IN KALEIDOTRON" ELSE BinMenuItem$ = IIFS$(k = 1, "OPEN", "OPEN IN KALEIDOTRON")
     END SELECT
@@ -301,7 +487,11 @@ SUB BinMenuClick
     NEXT
     IF hit = 0 THEN EXIT SUB
     IF binMenuKind = 1 THEN
-        IF hit = 1 THEN PicDrawFromBin binMenuRef$ ELSE KaleidoOpen PicPath$(binMenuRef$)
+        SELECT CASE hit
+            CASE 1: PntOpen binMenuRef$
+            CASE 2: PicDrawFromBin binMenuRef$
+            CASE ELSE: KaleidoOpen PicPath$(binMenuRef$)
+        END SELECT
         EXIT SUB
     END IF
     IF binMenuKind = 2 THEN
@@ -353,6 +543,7 @@ SUB PlaceStart (k, r$)
     pmRef$ = ""
     placeKind = k: placeRef$ = r$: placeDrag = -1: ghostKey$ = "": SelNone: ovDirty = -1
     PartFresh P_TPL, k, 0, 0, 0: pRef$(P_TPL) = r$ ' (set up as the last one of its kind was - the panel changes it)
+    IF FitKind(k) THEN ShapeFit P_TPL, snapStep, kindB(k) ' (a die, star, spike: its own proportions, on the grid, as big as the last)
     gHave = 0: IF ghostOn THEN ghostOn = 0: meshDirty = -1
     IF k = K_USE THEN
         Msg "Click where " + PfBase$(r$) + " goes (or drag it there): it stands on the face you point at. Shift: keep putting them down. Esc: stop"
@@ -364,12 +555,17 @@ END SUB
 SUB PlaceStop
     placeKind = 0: placeRef$ = "": ghostKey$ = "": gHave = 0
     IF ghostOn THEN ghostOn = 0: meshDirty = -1
+    MdlPlaceEnd
 END SUB
 
 ' The pictures of the folder's prefabs that aren't made yet (before the view's drawn: RenderBegin overwrites rId)
 SUB BinIconsDue
     DIM i, pf, x, y, w, h
     FOR i = 1 TO biN
+        IF biKind(i) = BI_MDL AND biIcon&(i) = 0 THEN ' (a model's: one a frame - it's read in to be drawn)
+            BinItemRect i, x, y, w, h
+            IF w > 0 THEN biIcon&(i) = _NEWIMAGE(64, 64, 32): ModelIcon biRef$(i), biIcon&(i): viewDirty = -1: EXIT SUB
+        END IF
         IF biKind(i) = BI_PF THEN
             BinItemRect i, x, y, w, h
             IF w > 0 THEN
@@ -396,24 +592,45 @@ SUB BinDraw
         LINE (x, y)-(x + w - 1, y + h - 1), c, BF
         LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
         _PUTIMAGE (x + 2, y + 4)-(x + 41, y + 43), binIcon&(k)
-        Txt x + 3, y + 1, LTRIM$(STR$(k)), cDim
+        IF k <= 6 THEN Txt x + 3, y + 1, LTRIM$(STR$(k)), cDim ' (its key)
     NEXT
+    BinTile NUM_KINDS + 1, x, y, w, h ' (the pen: a curve through three points)
+    c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover: t$ = "PEN (P): DRAW A SHAPE"
+    IF penOn THEN c = _RGB32(90, 30, 110)
+    LINE (x, y)-(x + w - 1, y + h - 1), c, BF
+    LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
+    PenIcon x, y
+    Txt x + 3, y + 1, "P", cDim
+    BinTile NUM_KINDS + 2, x, y, w, h ' (text: letters in a font)
+    c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover: t$ = "TEXT (X): LETTERS IN A FONT"
+    IF txOn THEN c = _RGB32(90, 30, 110)
+    LINE (x, y)-(x + w - 1, y + h - 1), c, BF
+    LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
+    TxIcon x, y
+    Txt x + 3, y + 1, "X", cDim
     Txt 10, TOP_H + 4, t$, cHi
 
-    Txt 10, 156, "PREFABS", IIFC~&(binTab = 0, cHi, cDim)
-    Txt 78, 156, "PICTURES", IIFC~&(binTab = 1, cHi, cDim)
-    LINE (IIF(binTab = 0, 10, 78), 169)-(IIF(binTab = 0, 65, 141), 169), cHi
+    y = BinTabY
+    Txt 10, y + 4, "PREFABS", IIFC~&(binTab = 0, cHi, cDim)
+    Txt 74, y + 4, "PICTURES", IIFC~&(binTab = 1, cHi, cDim)
+    Txt 146, y + 4, "MODELS", IIFC~&(binTab = 2, cHi, cDim)
+    x = 10: w = 56
+    IF binTab = 1 THEN x = 74: w = 64
+    IF binTab = 2 THEN x = 146: w = 48
+    LINE (x, y + 17)-(x + w - 1, y + 17), cHi
     IF binTab = 1 THEN
         FieldDraw F_PICPATH
+    ELSEIF binTab = 2 THEN
+        Txt 10, y + 22, "/models", cDim
     ELSE
         t$ = "/" + binDir$: IF LEN(t$) > 17 THEN t$ = ".." + RIGHT$(t$, 15)
-        Txt 10, 174, t$, cDim
+        Txt 10, y + 22, t$, cDim
     END IF
     xtLoads = 0
     FOR i = 1 TO biN
         BinItemRect i, x, y, w, h
         IF w > 0 THEN
-            isOn = (biKind(i) = BI_PF AND placeKind = K_USE AND placeRef$ = biRef$(i)) OR (biKind(i) = BI_PIC AND LEN(pmRef$) > 0 AND (pmRef$ = biRef$(i) OR pmSrc$ = biRef$(i)))
+            isOn = (biKind(i) = BI_MDL AND biRef$(i) = mdlName$ AND LEN(mdlPf$) = 0) OR (biKind(i) = BI_PF AND placeKind = K_USE AND placeRef$ = biRef$(i)) OR (biKind(i) = BI_PIC AND LEN(pmRef$) > 0 AND (pmRef$ = biRef$(i) OR pmSrc$ = biRef$(i)))
             c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover: hov$ = biName$(i)
             IF isOn THEN c = _RGB32(90, 30, 110)
             LINE (x, y)-(x + w - 1, y + h - 1), c, BF
@@ -424,13 +641,15 @@ SUB BinDraw
                 CASE BI_PIC
                     img& = PicThumb&(biRef$(i))
                     IF img& < -1 THEN _PUTIMAGE (x + 1, y + 2), img&
+                CASE BI_MDL
+                    IF biIcon&(i) < -1 THEN _PUTIMAGE (x + 1, y + 2), biIcon&(i)
                 CASE BI_PF
                     pf = PfFind(biRef$(i))
                     IF pf > 0 THEN
                         IF pfIcon&(pf) < -1 THEN _PUTIMAGE (x + 1, y + 2), pfIcon&(pf)
                     END IF
             END SELECT
-            t$ = LEFT$(biName$(i), (w - 2) \ 8): Txt x + (w - 8 * LEN(t$)) \ 2, y + h - 17, t$, IIFC~&(biKind(i) = BI_PF OR biKind(i) = BI_PIC, cText, cWarn)
+            t$ = LEFT$(biName$(i), (w - 2) \ 8): Txt x + (w - 8 * LEN(t$)) \ 2, y + h - 17, t$, IIFC~&(biKind(i) = BI_PF OR biKind(i) = BI_PIC OR biKind(i) = BI_MDL, cText, cWarn)
         END IF
     NEXT
     IF binTab = 1 AND (biN = 0 OR (biN = 1 AND biKind(1) = BI_UP)) THEN
@@ -438,6 +657,10 @@ SUB BinDraw
         Txt 10, BI_Y0 + IIF(biN, 108, 20), "drop a PNG from", cDim
         Txt 10, BI_Y0 + IIF(biN, 124, 36), "your desktop on", cDim
         Txt 10, BI_Y0 + IIF(biN, 140, 52), "the window.", cDim
+    ELSEIF binTab = 2 AND biN = 0 THEN
+        Txt 10, BI_Y0 + 4, "None here yet:", cDim
+        Txt 10, BI_Y0 + 20, "SAVE puts the", cDim
+        Txt 10, BI_Y0 + 36, "model here.", cDim
     ELSEIF biN = 0 OR (biN = 1 AND biKind(1) = BI_UP) THEN
         Txt 10, BI_Y0 + IIF(biN, 92, 4), "None here yet:", cDim
         Txt 10, BI_Y0 + IIF(biN, 108, 20), "PREFAB at the top", cDim
@@ -449,7 +672,7 @@ SUB BinDraw
         FieldDraw F_DIR
     ELSEIF typeField = F_PFNAME THEN
         FieldDraw F_PFNAME
-    ELSE
+    ELSEIF binTab <> 2 THEN
         BinBtn x, y, w, h: Btn x, y, w, h, "+ FOLDER", 0
     END IF
     ' (a name too long for its tile, in full by the pointer)
@@ -473,4 +696,22 @@ SUB FolderGlyph (x, y, up)
         LINE (x + 20, y + 16)-(x + 13, y + 24), cBg
         LINE (x + 20, y + 16)-(x + 27, y + 24), cBg
     END IF
+END SUB
+
+' The pen tile's picture: a closed outline, one side curved, its points and a handle
+SUB PenIcon (x, y)
+    DIM k, t#, m#, px, py, qx, qy, c AS _UNSIGNED LONG
+    c = _RGB32(80, 220, 230)
+    LINE (x + 10, y + 36)-(x + 34, y + 36), c: LINE (x + 34, y + 36)-(x + 34, y + 22), c
+    px = x + 34: py = y + 22
+    FOR k = 1 TO 12 ' (a curve from (34, 22) over to (10, 36), pulled up by (30, 4) and (8, 10))
+        t# = k / 12: m# = 1 - t#
+        qx = m# ^ 3 * (x + 34) + 3 * m# * m# * t# * (x + 30) + 3 * m# * t# * t# * (x + 4) + t# ^ 3 * (x + 10)
+        qy = m# ^ 3 * (y + 22) + 3 * m# * m# * t# * (y + 4) + 3 * m# * t# * t# * (y + 10) + t# ^ 3 * (y + 36)
+        LINE (px, py)-(qx, qy), c: px = qx: py = qy
+    NEXT
+    LINE (x + 34, y + 22)-(x + 30, y + 6), _RGB32(60, 180, 255): LINE (x + 29, y + 5)-(x + 31, y + 7), _RGB32(60, 180, 255), BF
+    LINE (x + 9, y + 35)-(x + 11, y + 37), _RGB32(240, 240, 250), BF
+    LINE (x + 33, y + 35)-(x + 35, y + 37), _RGB32(240, 240, 250), BF
+    LINE (x + 33, y + 21)-(x + 35, y + 23), _RGB32(240, 240, 250), BF
 END SUB

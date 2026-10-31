@@ -259,8 +259,8 @@ FUNCTION ShClick (y0)
         IF LEN(ShName$(k)) AND InRect(mX, mY, x, y, w, h) THEN
             SELECT CASE k
                 CASE 1 TO 3: SelFlip k - 1
-                CASE 4: SelSizeBy 1.25
-                CASE 5: SelSizeBy .8
+                CASE 4: SelSizeBy 1
+                CASE 5: SelSizeBy -1
                 CASE 7: SelTurn IIF(kShift, 15, 90): Msg "Turned left (Shift: 15 at a time; R / Shift+R too)"
                 CASE 8: SelTurn IIF(kShift, -15, -90): Msg "Turned right (Shift: 15 at a time; R / Shift+R too)"
             END SELECT
@@ -329,25 +329,201 @@ SUB SelFlip (ax)
 END SUB
 
 ' The selected parts k times the size, standing where they stand (several: as one piece, round the middle of their foot)
-SUB SelSizeBy (k)
-    DIM i, t AS LONG, lo AS V3, hi AS V3, n, cx#, cy#, cz#
+SUB SelSizeBy (dir)
+    DIM i, t AS LONG, lo AS V3, hi AS V3, n, cx#, cy#, cz#, st#, m#, q#, g#, k#
+    st# = GridStep#
+    IF TplOn THEN PartGrowStep P_TPL, dir, st#: GhostRemake: EXIT SUB
     IF SelCount = 0 THEN EXIT SUB
     UndoPush
+    IF SelCount = 1 THEN
+        PartGrowStep SelFirst, dir, st#
+    ELSE ' (several: as one, round their box's middle, its longest way a step each side)
+        lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
+        FOR t = 1 TO holeTN
+            IF tPart(t) >= 1 AND tPart(t) <= pN THEN
+                IF pSel(tPart(t)) THEN BoxGrow lo, hi, tA(t): BoxGrow lo, hi, tB(t): BoxGrow lo, hi, tC(t): n = n + 1
+            END IF
+        NEXT
+        IF n = 0 THEN EXIT SUB
+        cx# = (lo.x + hi.x) / 2: cy# = lo.y: cz# = (lo.z + hi.z) / 2
+        m# = hi.x - lo.x: q# = 2: g# = 2 * snapStep
+        IF hi.z - lo.z > m# THEN m# = hi.z - lo.z
+        IF hi.y - lo.y > m# THEN m# = hi.y - lo.y: q# = 1: g# = snapStep
+        IF m# < 1E-6 THEN EXIT SUB
+        k# = GridSnap#(m# + q# * st# * dir, g#, -1) / m#
+        FOR i = 1 TO pN
+            IF pSel(i) THEN
+                pX(i) = VAL(Fmt$(cx# + (pX(i) - cx#) * k#)): pY(i) = VAL(Fmt$(cy# + (pY(i) - cy#) * k#)): pZ(i) = VAL(Fmt$(cz# + (pZ(i) - cz#) * k#))
+                pSX(i) = PosSize(VAL(Fmt$(pSX(i) * k#))): pSY(i) = PosSize(VAL(Fmt$(pSY(i) * k#))): pSZ(i) = PosSize(VAL(Fmt$(pSZ(i) * k#)))
+            END IF
+        NEXT
+    END IF
+    ModelChanged
+    Msg IIFS$(dir > 0, "Grown", "Shrunk") + " a grid step each side (Shift: 10, Alt: a tenth; Ctrl+Z: as it was)"
+END SUB
+
+' Part i a grid step (st#) bigger or smaller each side, landing on the grid: a
+' shape square to the world by its size; a prefab, a mesh or a turned shape as
+' one, by its longest way
+SUB PartGrowStep (i, dir, st#)
+    DIM t AS LONG, lo AS V3, hi AS V3, n, m#, q#, g#, k#
+    IF pKind(i) <> K_USE AND pKind(i) <> K_MESH AND Square90(pRX(i)) AND Square90(pRY(i)) AND Square90(pRZ(i)) THEN
+        pSX(i) = GridSnap#(pSX(i) + 2 * st# * dir, 2 * snapStep, -1)
+        pSY(i) = GridSnap#(pSY(i) + st# * dir, snapStep, -1)
+        pSZ(i) = GridSnap#(pSZ(i) + 2 * st# * dir, 2 * snapStep, -1)
+        EXIT SUB
+    END IF
     lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
     FOR t = 1 TO holeTN
-        IF tPart(t) >= 1 AND tPart(t) <= pN THEN
-            IF pSel(tPart(t)) THEN BoxGrow lo, hi, tA(t): BoxGrow lo, hi, tB(t): BoxGrow lo, hi, tC(t): n = n + 1
-        END IF
+        IF tPart(t) = i THEN BoxGrow lo, hi, tA(t): BoxGrow lo, hi, tB(t): BoxGrow lo, hi, tC(t): n = n + 1
     NEXT
-    IF n THEN cx# = (lo.x + hi.x) / 2: cy# = lo.y: cz# = (lo.z + hi.z) / 2
-    FOR i = 1 TO pN
-        IF pSel(i) THEN
-            IF SelCount > 1 AND n > 0 THEN
-                pX(i) = VAL(Fmt$(cx# + (pX(i) - cx#) * k)): pY(i) = VAL(Fmt$(cy# + (pY(i) - cy#) * k)): pZ(i) = VAL(Fmt$(cz# + (pZ(i) - cz#) * k))
+    k# = 1 + .1 * dir ' (nothing made of it yet - the shape being put down: a tenth)
+    IF n THEN
+        m# = hi.x - lo.x: q# = 2: g# = 2 * snapStep
+        IF hi.z - lo.z > m# THEN m# = hi.z - lo.z
+        IF hi.y - lo.y > m# THEN m# = hi.y - lo.y: q# = 1: g# = snapStep
+        IF m# > 1E-6 THEN k# = GridSnap#(m# + q# * st# * dir, g#, -1) / m#
+    END IF
+    pSX(i) = PosSize(VAL(Fmt$(pSX(i) * k#))): pSY(i) = PosSize(VAL(Fmt$(pSY(i) * k#))): pSZ(i) = PosSize(VAL(Fmt$(pSZ(i) * k#)))
+END SUB
+
+' A turn of a whole number of quarters (0, 90, 180...)?
+FUNCTION Square90 (a)
+    Square90 = ABS(a - 90 * INT(a / 90 + .5)) < .01
+END FUNCTION
+
+' ---------------------------------------------------------------- SAME: the selected parts made like the first picked
+
+' k 1-3 PLACE SIZE TURN, 4-6 X Y Z (toggles), 7-9 WIDTH HEIGHT DEPTH as seen
+SUB SmBtn (k, y0, x, y, w, h)
+    h = 22
+    SELECT CASE k
+        CASE 1 TO 3: x = PX0 + (k - 1) * 49: y = y0 + 18: w = 47
+        CASE 4 TO 6: x = PX0 + 152 + (k - 4) * 27: y = y0 + 18: w = 25
+        CASE ELSE: x = PX0 + (k - 7) * 78: y = y0 + 62: w = 74
+    END SELECT
+END SUB
+
+FUNCTION SmName$ (k)
+    SmName$ = _TRIM$(MID$("PLACESIZE TURN X    Y    Z    WIDTHHEIGHDEPTH", (k - 1) * 5 + 1, 5))
+    IF k = 8 THEN SmName$ = "HEIGHT"
+END FUNCTION
+
+SUB SmDraw (y0)
+    DIM k, x, y, w, h, lit
+    IF y0 + 86 > scrH - BAR_H THEN EXIT SUB
+    Txt PX0, y0, "SAME (as the first picked)", cDim
+    Txt PX0, y0 + 44, "AS SEEN", cDim
+    FOR k = 1 TO 9
+        SmBtn k, y0, x, y, w, h: lit = 0
+        IF k >= 4 AND k <= 6 THEN lit = smAx(k - 3) ' (QB64's AND looks at both sides: no smAx(-2))
+        Btn x, y, w, h, SmName$(k), lit
+    NEXT
+END SUB
+
+FUNCTION SmClick (y0)
+    DIM k, x, y, w, h
+    IF y0 + 86 > scrH - BAR_H THEN EXIT FUNCTION
+    FOR k = 1 TO 9
+        SmBtn k, y0, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN
+            IF k >= 4 AND k <= 6 THEN
+                smAx(k - 3) = NOT smAx(k - 3)
+                Msg "SAME's PLACE / SIZE / TURN copy the first picked's " + IIFS$(smAx(1), "X ", "") + IIFS$(smAx(2), "Y ", "") + IIFS$(smAx(3), "Z", "")
+            ELSE
+                SameDo k
             END IF
-            pSX(i) = VAL(Fmt$(pSX(i) * k)): pSY(i) = VAL(Fmt$(pSY(i) * k)): pSZ(i) = VAL(Fmt$(pSZ(i) * k))
+            SmClick = -1: EXIT FUNCTION
         END IF
     NEXT
+END FUNCTION
+
+' The part the others are made like: the first picked (else the first selected)
+FUNCTION SameRef
+    DIM i
+    IF samFirst >= 1 AND samFirst <= pN THEN
+        IF pSel(samFirst) THEN SameRef = samFirst: EXIT FUNCTION
+    END IF
+    FOR i = 1 TO pN
+        IF pSel(i) THEN SameRef = i: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Part i's size along its own axis a (1-3): a shape's is its size; a mesh's / use's its own size times its scale (0: not known)
+FUNCTION SameOwn# (i, a)
+    DIM s#
+    IF a = 1 THEN s# = pSX(i) ELSE IF a = 2 THEN s# = pSY(i) ELSE s# = pSZ(i)
+    IF pKind(i) = K_MESH OR pKind(i) = K_USE THEN s# = s# * dragNat#(i, a)
+    SameOwn# = s#
+END FUNCTION
+
+SUB SameSet (i, a, v#)
+    IF a = 1 THEN pSX(i) = PosSize(v#) ELSE IF a = 2 THEN pSY(i) = PosSize(v#) ELSE pSZ(i) = PosSize(v#)
+END SUB
+
+' Part i's reach along world axis w (1 x, 2 y, 3 z), from its triangles
+FUNCTION SameReach# (i, w)
+    DIM t AS LONG, lo AS DOUBLE, hi AS DOUBLE
+    lo = 1E+30: hi = -1E+30
+    FOR t = 1 TO holeTN
+        IF tPart(t) = i THEN TfGrowAxis lo, hi, tA(t), w: TfGrowAxis lo, hi, tB(t), w: TfGrowAxis lo, hi, tC(t), w
+    NEXT
+    IF hi > lo THEN SameReach# = hi - lo
+END FUNCTION
+
+SUB SameDo (k)
+    DIM r, i, a, n, w, best, v#, e#, er#, b#, m(8), vx, vy, vz, nm$
+    IF SelCount < 2 THEN Msg "Select two parts or more: the others are made like the first one you picked": EXIT SUB
+    r = SameRef
+    IF meshDirty THEN MeshBuild
+    TfNatAll
+    UndoPush
+    IF k <= 3 THEN
+        FOR i = 1 TO pN
+            IF pSel(i) AND i <> r THEN
+                FOR a = 1 TO 3
+                    IF smAx(a) THEN
+                        SELECT CASE k
+                            CASE 1
+                                IF a = 1 THEN pX(i) = pX(r) ELSE IF a = 2 THEN pY(i) = pY(r) ELSE pZ(i) = pZ(r)
+                            CASE 2
+                                v# = SameOwn#(r, a): e# = SameOwn#(i, a)
+                                IF v# > 0 AND e# > 0 THEN SameSet i, a, (IIF(a = 1, pSX(i), IIF(a = 2, pSY(i), pSZ(i)))) * v# / e#
+                            CASE 3
+                                IF a = 1 THEN pRX(i) = pRX(r) ELSE IF a = 2 THEN pRY(i) = pRY(r) ELSE pRZ(i) = pRZ(r)
+                        END SELECT
+                    END IF
+                NEXT
+                n = n + 1
+            END IF
+        NEXT
+        nm$ = SmName$(k)
+    ELSE
+        SELECT CASE k ' (the world axis nearest that way on the screen)
+            CASE 7: vx = cRX: vy = cRY: vz = cRZ
+            CASE 8: vx = cUX: vy = cUY: vz = cUZ
+            CASE ELSE: vx = cFX: vy = cFY: vz = cFZ
+        END SELECT
+        w = 1: IF ABS(vy) > ABS(vx) THEN w = 2
+        IF ABS(vz) > ABS(IIF(w = 1, vx, vy)) THEN w = 3
+        er# = SameReach#(r, w)
+        IF er# <= 0 THEN Msg "The first picked has no size that way": EXIT SUB
+        FOR i = 1 TO pN
+            IF pSel(i) AND i <> r THEN
+                e# = SameReach#(i, w)
+                IF e# > 1E-9 THEN
+                    RotMat pRX(i), pRY(i), pRZ(i), m() ' (its own axis lying most along it)
+                    best = 1: b# = 0
+                    FOR a = 1 TO 3
+                        IF ABS(m((w - 1) * 3 + a - 1)) > b# THEN b# = ABS(m((w - 1) * 3 + a - 1)): best = a
+                    NEXT
+                    SameSet i, best, (IIF(best = 1, pSX(i), IIF(best = 2, pSY(i), pSZ(i)))) * er# / e#
+                    n = n + 1
+                END IF
+            END IF
+        NEXT
+        nm$ = SmName$(k) + " as seen (" + MID$("XYZ", w, 1) + ")"
+    END IF
     ModelChanged
-    Msg IIFS$(k > 1, "Grown", "Shrunk") + " by a quarter (SIZE in the panel sets it exactly; Ctrl+Z: as it was)"
+    Msg "SAME " + nm$ + ":" + STR$(n) + IIFS$(n = 1, " part", " parts") + " made like part" + STR$(r) + IIFS$(LEN(pName$(r)) > 0, " (" + pName$(r) + ")", "") + " - Ctrl+Z: as they were"
 END SUB

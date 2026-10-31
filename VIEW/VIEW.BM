@@ -7,21 +7,32 @@
 '
 
 SUB ViewSetup ' (the view's pictures are made by Layout, CORE/APP.BM)
+    DIM d
     camFov = 45
+    d = _DEVICES ' (the keyboard as a device: NumpadPoll)
     ViewHome
 END SUB
 
 SUB ViewHome
     camTX = 0: camTY = .15: camTZ = 0: camYaw = 30: camPitch = 24: camDist = 1.5
-    viewDirty = -1
+    camOrtho = 0: viewDirty = -1
+END SUB
+
+' The eye moved round to yaw / pitch (where it looks and how far kept)
+SUB ViewAngle (yaw, pitch)
+    camYaw = yaw: camPitch = pitch: viewDirty = -1
 END SUB
 
 ' The camera's eye and its three ways (forward, right, up), for a picture w x h
 SUB CamBasis (w, h)
-    DIM l
-    cEX = camTX + camDist * DCos(camPitch) * DSin(camYaw)
-    cEY = camTY + camDist * DSin(camPitch)
-    cEZ = camTZ - camDist * DCos(camPitch) * DCos(camYaw)
+    DIM l, fov, d
+    ' (flat - orthographic, numpad 5 - is the eye far back through a narrow
+    ' lens: the same size on the screen, everything else as it was)
+    fov = camFov: d = camDist
+    IF camOrtho THEN fov = 1: d = camDist * TAN(camFov / 2 * 3.14159265 / 180) / TAN(fov / 2 * 3.14159265 / 180)
+    cEX = camTX + d * DCos(camPitch) * DSin(camYaw)
+    cEY = camTY + d * DSin(camPitch)
+    cEZ = camTZ - d * DCos(camPitch) * DCos(camYaw)
     cFX = camTX - cEX: cFY = camTY - cEY: cFZ = camTZ - cEZ
     l = SQR(cFX * cFX + cFY * cFY + cFZ * cFZ): cFX = cFX / l: cFY = cFY / l: cFZ = cFZ / l
     ' right = forward x up(0,1,0); up = right x forward
@@ -30,7 +41,7 @@ SUB CamBasis (w, h)
     cRX = cRX / l: cRZ = cRZ / l
     cUX = cRY * cFZ - cRZ * cFY: cUY = cRZ * cFX - cRX * cFZ: cUZ = cRX * cFY - cRY * cFX
     cMidX = w / 2: cMidY = h / 2
-    cFoc = (h / 2) / TAN(camFov / 2 * 3.14159265 / 180)
+    cFoc = (h / 2) / TAN(fov / 2 * 3.14159265 / 180)
 END SUB
 
 ' The light, coming from over your left shoulder: lo + k x how square on a face is to it
@@ -46,6 +57,7 @@ SUB RCap (n AS LONG)
     IF n <= rCapN THEN EXIT SUB
     rCapN = n
     REDIM rZ(n) AS SINGLE, rId(n) AS LONG, rPart(n) AS INTEGER
+    REDIM wMark(n) AS LONG, wOld(n) AS _UNSIGNED LONG
 END SUB
 
 ' Start drawing into img& (w x h): nothing's there yet
@@ -53,6 +65,8 @@ SUB RenderBegin (img&, w, h)
     DIM m AS _MEM
     RCap w * h
     rImg& = img&: rW = w: rH = h
+    wGen = wGen + 1
+    IF wGen > 8000000 THEN wGen = 1: REDIM wMark(rCapN) AS LONG
     rMem = _MEMIMAGE(img&)
     m = _MEM(rZ()): _MEMFILL m, m.OFFSET, w * h * 4, 0 AS LONG: _MEMFREE m
     m = _MEM(rId()): _MEMFILL m, m.OFFSET, w * h * 4, 0 AS LONG: _MEMFREE m
@@ -73,6 +87,7 @@ SUB ViewRender
         k = y / vH
         LINE (0, y)-(vW - 1, y), _RGB32(10 + 14 * k, 9 + 10 * k, 20 + 18 * k)
     NEXT
+    RefRenderAll ' (reference pictures: on the ground and the far walls, under the grid)
     DrawGrid
     rOrtho = 0: rCull = -1: rGhost = 0
     IF viewWire THEN ' (TEX off: filled unseen, so a click still finds the part and the face)
@@ -105,7 +120,7 @@ SUB ViewRender
     FOR t = 1 TO holeTN
         IF pWire(tPart(t)) THEN
             WireTri t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t)))
-        ELSEIF wireOn THEN
+        ELSEIF wireOn AND guidesOn THEN ' (GUIDES off: no WIRE either)
             WireTriZ t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t))), kSeen, kHid
         END IF
     NEXT
@@ -139,10 +154,14 @@ SUB WireTriZ (t AS LONG, c AS _UNSIGNED LONG, kSeen, kHid)
     IF e AND 4 THEN LineZ tC(t).x, tC(t).y, tC(t).z, tA(t).x, tA(t).y, tA(t).z, c, kSeen, kHid
 END SUB
 
-' A line in the world blended into the view as it's drawn (RenderBegin's), tested against rZ
+' A line in the world blended into the view as it's drawn (RenderBegin's), tested
+' against rZ - each pixel turned to what was there XOR &H808080 (half way round
+' each colour: it shows on white, black and every colour). The first line on a
+' pixel keeps what was there (wOld, wMark: this render's, and how strong), so a
+' second over it - a shared edge, drawn by both faces - doesn't turn it back.
 SUB LineZ (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, kSeen, kHid)
     DIM avx, avy, avz, bvx, bvy, bvz, t, nz, sx0, sy0, sx1, sy1, qa, qb, n, k, x, y, f, q, a
-    DIM i AS LONG, old AS _UNSIGNED LONG, r, g, b
+    DIM i AS LONG, old AS _UNSIGNED LONG, r, g, b, x2 AS _UNSIGNED LONG
     IF kSeen <= 0 AND kHid <= 0 THEN EXIT SUB
     nz = .01
     CamSpace ax, ay, az, avx, avy, avz
@@ -154,7 +173,6 @@ SUB LineZ (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, kSeen, kHid)
     sx1 = cMidX + bvx / bvz * cFoc: sy1 = cMidY - bvy / bvz * cFoc: qb = 1 / bvz
     n = INT(ABS(sx1 - sx0)): IF ABS(sy1 - sy0) > n THEN n = INT(ABS(sy1 - sy0))
     IF n > 4000 THEN n = 4000
-    r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
     FOR k = 0 TO n
         IF n = 0 THEN f = 0 ELSE f = k / n
         x = INT(sx0 + (sx1 - sx0) * f): y = INT(sy0 + (sy1 - sy0) * f)
@@ -162,7 +180,16 @@ SUB LineZ (ax, ay, az, bx, by, bz, c AS _UNSIGNED LONG, kSeen, kHid)
             i = y * rW + x: q = qa + (qb - qa) * f
             IF rZ(i) <= q * 1.004 + .00001 THEN a = kSeen ELSE a = kHid
             IF a > 0 THEN
-                _MEMGET rMem, rMem.OFFSET + i * 4, old
+                IF wMark(i) \ 256 = wGen THEN
+                    IF (wMark(i) AND 255) >= a THEN a = 0 ELSE old = wOld(i) ' (drawn already, as strong: left)
+                ELSE
+                    _MEMGET rMem, rMem.OFFSET + i * 4, old: wOld(i) = old
+                END IF
+            END IF
+            IF a > 0 THEN
+                wMark(i) = wGen * 256 + a
+                x2 = old XOR &H808080~&
+                r = _RED32(x2): g = _GREEN32(x2): b = _BLUE32(x2)
                 _MEMPUT rMem, rMem.OFFSET + i * 4, _RGB32(_RED32(old) + (r - _RED32(old)) * a \ 255, _GREEN32(old) + (g - _GREEN32(old)) * a \ 255, _BLUE32(old) + (b - _BLUE32(old)) * a \ 255) AS _UNSIGNED LONG
             END IF
         END IF
@@ -194,52 +221,109 @@ FUNCTION WireCol~& (c AS _UNSIGNED LONG)
 END FUNCTION
 
 ' The ground: a grid on y = 0 - a cell's square (where a NEON-CASTER prop
-' stands) bright, eighths of a cell dim - and the X (red) and Z (blue) lines
+' stands) bright, the X (red) and Z (blue) lines. One grid, round where the
+' eye looks, that never stops but fades into the backdrop: the finest lines
+' the snap's (wider when they'd blur), each coarser level (4 times apart)
+' reaching 4 times farther - all fading out, so it thins with distance and
+' ends in solid colour, no edges
 SUB DrawGrid
-    DIM k, v, c AS _UNSIGNED LONG
+    DIM sp, lv, k, v, r, g, b, rad, last, cx, cz
     IF gridWalls THEN GridWallsDraw ELSE gridH = 1
-    FOR k = -16 TO 16
-        v = k / 16
-        c = GridC~&(34, 32, 54): IF k MOD 4 = 0 THEN c = GridC~&(48, 44, 76)
-        Line3D -1, 0, v, 1, 0, v, c
-        Line3D v, 0, -1, v, 0, 1, c
-    NEXT
-    c = GridC~&(110, 60, 150)
-    Line3D -.5, 0, -.5, .5, 0, -.5, c: Line3D .5, 0, -.5, .5, 0, .5, c
-    Line3D .5, 0, .5, -.5, 0, .5, c: Line3D -.5, 0, .5, -.5, 0, -.5, c
-    Line3D -1, 0, 0, 1, 0, 0, _RGB32(150, 50, 60)
-    Line3D 0, 0, -1, 0, 0, 1, _RGB32(50, 80, 170)
+    sp = snapStep: IF sp <= 0 THEN sp = 1 / 16 ' (the finest lines: the snap's)
+    DO WHILE sp < camDist / 96: sp = sp * 2: LOOP ' (too close together to see: wider)
+    cx = camTX: cz = camTZ
+    lv = 0
+    DO
+        rad = sp * 32: last = (rad * 4 >= camDist * 6 OR lv >= 5)
+        IF last AND rad < camDist * 6 THEN rad = camDist * 6
+        r = 34: g = 32: b = 54: IF lv > 0 THEN r = 48: g = 44: b = 76
+        FOR k = INT((cx - rad) / sp) TO INT((cx + rad) / sp) + 1 ' (each level leaves the next's lines to it)
+            IF last OR (k MOD 4) <> 0 THEN v = k * sp: GridFade v, cz - rad, v, cz + rad, r, g, b, rad, cx, cz
+        NEXT
+        FOR k = INT((cz - rad) / sp) TO INT((cz + rad) / sp) + 1
+            IF last OR (k MOD 4) <> 0 THEN v = k * sp: GridFade cx - rad, v, cx + rad, v, r, g, b, rad, cx, cz
+        NEXT
+        IF last THEN EXIT DO
+        sp = sp * 4: lv = lv + 1
+    LOOP
+    GridFade cx - rad, 0, cx + rad, 0, 150, 50, 60, rad, cx, cz ' (X)
+    GridFade 0, cz - rad, 0, cz + rad, 50, 80, 170, rad, cx, cz ' (Z)
+    v = GridC~&(110, 60, 150)
+    Line3D -.5, 0, -.5, .5, 0, -.5, v: Line3D .5, 0, -.5, .5, 0, .5, v
+    Line3D .5, 0, .5, -.5, 0, .5, v: Line3D -.5, 0, .5, -.5, 0, -.5, v
     Line3D 0, 0, 0, 0, gridH, 0, _RGB32(50, 120, 60) ' (y: up)
     Line3D 0, 0, -.5, 0, 0, -.62, _RGB32(80, 140, 255) ' (its front: towards -z)
 END SUB
 
-' The two walls away from you (x = +-1, z = +-1): the ground's grid stood up,
-' an eighth of a cell apart, fainter - as tall as the model, a cell at least
-SUB GridWallsDraw
-    DIM k, v, n, c AS _UNSIGNED LONG, lo AS V3, hi AS V3
-    MeshBounds lo, hi, 0
-    gridH = INT(hi.y * 4 + .999) / 4: IF gridH < 1 THEN gridH = 1
-    IF gridH > 4 THEN gridH = 4
-    gridWX = -1: IF cEX < 0 THEN gridWX = 1
-    gridWZ = -1: IF cEZ < 0 THEN gridWZ = 1
-    n = gridH * 8
-    FOR k = 0 TO n ' (across: heights)
-        v = k / 8
-        c = GridC~&(24, 23, 42): IF k MOD 2 = 0 THEN c = GridC~&(33, 30, 56)
-        IF k MOD 8 = 0 THEN c = GridC~&(44, 40, 72)
-        Line3D gridWX, v, -1, gridWX, v, 1, c
-        Line3D -1, v, gridWZ, 1, v, gridWZ, c
+' A ground line from (ax, az) to (bx, bz) in pieces, each fading from colour
+' r g b towards the backdrop by how far its middle is from (cx, cz): gone at rad
+SUB GridFade (ax, az, bx, bz, r, g, b, rad, cx, cz)
+    DIM i, n, t0, t1, x0, z0, x1, z1, mx, mz, f
+    n = 8
+    FOR i = 0 TO n - 1
+        t0 = i / n: t1 = (i + 1) / n
+        x0 = ax + (bx - ax) * t0: z0 = az + (bz - az) * t0
+        x1 = ax + (bx - ax) * t1: z1 = az + (bz - az) * t1
+        mx = (x0 + x1) / 2 - cx: mz = (z0 + z1) / 2 - cz
+        f = 1 - SQR(mx * mx + mz * mz) / rad
+        IF f > 0 THEN
+            f = f * f * (3 - 2 * f) ' (soft at both ends)
+            Line3D x0, 0, z0, x1, 0, z1, GridC~&(14 + (r - 14) * f, 12 + (g - 12) * f, 28 + (b - 28) * f)
+        END IF
     NEXT
-    FOR k = -8 TO 8 ' (up)
-        v = k / 8
-        c = GridC~&(24, 23, 42): IF k MOD 2 = 0 THEN c = GridC~&(33, 30, 56)
+END SUB
+
+' Where the walls stand (gridWX, gridWZ: the far ones; gridH), and how far they reach
+SUB GridWallsAt (x0, x1, z0, z1)
+    DIM lo AS V3, hi AS V3
+    MeshBounds lo, hi, 0
+    IF lo.x > hi.x THEN lo.x = 0: hi.x = 0: lo.z = 0: hi.z = 0: hi.y = 0 ' (nothing there)
+    gridH = INT(hi.y * 4 + .999) / 4: IF gridH < 1 THEN gridH = 1
+    x0 = INT(lo.x * 4) / 4 - .25: IF x0 > -1 THEN x0 = -1
+    x1 = -INT(-hi.x * 4) / 4 + .25: IF x1 < 1 THEN x1 = 1
+    z0 = INT(lo.z * 4) / 4 - .25: IF z0 > -1 THEN z0 = -1
+    z1 = -INT(-hi.z * 4) / 4 + .25: IF z1 < 1 THEN z1 = 1
+    gridWX = x0: IF cEX < 0 THEN gridWX = x1
+    gridWZ = z0: IF cEZ < 0 THEN gridWZ = z1
+END SUB
+
+' The two walls away from you: round the model (a cell out from the middle at
+' least, a quarter past its parts), the ground's grid stood up, fainter - as
+' tall as the model, a cell at least; lines an eighth of a cell apart, wider
+' when it's big
+SUB GridWallsDraw
+    DIM k, v, n, c AS _UNSIGNED LONG, x0, x1, z0, z1, st, m
+    GridWallsAt x0, x1, z0, z1
+    m = x1 - x0: IF z1 - z0 > m THEN m = z1 - z0
+    IF gridH > m THEN m = gridH
+    st = 1 / 8
+    DO WHILE m / st > 64: st = st * 2: LOOP
+    FOR k = 0 TO INT(gridH / st + .001) ' (across: heights)
+        v = k * st
+        c = GridC~&(24, 23, 42): IF (k * st * 4) = INT(k * st * 4) THEN c = GridC~&(33, 30, 56)
+        IF k * st = INT(k * st) THEN c = GridC~&(44, 40, 72)
+        Line3D gridWX, v, z0, gridWX, v, z1, c
+        Line3D x0, v, gridWZ, x1, v, gridWZ, c
+    NEXT
+    FOR k = -INT(-z0 / st + .001) TO INT(z1 / st + .001) ' (up)
+        v = k * st
+        c = GridC~&(24, 23, 42): IF (v * 4) = INT(v * 4) THEN c = GridC~&(33, 30, 56)
         IF k = 0 THEN c = GridC~&(48, 44, 76)
         Line3D gridWX, 0, v, gridWX, gridH, v, c
+    NEXT
+    FOR k = -INT(-x0 / st + .001) TO INT(x1 / st + .001)
+        v = k * st
+        c = GridC~&(24, 23, 42): IF (v * 4) = INT(v * 4) THEN c = GridC~&(33, 30, 56)
+        IF k = 0 THEN c = GridC~&(48, 44, 76)
         Line3D v, 0, gridWZ, v, gridH, gridWZ, c
     NEXT
     ' (where the axes meet the walls: a short coloured line up each)
     Line3D gridWX, 0, 0, gridWX, gridH, 0, GridC~&(40, 50, 100)
     Line3D 0, 0, gridWZ, 0, gridH, gridWZ, GridC~&(90, 40, 55)
+    ' (the walls' bottoms and edges)
+    c = GridC~&(48, 44, 76)
+    Line3D gridWX, 0, z0, gridWX, gridH, z0, c: Line3D gridWX, 0, z1, gridWX, gridH, z1, c
+    Line3D x0, 0, gridWZ, x0, gridH, gridWZ, c: Line3D x1, 0, gridWZ, x1, gridH, gridWZ, c
 END SUB
 
 ' A grid line's colour at the brightness set: from the backdrop's (0) through as it
@@ -618,9 +702,14 @@ END SUB
 
 ' The camera turned to see the whole model (or the selection)
 SUB ViewFrameAll
+    ViewFrame SelCount > 0
+END SUB
+
+' The camera turned to see the selection (selOnly), or the whole model
+SUB ViewFrame (selOnly)
     DIM lo AS V3, hi AS V3, r
     IF meshDirty THEN MeshBuild
-    MeshBounds lo, hi, SelCount > 0
+    MeshBounds lo, hi, selOnly
     IF hi.x - lo.x + hi.y - lo.y + hi.z - lo.z < .0001 THEN ViewHome: EXIT SUB
     camTX = (lo.x + hi.x) / 2: camTY = (lo.y + hi.y) / 2: camTZ = (lo.z + hi.z) / 2
     r = SQR((hi.x - lo.x) ^ 2 + (hi.y - lo.y) ^ 2 + (hi.z - lo.z) ^ 2) / 2

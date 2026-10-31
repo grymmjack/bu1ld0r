@@ -9,13 +9,13 @@
 ' takes off their picture.
 '
 CONST BI_PIC = 4
-DIM SHARED binTab ' (the bin's lower half: 0 the prefabs, 1 the pictures)
+DIM SHARED binTab ' (the bin's lower half: 0 the prefabs, 1 the pictures, 2 the models)
 DIM SHARED binPicDir$ ' (the folder open in pictures/: "" or "walls/")
 DIM SHARED pmRef$, pmDrag ' (the picture being put on a face; dragged from the bin)
 DIM SHARED pcThumb&(MAX_PIC) ' (each picture's tile in the bin, BinTS square)
 DIM SHARED dropFile$, dropWait ' (a file dropped on the window: dealt with a few frames on, once the pointer's where it landed)
 CONST PT_FIT = 1, PT_ACROSS = 2, PT_TURN = 3, PT_FLIP = 4, PT_MORE = 5, PT_FEWER = 6, PT_LEFT = 7, PT_RIGHT = 8, PT_UP = 9, PT_DOWN = 10, PT_NONE = 11
-CONST PT_DEFORM = 12, PT_MOVE = 13, PT_DRAW = 14 ' (DRAW: the picture opened in DRAW - a new one if the face has none) ' (DEFORM: its corners pinned to the face's; MOVE: the mode below)
+CONST PT_DEFORM = 12, PT_MOVE = 13, PT_DRAW = 14, PT_PAINT = 15 ' (DRAW: the picture opened in DRAW - a new one if the face has none) ' (DEFORM: its corners pinned to the face's; MOVE: the mode below)
 ' The picture moved by hand (P, or MOVE PICTURE, in E with faces picked): a drag on a
 ' picked face slides it under the pointer, the wheel sizes it, Shift + wheel turns it
 DIM SHARED pvOn, pvArm, pvDrag, pvF AS LONG, pvH AS V3, pvN AS V3, pvP0x#, pvP0y#, pvP0z#
@@ -37,3 +37,5 @@ DIM SHARED xtRef$(XT_MAX), xtImg&(XT_MAX), xtNext, xtLoads ' (outside pictures' 
 DIM SHARED picTS ' (the PICTURES tab's tiles, in pixels: Shift + wheel, pic_size= in bu1ld0r.cfg)
 CONST PIC_TS_MIN = 40, PIC_TS_MAX = 256
 DIM SHARED cfgKaleido$ ' (kaleidotron's program: kaleidotron= in bu1ld0r.cfg)
+DIM SHARED lookHave, lookCol AS _UNSIGNED LONG, lookTex, lookU#(2), lookV#(2) ' (a face's look copied in E: colour, picture, its spots as planes)
+DIM SHARED clipParts$ ' (parts copied: their .bld lines)

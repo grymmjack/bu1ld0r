@@ -29,8 +29,9 @@ SUB MeshBuild
 END SUB
 
 ' Parts q0 to q1 (the model's, or a prefab's) as triangles, each hole cut
-' out of the solid parts before it that it reaches (a hole in a group: only
-' its group's; a KEEP hole leaves only where they overlap). owner: whose
+' out of the solid parts it reaches (HoleCuts: a hole in a group, its group's
+' wherever they're listed; else the ones before it - so a part after it can
+' sit in it); a KEEP hole leaves only where they overlap. owner: whose
 ' they all count as (-1: each its own). Holes and hidden parts make none here.
 SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
     DIM q AS LONG, k, nh, t0 AS LONG, t1 AS LONG, lo AS V3, hi AS V3, la AS LONG, lb AS LONG, m1 AS LONG, m2 AS LONG, o, cut
@@ -59,7 +60,7 @@ SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
             TriBounds t0 + 1, tN, lo, hi
             la = 0: cut = 0
             FOR k = 1 TO nh
-                IF hq(k) > q AND (pGrp(hq(k)) = 0 OR pGrp(hq(k)) = pGrp(q)) THEN
+                IF HoleCuts(hq(k), q) THEN
                     IF pKeep(hq(k)) OR BoxesMeet(lo, hi, hlo(k), hhi(k)) THEN
                         IF cut = 0 THEN cut = -1: CsgMark m1, m2: la = CsgFromTris&(t0 + 1, tN, 0): tN = t0
                         IF la THEN
@@ -75,6 +76,11 @@ SUB MeshRun (q0 AS LONG, q1 AS LONG, owner)
         END IF
     NEXT
 END SUB
+
+' Hole h cuts solid part q: in a group, all its group's; not, the parts listed before it
+FUNCTION HoleCuts (h AS LONG, q AS LONG)
+    IF pGrp(h) THEN HoleCuts = (pGrp(h) = pGrp(q)) ELSE HoleCuts = (q < h)
+END FUNCTION
 
 ' Triangles t0 to t1 are one solid, part q's (a use's: its solids, overlapping - all one here)
 SUB SolidMark (t0 AS LONG, t1 AS LONG, q AS LONG)
@@ -123,7 +129,18 @@ END FUNCTION
 
 FUNCTION SegsOf (i)
     DIM s
-    s = pSeg(i): IF s < 3 THEN s = 12
+    s = pSeg(i)
+    IF s < 3 THEN
+        SELECT CASE pKind(i)
+            CASE K_DIE, K_SPIKE: s = 20
+            CASE K_STAR: s = 5
+            CASE K_DIAMOND: s = 8
+            CASE K_PILL: s = 16
+            CASE K_DONUT: s = 24
+            CASE ELSE: s = 12
+        END SELECT
+    END IF
+    IF DieLike(pKind(i)) THEN s = dieN(DieIdx(s))
     IF s > 64 THEN s = 64
     SegsOf = s
 END FUNCTION
@@ -219,6 +236,14 @@ SUB MeshShape (i, owner)
                     mkTriE = 2: mkFace = 1: MkTri 0, 0, 0, cp1 * DCos(a0), 0, cp1 * DSin(a0), cp1 * DCos(a1), 0, cp1 * DSin(a1), 0, -1, 0: mkTriE = 7
                 NEXT
             END IF
+        CASE K_DIE: MkDie s
+        CASE K_SPIKE: MkSpike s, pAmt(i)
+        CASE K_STAR: MkStar s, pAmt(i)
+        CASE K_GEAR: MkGear s, pAmt(i)
+        CASE K_DONUT: MkDonut s, pAmt(i)
+        CASE K_DIAMOND: MkDiamond s, pAmt(i)
+        CASE K_PILL: MkPill s, pAmt(i)
+        CASE K_ARROW: MkArrow pAmt(i)
         CASE K_WEDGE
             ' Its back full height, sloping down to its front's foot
             mkFace = 0: MkQuad -.5, 0, -.5, .5, 0, -.5, .5, 1, .5, -.5, 1, .5, 0, 1, -1 ' (the slope)

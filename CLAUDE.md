@@ -10,11 +10,14 @@ input, helpers), MODEL (PARTS: the part list, .bld text, undo; PREFAB: the
 prefab library, save as / edit a prefab; MESH: each shape as triangles,
 holes cut; CSG: one solid less another, or their overlap; EMESH: mesh
 parts; BAKE: APPLY, UNLINK, groups, tint, prefab rename; PIC: pictures;
-IMPORT: an OBJ / NEON-CASTER prop opened as a model), VIEW (camera, the rasterizer,
+IMPORT: an OBJ / NEON-CASTER prop opened as a model; SHAPES: dice, star,
+gear, donut, diamond, spike, pill, arrow; SVG: an SVG opened as a model;
+FONT: TrueType outlines), VIEW (camera, the rasterizer,
 picking, outlines), UI (UI: panel, keys, mouse, putting down, dragging;
 BIN: the bin - shapes, prefab folders, thumbnails; LIST: the parts list;
 PICS: the bin's PICTURES tab, pictures put on faces, file drops, the
-picture tools; ALIGN: align parts / points / faces as seen; GIZMO: the
+picture tools; PAINT: the painter; PEN: the pen; TEXT: the text tool;
+REF: reference pictures; ALIGN: align parts / points / faces as seen; GIZMO: the
 move widget's arrows and X/Y/Z held - a drag kept to one axis (`AxisAt#`);
 EDIT: a part's faces, edges (`ED_EDGES`: picked as their two points in edSelV - `EdPtMode` is points or edges) and points; BEVEL: B in E, a mode; LOOP: O in E, the same mode), OUT (EXPORT: OBJ + NEON-CASTER; TIDY:
 the export's mesh tidied). As NEON-CASTER: `.BI`
@@ -56,6 +59,21 @@ declarations, `.BM` routines, no GOSUB/GOTO, DIM every local.
   (drv.sh's `testkill`; `win` finds only it). The `^` keeps the pattern
   from matching the shell running pkill. Xvfb: only `:99`'s -
   `pkill -f '^Xvfb :99'`.
+- **A SUB's `REDIM` of a SHARED array with a different type makes a
+  local copy** (shX was DOUBLE in the .BI, SINGLE in the SUB: the shared
+  one stayed size 0). Declare it once, the type it's used as.
+- After `source tools/test/drv.sh`, `mv` is its mouse-move helper, not
+  the shell's: move files with `/bin/mv`.
+- A variable can't share a FUNCTION's name, whatever the suffix (`txKey$`
+  vs `TxKey`: renamed `txRk$`). A string can't hold `""` - CHR$(34).
+  A single-line IF can't hold a FOR.
+- `OPEN f$ FOR BINARY` fails ("Bad file name") on a read-only file (the
+  system's fonts): read with `_READFILE$`.
+- `_DEVICEINPUT` pops an event each call: read it once a pass
+  (`DO WHILE d ... d = _DEVICEINPUT`), never `DO WHILE _DEVICEINPUT` plus
+  another call inside.
+- `EmFromTris&`'s allEdges -1 merges gently curved walls into non-flat
+  polygons that open gaps: text and merges pass 0.
 - `_FILES$` is one iterator: list a folder's names first, then recurse
   (`PfLoadAll`). Folders come back with a trailing `/`, plus `./` `../`.
 
@@ -183,10 +201,111 @@ each ring edge (`LcT#`: POSITION if one, else even), strips each ring face
 EdDivideAny's). Edges picked are points (edSelV), so two opposite sides
 of a quad pick all four: `edPkA/edPkB` keep the edges clicked (EdPress,
 `EdPkMark`; the work's in `wkPk`, renumbered by swMap in EdCommit;
-cleared by EdSelClear / EdSelAll / EdSelReset / leaving EDGES), and
+cleared by EdSelClear / EdSelAll / EdSelReset / leaving EDGES), Ctrl+click
+an edge picks its loop (`EdLoopPick`: `EdFan&` lists a point's neighbours
+round it in `edNb`, on only through four-edged points), and
 `EdPickedEdges` / `EdEdgeMeant` leave out an edge whose points are all
-clicked edges' but which wasn't. E's edge lines are light or dark by the
+clicked edges' but which wasn't. WIRE's lines (`LineZ`) are the pixel under them XOR 808080, blended by
+strength: `wMark` (wGen x 256 + strength) / `wOld` keep a pixel's first
+colour so lines crossing don't XOR back (wGen bumped in RenderBegin; the
+part colour passed in is unused). E's edge lines are light or dark by the
 face's colour times how solid TEX shows it (`texOp`, 0 with TEX off).
+
+## Shapes, the MODELS tab, the painter, SVGs
+
+Kinds: K_DIE..K_ARROW are 7-14 (NUM_KINDS 14), K_USE 15, K_MESH 16 (the
+.bld names kinds, so files don't care). MODEL/SHAPES: `ShapesSetup` (in
+PartsSetup) makes each die once (`DieMake`: points, a convex hull by
+triples of points, rested on its lowest face, fitted to the unit box;
+d10 a trapezohedron, d30 the icosahedron's 12 + dodecahedron's 20 points
+scaled onto the face planes); `pSeg` is FACES (`DieIdx`/`DieStep` snap
+and step it), `pAmt` the second number (`AmtName$`/`SegName$` in UI
+label them). Flat shapes are outlines in shX/shZ extruded (`MkPrism`).
+The bin's shape tiles go `BinShapeCols` across, so `BI_Y0` is a
+FUNCTION now (tabs at `BinTabY`); BIN_MIN 200. binTab 2 is MODELS
+(`MdlBinList`; `ModelIcon` reads the model into PF_BASE+pfTop as a
+throwaway prefab "*NAME" and renders it as a use, one a frame in
+BinIconsDue; `MdlBinOpen` asks once when unsaved).
+
+The painter (UI/PAINT, `pntOn`) takes the whole window: UiFrame / UiKey /
+UiDraw hand over at their top. Ctrl+P (`PntFromPointer`): E's picked
+faces -> `PicOfPicked$` (shared with EDIT IN DRAW), else the face under
+the pointer's tTex, else `PicNewFile$` + PicPutAt. Pixels through a
+`_MEM` (`pntM`); undo is whole pictures as strings (`PntSnap$`); shapes
+redraw over `pntBack$` while dragging. Save: `_SAVEIMAGE`, then picW = 0
++ PicFind reloads it, the thumb dropped, PicWatch's signature refreshed.
+MAKE (`PntMake`) is tileable value noise (`PntVNoise!` wraps), seeded.
+
+SVG (MODEL/SVG, `SvgImport` from ModelLoad / DropTake / OpenList's
+models/*.svg): a tag scanner (quotes kept, comments / CDATA / defs-like
+containers skipped by depth), a group stack `svT#` / `svFill` / `svOp`
+(32 deep), each shape's outlines through `svM#` into svPX/svPY (rings
+svR0/svRN, shape svRE). `SvBuild`: fitted (x mirrored, so it reads
+right from -z), near points merged (8E-4), in-line points and needles
+dropped (`SvStraighten`: else walls and caps disagree - T-junctions),
+depth by containment (odd: a hole of the smallest ring round it), holes
+bridged into the outline (`SvBridge`, rightmost first), ear-clipped
+(`SvEars`), caps both sides and walls (`SvWalls`), each shape one part
+via EmFromTris&. Layers: a shape whose box overlaps an earlier one's is
+`lay` steps (.02) nearer -z. Test: comps.py (per solid: closed, volume
+> 0) - parity.py's rays misfire on thin slabs; real icons in
+/usr/share/icons/hicolor/scalable/apps.
+
+## Pen, text, merge, the pivot, the numpad, references
+
+PEN (UI/PEN, `penOn`): points `penAX#/penAZ#` on the ground (PenGround,
+snapped), handles `penO*/penI*`; PenMake flattens the curves into SVG's
+rings and makes one flat mesh part (SvPrep + SvSolid, as an SVG's shape).
+TEXT (UI/TEXT, `txOn`; MODEL/FONT): `FontLoad` reads a .ttf/.ttc/.otf with
+`_READFILE$` (head maxp hhea hmtx loca glyf cmap 4 / 12, else 3,0 symbol
+at +F000), `FontRings` walks simple and composite glyphs (quadratics in 6
+steps) into svPX/svPY rings, svRE = the character; `FontScan` lists
+fonts/, ~/git/DRAW/ASSETS/FONTS/, ~/.local/share/fonts, ~/.fonts,
+/usr/share/fonts (deduped by name). `TxMake`: per character SvSolid of its
+even-depth rings, turned lying (ax+x, z, az-y) or standing (ax-x, y,
+az-z), `EmFromTris&(.., 0)`, all one group (GroupNew), named by the
+letter. SvBuild's ring prep is `SvPrep (tol#)` (dedup, SvStraighten,
+areas, depth, parents), shared by SVG / PEN / TEXT.
+
+MERGE (M, panel slot 25 = APPLY / UNLINK / MERGE by what's picked):
+`SelMerge` (MODEL/BAKE) folds the selected solid parts with `CsgBool&`
+keep 2 (union: A's pieces outside B, B's outside A; a face both share kept
+once - B's on-surface pieces tested at +-.0002) into the first part's slot,
+unturned, sized to the box. `MkPolyTris` fans a convex polygon from a
+corner whose neighbours are corners too (`pcS`): skipping flat triangles
+made T-junctions, fanning from a mid-edge point made zero-area ones.
+
+The pivot (UI/GIZMO): Ctrl+Alt shows `PivGhost` points (0 the middle, 1-6
+side middles, 7-14 corners) of the selection box (`gzLo/gzHi`);
+`PivPick` sets `tfPivOn`/`tfPiv` (a ghost, else the picked surface point
+snapped); `GzUpdate` drops it when `PivKey$` (the selection) changes and
+moves it with a MOVE; SCALE grows from it (`TfPivMove`), TURN goes round it.
+SAME (UI/ALIGN `SmDraw`/`SmClick`, `samFirst` = the part clicked first);
+SCALE snaps meshes / uses by their own size (`TfNatAll`).
+
+The numpad (UI/UI): `_KEYHIT` folds keypad keys into plain ones, so a key
+the numpad could send (`NumpadOf`: digits . + - * / Enter, or with Num
+Lock off End Down PgDn Left 19456 Right Home Up PgUp Ins Del) counts as the
+numpad only if that key is held (`_KEYDOWN(100256+n / 200000+n)`,
+`NumpadHeld`) or was pressed in the last .25 s by the keyboard device
+(`NumpadDev`: X11 ids, `NumpadId`; read once a pass). Fields, the painter,
+OPEN, HELP, asks and TEXT get the plain key. `--keylog F` logs each key;
+`tools/test/numpad.sh` holds / taps every keypad key with Num Lock on and
+off (ALL PASS).
+
+REF (UI/REF): slot 0 ground, 1 the back wall (z = gridWZ), 2 the side wall
+(x = gridWX) - the far walls, from `GridWallsAt` (pulled out of
+GridWallsDraw). A, B its middle on the plane (ground x,z; back x,y; side
+z,y), `refW#` its width, the picture's right is -A. Pixels in `refPix`
+(slot k at k x REF_PX, shrunk to 1024). `RefRenderAll` in ViewRender after
+the backdrop, before DrawGrid: 16 x 16 pieces projected, `RefTri` spans
+with 16.16 steps, blended into rMem, no depth ($CHECKING:OFF; 36 ms for
+three view-filling ones). Controls `RefBtn` 1-6 at the view's top right
+(`onRef` in UiFrame keeps orbit / pan / clicks off them); `refTr`: drag
+(`RefPress`/`RefFrame`, `RefArrowAt` locks one way), `RefKey`, `RefWheel`.
+.bld: `ref K OP SHOWN A B W PATH` (`RefLines` in ModelWrite, `RefFromText`
+in ModelLoad, ModelNew clears; not in undo or prefabs). Drops on REF:
+DropTake; a PICTURES tile let go on it: UiFrame's mR1.
 
 ## Pictures (textures)
 

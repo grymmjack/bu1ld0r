@@ -1,0 +1,537 @@
+''
+' bu1ld0r - MODEL/SHAPES.BM
+' =============================================================================
+' The shapes past the first six. DIE: the dice (4, 6, 8, 10, 12, 20 or 30
+' faces - the faces found as a convex hull of their points, made once each),
+' resting on a face, as big as fits the box all ways (so it's regular when
+' the box is a cube). After DRAW's smart shapes: STAR (POLYGON's points and
+' depth), GEAR, DONUT (a ring: a torus), DIAMOND (a cut gem), SPIKE (a die
+' with a point out of each face), PILL (along x, its ends rounded), ARROW
+' (flat, pointing to the front: -z). Each is 1 x 1 x 1 on its foot as the
+' others are (MODEL/MESH).
+'
+
+SUB ShapesSetup
+    dieN(1) = 4: dieN(2) = 6: dieN(3) = 8: dieN(4) = 10: dieN(5) = 12: dieN(6) = 20: dieN(7) = 30
+    ' How big each is made (ShapeFit: a cube or a long d10 as big as the rest look bigger)
+    dieSc(1) = 1: dieSc(2) = .75: dieSc(3) = 1: dieSc(4) = .9: dieSc(5) = 1: dieSc(6) = 1: dieSc(7) = 1
+END SUB
+
+' The die (1 to 7) nearest n faces
+FUNCTION DieIdx (n)
+    DIM d, best, b
+    best = 6: b = 1E9
+    FOR d = 1 TO DIE_KINDS
+        IF ABS(dieN(d) - n) < b THEN b = ABS(dieN(d) - n): best = d
+    NEXT
+    DieIdx = best
+END FUNCTION
+
+' The next die's faces from n, dir steps on (the wheel on FACES)
+FUNCTION DieStep (n, dir)
+    DIM d
+    d = DieIdx(n) + dir
+    IF d < 1 THEN d = 1
+    IF d > DIE_KINDS THEN d = DIE_KINDS
+    DieStep = dieN(d)
+END FUNCTION
+
+' Kind k's SLICES field counts dice faces (only those in the list)
+FUNCTION DieLike (k)
+    DieLike = (k = K_DIE OR k = K_SPIKE)
+END FUNCTION
+
+SUB DiePt (d, n, x#, y#, z#)
+    dieX(d, n) = x#: dieY(d, n) = y#: dieZ(d, n) = z#: n = n + 1
+END SUB
+
+' Die d's points and faces, made the first time it's wanted
+SUB DieMake (d)
+    DIM n, i, j, k, m, f, nf, ph#, ip#, a#, h#, z#, l#, s#, best#, sPos, sNeg, dup, c
+    DIM ax#, ay#, az#, bx#, by#, bz#, nx#, ny#, nz#, dd#, gx#, gy#, gz#, ux#, uy#, uz#, wx#, wy#, wz#
+    DIM ang#(DIE_MAXC + 8), idx(DIE_MAXC + 8), t#, ti, j2
+    DIM fnx#(30), fny#(30), fnz#(30), nfn, r#(8), lo#(2), hi#(2), sc#, px#, py#, pz#
+    IF dieMade(d) THEN EXIT SUB
+    dieMade(d) = -1
+    ph# = (1 + SQR(5)) / 2: ip# = 1 / ph#
+    n = 0
+    SELECT CASE dieN(d)
+        CASE 4: DiePt d, n, 1, 1, 1: DiePt d, n, 1, -1, -1: DiePt d, n, -1, 1, -1: DiePt d, n, -1, -1, 1
+        CASE 6
+            FOR i = 0 TO 7: DiePt d, n, IIF(i AND 1, 1, -1), IIF(i AND 2, 1, -1), IIF(i AND 4, 1, -1): NEXT
+        CASE 8
+            DiePt d, n, 1, 0, 0: DiePt d, n, -1, 0, 0: DiePt d, n, 0, 1, 0: DiePt d, n, 0, -1, 0: DiePt d, n, 0, 0, 1: DiePt d, n, 0, 0, -1
+        CASE 10 ' (two five-sided fans, kites: the apexes as high as makes each kite flat)
+            z# = .111: a# = 3.14159265358979 / 5: h# = z# * (1 + COS(a#)) / (1 - COS(a#))
+            DiePt d, n, 0, h#, 0: DiePt d, n, 0, -h#, 0
+            FOR i = 0 TO 4
+                DiePt d, n, COS(2 * a# * i), z#, SIN(2 * a# * i)
+                DiePt d, n, COS(2 * a# * i + a#), -z#, SIN(2 * a# * i + a#)
+            NEXT
+        CASE 12, 30
+            FOR i = 0 TO 7: DiePt d, n, IIF(i AND 1, 1, -1), IIF(i AND 2, 1, -1), IIF(i AND 4, 1, -1): NEXT
+            FOR i = 0 TO 3
+                a# = ip#: IF i AND 1 THEN a# = -ip#
+                h# = ph#: IF i AND 2 THEN h# = -ph#
+                IF dieN(d) = 12 THEN
+                    DiePt d, n, 0, a#, h#: DiePt d, n, a#, h#, 0: DiePt d, n, h#, 0, a#
+                ELSE ' (the other way round: lined up with the icosahedron's faces)
+                    DiePt d, n, 0, h#, a#: DiePt d, n, h#, a#, 0: DiePt d, n, a#, 0, h#
+                END IF
+            NEXT
+            IF dieN(d) = 30 THEN ' (and the icosahedron's 12 - each point as far out as the 30 faces let it)
+                FOR i = 0 TO 3
+                    a# = 1: IF i AND 1 THEN a# = -1
+                    h# = ph#: IF i AND 2 THEN h# = -ph#
+                    DiePt d, n, 0, a#, h#: DiePt d, n, a#, h#, 0: DiePt d, n, h#, 0, a#
+                NEXT
+                nfn = 0 ' (the faces face the icosahedron's edges' middles: its points 2 apart)
+                FOR i = 20 TO 30: FOR j = i + 1 TO 31
+                    l# = (dieX(d, i) - dieX(d, j)) ^ 2 + (dieY(d, i) - dieY(d, j)) ^ 2 + (dieZ(d, i) - dieZ(d, j)) ^ 2
+                    IF ABS(l# - 4) < .01 AND nfn <= 30 THEN
+                        nx# = dieX(d, i) + dieX(d, j): ny# = dieY(d, i) + dieY(d, j): nz# = dieZ(d, i) + dieZ(d, j)
+                        l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+                        fnx#(nfn) = nx# / l#: fny#(nfn) = ny# / l#: fnz#(nfn) = nz# / l#: nfn = nfn + 1
+                    END IF
+                NEXT: NEXT
+                FOR i = 0 TO n - 1
+                    l# = SQR(dieX(d, i) ^ 2 + dieY(d, i) ^ 2 + dieZ(d, i) ^ 2)
+                    ax# = dieX(d, i) / l#: ay# = dieY(d, i) / l#: az# = dieZ(d, i) / l#
+                    best# = 0
+                    FOR f = 0 TO nfn - 1
+                        s# = ax# * fnx#(f) + ay# * fny#(f) + az# * fnz#(f): IF s# > best# THEN best# = s#
+                    NEXT
+                    dieX(d, i) = ax# / best#: dieY(d, i) = ay# / best#: dieZ(d, i) = az# / best#
+                NEXT
+            END IF
+        CASE 20
+            FOR i = 0 TO 3
+                a# = 1: IF i AND 1 THEN a# = -1
+                h# = ph#: IF i AND 2 THEN h# = -ph#
+                DiePt d, n, 0, a#, h#: DiePt d, n, a#, h#, 0: DiePt d, n, h#, 0, a#
+            NEXT
+    END SELECT
+
+    ' Its faces: each plane through three points with all the points on one side of it
+    nf = 0
+    FOR i = 0 TO n - 3: FOR j = i + 1 TO n - 2: FOR k = j + 1 TO n - 1
+        ax# = dieX(d, j) - dieX(d, i): ay# = dieY(d, j) - dieY(d, i): az# = dieZ(d, j) - dieZ(d, i)
+        bx# = dieX(d, k) - dieX(d, i): by# = dieY(d, k) - dieY(d, i): bz# = dieZ(d, k) - dieZ(d, i)
+        nx# = ay# * bz# - az# * by#: ny# = az# * bx# - ax# * bz#: nz# = ax# * by# - ay# * bx#
+        l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+        IF l# > 1E-9 THEN
+            nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+            dd# = nx# * dieX(d, i) + ny# * dieY(d, i) + nz# * dieZ(d, i)
+            sPos = 0: sNeg = 0
+            FOR m = 0 TO n - 1
+                s# = nx# * dieX(d, m) + ny# * dieY(d, m) + nz# * dieZ(d, m) - dd#
+                IF s# > 1E-6 THEN sPos = -1
+                IF s# < -1E-6 THEN sNeg = -1
+            NEXT
+            IF (sPos AND sNeg) = 0 THEN
+                IF sPos THEN nx# = -nx#: ny# = -ny#: nz# = -nz#: dd# = -dd#
+                dup = 0
+                FOR f = 0 TO nf - 1
+                    IF nx# * dieNX(d, f) + ny# * dieNY(d, f) + nz# * dieNZ(d, f) > 1 - 1E-7 THEN dup = -1: EXIT FOR
+                NEXT
+                IF dup = 0 AND nf <= DIE_MAXF THEN
+                    ' Its corners, round it anticlockwise as seen from outside
+                    c = 0: gx# = 0: gy# = 0: gz# = 0
+                    FOR m = 0 TO n - 1
+                        s# = nx# * dieX(d, m) + ny# * dieY(d, m) + nz# * dieZ(d, m) - dd#
+                        IF ABS(s#) <= 1E-6 AND c <= DIE_MAXC THEN idx(c) = m: c = c + 1: gx# = gx# + dieX(d, m): gy# = gy# + dieY(d, m): gz# = gz# + dieZ(d, m)
+                    NEXT
+                    gx# = gx# / c: gy# = gy# / c: gz# = gz# / c
+                    ux# = dieX(d, idx(0)) - gx#: uy# = dieY(d, idx(0)) - gy#: uz# = dieZ(d, idx(0)) - gz#
+                    wx# = ny# * uz# - nz# * uy#: wy# = nz# * ux# - nx# * uz#: wz# = nx# * uy# - ny# * ux#
+                    FOR m = 0 TO c - 1
+                        ax# = dieX(d, idx(m)) - gx#: ay# = dieY(d, idx(m)) - gy#: az# = dieZ(d, idx(m)) - gz#
+                        ang#(m) = _ATAN2(ax# * wx# + ay# * wy# + az# * wz#, ax# * ux# + ay# * uy# + az# * uz#)
+                    NEXT
+                    FOR m = 1 TO c - 1 ' (put in order of angle)
+                        t# = ang#(m): ti = idx(m): j2 = m - 1
+                        DO WHILE j2 >= 0
+                            IF ang#(j2) <= t# THEN EXIT DO
+                            ang#(j2 + 1) = ang#(j2): idx(j2 + 1) = idx(j2): j2 = j2 - 1
+                        LOOP
+                        ang#(j2 + 1) = t#: idx(j2 + 1) = ti
+                    NEXT
+                    dieNX(d, nf) = nx#: dieNY(d, nf) = ny#: dieNZ(d, nf) = nz#: dieFC(d, nf) = c
+                    FOR m = 0 TO c - 1: dieFV(d, nf, m) = idx(m): NEXT
+                    nf = nf + 1
+                END IF
+            END IF
+        END IF
+    NEXT: NEXT: NEXT
+    dieFN(d) = nf
+
+    ' Resting on its lowest face: turned so that face looks straight down
+    best# = 2: f = 0
+    FOR m = 0 TO nf - 1
+        IF dieNY(d, m) < best# - 1E-6 THEN best# = dieNY(d, m): f = m
+    NEXT
+    RotOnto dieNX(d, f), dieNY(d, f), dieNZ(d, f), 0, -1, 0, r#()
+    FOR m = 0 TO n - 1
+        px# = dieX(d, m): py# = dieY(d, m): pz# = dieZ(d, m)
+        dieX(d, m) = r#(0) * px# + r#(1) * py# + r#(2) * pz#
+        dieY(d, m) = r#(3) * px# + r#(4) * py# + r#(5) * pz#
+        dieZ(d, m) = r#(6) * px# + r#(7) * py# + r#(8) * pz#
+    NEXT
+    FOR m = 0 TO nf - 1
+        px# = dieNX(d, m): py# = dieNY(d, m): pz# = dieNZ(d, m)
+        dieNX(d, m) = r#(0) * px# + r#(1) * py# + r#(2) * pz#
+        dieNY(d, m) = r#(3) * px# + r#(4) * py# + r#(5) * pz#
+        dieNZ(d, m) = r#(6) * px# + r#(7) * py# + r#(8) * pz#
+    NEXT
+    ' Filling the 1 x 1 x 1 box every way, on its foot (so its sides are the box's - on the grid)
+    lo#(0) = 1E9: lo#(1) = 1E9: lo#(2) = 1E9: hi#(0) = -1E9: hi#(1) = -1E9: hi#(2) = -1E9
+    FOR m = 0 TO n - 1
+        IF dieX(d, m) < lo#(0) THEN lo#(0) = dieX(d, m)
+        IF dieY(d, m) < lo#(1) THEN lo#(1) = dieY(d, m)
+        IF dieZ(d, m) < lo#(2) THEN lo#(2) = dieZ(d, m)
+        IF dieX(d, m) > hi#(0) THEN hi#(0) = dieX(d, m)
+        IF dieY(d, m) > hi#(1) THEN hi#(1) = dieY(d, m)
+        IF dieZ(d, m) > hi#(2) THEN hi#(2) = dieZ(d, m)
+    NEXT
+    sc# = hi#(0) - lo#(0)
+    IF hi#(1) - lo#(1) > sc# THEN sc# = hi#(1) - lo#(1)
+    IF hi#(2) - lo#(2) > sc# THEN sc# = hi#(2) - lo#(2)
+    ' (its own proportions, the longest 1 - times dieSc: what ShapeFit sizes it to)
+    dieEX(d) = (hi#(0) - lo#(0)) / sc# * dieSc(d): dieEY(d) = (hi#(1) - lo#(1)) / sc# * dieSc(d): dieEZ(d) = (hi#(2) - lo#(2)) / sc# * dieSc(d)
+    FOR m = 0 TO n - 1
+        dieX(d, m) = (dieX(d, m) - (lo#(0) + hi#(0)) / 2) / (hi#(0) - lo#(0))
+        dieY(d, m) = (dieY(d, m) - lo#(1)) / (hi#(1) - lo#(1))
+        dieZ(d, m) = (dieZ(d, m) - (lo#(2) + hi#(2)) / 2) / (hi#(2) - lo#(2))
+    NEXT
+END SUB
+
+' The turn (a 3 x 3 matrix, rows) that takes direction a onto direction b (both length 1)
+SUB RotOnto (ax#, ay#, az#, bx#, by#, bz#, r#())
+    DIM vx#, vy#, vz#, c#, k#
+    vx# = ay# * bz# - az# * by#: vy# = az# * bx# - ax# * bz#: vz# = ax# * by# - ay# * bx#
+    c# = ax# * bx# + ay# * by# + az# * bz#
+    IF c# < -.999999 THEN ' (opposite: half a turn round x)
+        r#(0) = 1: r#(1) = 0: r#(2) = 0: r#(3) = 0: r#(4) = -1: r#(5) = 0: r#(6) = 0: r#(7) = 0: r#(8) = -1
+        EXIT SUB
+    END IF
+    k# = 1 / (1 + c#)
+    r#(0) = 1 - (vy# * vy# + vz# * vz#) * k#: r#(1) = -vz# + vx# * vy# * k#: r#(2) = vy# + vx# * vz# * k#
+    r#(3) = vz# + vx# * vy# * k#: r#(4) = 1 - (vx# * vx# + vz# * vz#) * k#: r#(5) = -vx# + vy# * vz# * k#
+    r#(6) = -vy# + vx# * vz# * k#: r#(7) = vx# + vy# * vz# * k#: r#(8) = 1 - (vx# * vx# + vy# * vy#) * k#
+END SUB
+
+' A flat polygon of n corners (shX..) as a fan of triangles: only its rim is edges
+SUB MkFan (n, hx, hy, hz)
+    DIM k, e
+    e = mkTriE
+    FOR k = 1 TO n - 2
+        mkTriE = 2
+        IF k = 1 THEN mkTriE = mkTriE OR 1
+        IF k = n - 2 THEN mkTriE = mkTriE OR 4
+        MkTri shX(0), shY(0), shZ(0), shX(k), shY(k), shZ(k), shX(k + 1), shY(k + 1), shZ(k + 1), hx, hy, hz
+    NEXT
+    mkTriE = e
+END SUB
+
+' A triangle of a shape that's convex round (0, .5, 0): out is away from there
+SUB MkTriOut (ax, ay, az, bx, by, bz, cx, cy, cz)
+    MkTri ax, ay, az, bx, by, bz, cx, cy, cz, (ax + bx + cx) / 3, (ay + by + cy) / 3 - .5, (az + bz + cz) / 3
+END SUB
+
+SUB MkDie (s)
+    DIM d, f, k
+    d = DieIdx(s): DieMake d
+    FOR f = 0 TO dieFN(d) - 1
+        FOR k = 0 TO dieFC(d, f) - 1
+            shX(k) = dieX(d, dieFV(d, f, k)): shY(k) = dieY(d, dieFV(d, f, k)): shZ(k) = dieZ(d, dieFV(d, f, k))
+        NEXT
+        mkFace = f: MkFan dieFC(d, f), dieNX(d, f), dieNY(d, f), dieNZ(d, f)
+    NEXT
+END SUB
+
+' A die with a point out of each face, amt long (0 to 1: a little to twice the die's reach)
+SUB MkSpike (s, amt)
+    DIM d, f, k, c, k2, lo#(2), hi#(2), mx#, mz#, wx#, wy#, wz#
+    d = DieIdx(s): DieMake d
+    SpikeMake d, amt, lo#(), hi#()
+    mx# = (lo#(0) + hi#(0)) / 2: mz# = (lo#(2) + hi#(2)) / 2
+    wx# = hi#(0) - lo#(0): wy# = hi#(1) - lo#(1): wz# = hi#(2) - lo#(2) ' (filling the box every way)
+    FOR f = 0 TO dieFN(d) - 1
+        c = dieFC(d, f): mkFace = f
+        FOR k = 0 TO c - 1
+            k2 = dieFV(d, f, (k + 1) MOD c)
+            shX(0) = (dieX(d, dieFV(d, f, k)) - mx#) / wx#: shY(0) = (dieY(d, dieFV(d, f, k)) - lo#(1)) / wy#: shZ(0) = (dieZ(d, dieFV(d, f, k)) - mz#) / wz#
+            shX(1) = (dieX(d, k2) - mx#) / wx#: shY(1) = (dieY(d, k2) - lo#(1)) / wy#: shZ(1) = (dieZ(d, k2) - mz#) / wz#
+            shX(2) = (spAX#(f) - mx#) / wx#: shY(2) = (spAY#(f) - lo#(1)) / wy#: shZ(2) = (spAZ#(f) - mz#) / wz#
+            ' (out: away from the die's middle - each side of a point leans out)
+            MkTri shX(0), shY(0), shZ(0), shX(1), shY(1), shZ(1), shX(2), shY(2), shZ(2), (shX(0) + shX(1) + shX(2)) / 3 - (spCX# - mx#) / wx#, (shY(0) + shY(1) + shY(2)) / 3 - (spCY# - lo#(1)) / wy#, (shZ(0) + shZ(1) + shZ(2)) / 3 - (spCZ# - mz#) / wz#
+        NEXT
+    NEXT
+END SUB
+
+' A spike's points (spAX#.. one a face of die d, amt long), its die's middle (spCX#..) and the box round it all
+SUB SpikeMake (d, amt, lo#(), hi#())
+    DIM f, k, c, n, gx#, gy#, gz#, l#
+    n = DiePtCount(d)
+    spCX# = 0: spCY# = 0: spCZ# = 0
+    FOR k = 0 TO n - 1: spCX# = spCX# + dieX(d, k): spCY# = spCY# + dieY(d, k): spCZ# = spCZ# + dieZ(d, k): NEXT
+    spCX# = spCX# / n: spCY# = spCY# / n: spCZ# = spCZ# / n
+    lo#(0) = 1E9: lo#(1) = 1E9: lo#(2) = 1E9: hi#(0) = -1E9: hi#(1) = -1E9: hi#(2) = -1E9
+    FOR f = 0 TO dieFN(d) - 1
+        gx# = 0: gy# = 0: gz# = 0: c = dieFC(d, f)
+        FOR k = 0 TO c - 1: gx# = gx# + dieX(d, dieFV(d, f, k)): gy# = gy# + dieY(d, dieFV(d, f, k)): gz# = gz# + dieZ(d, dieFV(d, f, k)): NEXT
+        gx# = gx# / c: gy# = gy# / c: gz# = gz# / c
+        ' (along the normal as far as the face is from the middle - the die's own
+        ' proportions, so a die squashed into its box is undone first)
+        l# = (gx# - spCX#) * dieNX(d, f) * dieEX(d) + (gy# - spCY#) * dieNY(d, f) * dieEY(d) + (gz# - spCZ#) * dieNZ(d, f) * dieEZ(d)
+        l# = l# * (.15 + 1.85 * Clamp(amt, 0, 1))
+        spAX#(f) = gx# + dieNX(d, f) * l# / dieEX(d): spAY#(f) = gy# + dieNY(d, f) * l# / dieEY(d): spAZ#(f) = gz# + dieNZ(d, f) * l# / dieEZ(d)
+        SpBox lo#(), hi#(), spAX#(f), spAY#(f), spAZ#(f)
+    NEXT
+    FOR k = 0 TO n - 1: SpBox lo#(), hi#(), dieX(d, k), dieY(d, k), dieZ(d, k): NEXT
+END SUB
+
+SUB SpBox (lo#(), hi#(), x#, y#, z#)
+    IF x# < lo#(0) THEN lo#(0) = x#
+    IF y# < lo#(1) THEN lo#(1) = y#
+    IF z# < lo#(2) THEN lo#(2) = z#
+    IF x# > hi#(0) THEN hi#(0) = x#
+    IF y# > hi#(1) THEN hi#(1) = y#
+    IF z# > hi#(2) THEN hi#(2) = z#
+END SUB
+
+' How many points die d has (its faces' highest corner + 1)
+FUNCTION DiePtCount (d)
+    DIM f, k, m
+    FOR f = 0 TO dieFN(d) - 1
+        FOR k = 0 TO dieFC(d, f) - 1
+            IF dieFV(d, f, k) + 1 > m THEN m = dieFV(d, f, k) + 1
+        NEXT
+    NEXT
+    DiePtCount = m
+END FUNCTION
+
+' An outline (shX, shZ: n points round, x and z -0.5 to 0.5) stood up 0 to 1:
+' its walls, and its top and bottom as fans from (cx, cz), which sees every edge
+SUB MkPrism (n, cx, cz)
+    DIM k, k2, ex, ez, hx, hz, e, lx, hx2, lz, hz2
+    e = mkTriE
+    ' (filling the box: its outline stretched to -0.5..0.5 both ways - a star's
+    ' own proportions go in its size, ShapeFit)
+    lx = 1E9: lz = 1E9: hx2 = -1E9: hz2 = -1E9
+    FOR k = 0 TO n - 1
+        IF shX(k) < lx THEN lx = shX(k)
+        IF shX(k) > hx2 THEN hx2 = shX(k)
+        IF shZ(k) < lz THEN lz = shZ(k)
+        IF shZ(k) > hz2 THEN hz2 = shZ(k)
+    NEXT
+    IF hx2 - lx > 1E-6 AND hz2 - lz > 1E-6 THEN
+        FOR k = 0 TO n - 1: shX(k) = (shX(k) - (lx + hx2) / 2) / (hx2 - lx): shZ(k) = (shZ(k) - (lz + hz2) / 2) / (hz2 - lz): NEXT
+        cx = (cx - (lx + hx2) / 2) / (hx2 - lx): cz = (cz - (lz + hz2) / 2) / (hz2 - lz)
+    END IF
+    FOR k = 0 TO n - 1
+        k2 = (k + 1) MOD n
+        ex = shX(k2) - shX(k): ez = shZ(k2) - shZ(k): hx = ez: hz = -ex
+        IF hx * ((shX(k) + shX(k2)) / 2 - cx) + hz * ((shZ(k) + shZ(k2)) / 2 - cz) < 0 THEN hx = -hx: hz = -hz
+        mkFace = 0: MkQuad shX(k), 0, shZ(k), shX(k2), 0, shZ(k2), shX(k2), 1, shZ(k2), shX(k), 1, shZ(k), hx, 0, hz
+        mkTriE = 2
+        mkFace = 1: MkTri cx, 1, cz, shX(k), 1, shZ(k), shX(k2), 1, shZ(k2), 0, 1, 0
+        mkFace = 2: MkTri cx, 0, cz, shX(k), 0, shZ(k), shX(k2), 0, shZ(k2), 0, -1, 0
+        mkTriE = e
+    NEXT
+END SUB
+
+' STAR: s points, the dips between them amt of the way out (1: a polygon of 2s sides)
+SUB MkStar (s, amt)
+    DIM k, r, a
+    FOR k = 0 TO 2 * s - 1
+        r = .5: IF k AND 1 THEN r = .5 * Clamp(amt, .05, 1)
+        a = 180 * k / s
+        shX(k) = r * DSin(a): shZ(k) = -r * DCos(a) ' (the first point to the front)
+    NEXT
+    MkPrism 2 * s, 0, 0
+END SUB
+
+' GEAR: s teeth, amt of its reach deep
+SUB MkGear (s, amt)
+    DIM k, r0, a, p
+    r0 = .5 * (1 - Clamp(amt, .02, .9) * .6): p = 360 / s
+    FOR k = 0 TO s - 1
+        a = p * k
+        shX(4 * k) = r0 * DSin(a): shZ(4 * k) = -r0 * DCos(a)
+        shX(4 * k + 1) = .5 * DSin(a + p * .18): shZ(4 * k + 1) = -.5 * DCos(a + p * .18)
+        shX(4 * k + 2) = .5 * DSin(a + p * .42): shZ(4 * k + 2) = -.5 * DCos(a + p * .42)
+        shX(4 * k + 3) = r0 * DSin(a + p * .6): shZ(4 * k + 3) = -r0 * DCos(a + p * .6)
+    NEXT
+    MkPrism 4 * s, 0, 0
+END SUB
+
+' ARROW: flat, to the front (-z); its head amt of its length, its stem half its width
+SUB MkArrow (amt)
+    DIM zh, hl
+    hl = Clamp(amt, .1, .9): zh = -.5 + hl
+    shX(0) = 0: shZ(0) = -.5
+    shX(1) = .5: shZ(1) = zh
+    shX(2) = .25: shZ(2) = zh
+    shX(3) = .25: shZ(3) = .5
+    shX(4) = -.25: shZ(4) = .5
+    shX(5) = -.25: shZ(5) = zh
+    shX(6) = -.5: shZ(6) = zh
+    MkPrism 7, 0, zh - hl * .3
+END SUB
+
+' DONUT: a ring round y, its hole amt of its width; s slices round, half as many round the ring
+SUB MkDonut (s, amt)
+    DIM i, j, m, ri, rr, rc, a0, a1, b0, b1, am, bm
+    ri = .5 * Clamp(amt, 0, .9): rr = (.5 - ri) / 2: rc = ri + rr
+    m = s \ 2: IF m < 6 THEN m = 6
+    mkFace = 0
+    FOR i = 0 TO s - 1
+        a0 = 360 * i / s: a1 = 360 * (i + 1) / s: am = (a0 + a1) / 2
+        FOR j = 0 TO m - 1
+            b0 = 360 * j / m: b1 = 360 * (j + 1) / m: bm = (b0 + b1) / 2
+            MkQuad (rc + rr * DCos(b0)) * DCos(a0), .5 + .5 * DSin(b0), (rc + rr * DCos(b0)) * DSin(a0), (rc + rr * DCos(b0)) * DCos(a1), .5 + .5 * DSin(b0), (rc + rr * DCos(b0)) * DSin(a1), (rc + rr * DCos(b1)) * DCos(a1), .5 + .5 * DSin(b1), (rc + rr * DCos(b1)) * DSin(a1), (rc + rr * DCos(b1)) * DCos(a0), .5 + .5 * DSin(b1), (rc + rr * DCos(b1)) * DSin(a0), DCos(bm) * DCos(am), DSin(bm), DCos(bm) * DSin(am)
+        NEXT
+    NEXT
+END SUB
+
+' DIAMOND: a cut gem on its point - s sides, the flat top (the table) amt of its width
+SUB MkDiamond (s, amt)
+    DIM k, k2, a, h, gy, rt, f
+    gy = .62: rt = .5 * Clamp(amt, .1, .95): h = 180 / s
+    FOR k = 0 TO s - 1
+        k2 = (k + 1) MOD s: a = 360 * k / s
+        f = 3 * k
+        mkFace = f: MkTriOut 0, 0, 0, .5 * DCos(a), gy, .5 * DSin(a), .5 * DCos(a + 2 * h), gy, .5 * DSin(a + 2 * h)
+        mkFace = f + 1: MkTriOut .5 * DCos(a), gy, .5 * DSin(a), .5 * DCos(a + 2 * h), gy, .5 * DSin(a + 2 * h), rt * DCos(a + h), 1, rt * DSin(a + h)
+        mkFace = f + 2: MkTriOut .5 * DCos(a + 2 * h), gy, .5 * DSin(a + 2 * h), rt * DCos(a + h), 1, rt * DSin(a + h), rt * DCos(a + 3 * h), 1, rt * DSin(a + 3 * h)
+        shX(k) = rt * DCos(a + h): shY(k) = 1: shZ(k) = rt * DSin(a + h)
+    NEXT
+    mkFace = 3 * s: MkFan s, 0, 1, 0
+END SUB
+
+' PILL: along x, s slices round; each end amt of half its length rounded (1: an egg all round)
+SUB MkPill (s, amt)
+    DIM i, j, m, cl, nr, a0, a1
+    DIM rx(40), rr(40)
+    cl = .5 * Clamp(amt, 0, 1)
+    m = s \ 4: IF m < 2 THEN m = 2
+    IF m > 16 THEN m = 16
+    IF cl < .001 THEN m = 1
+    nr = 0
+    FOR j = 0 TO m ' (the left end: from its tip to where it's full)
+        rx(nr) = -(.5 - cl + cl * DCos(90 * j / m)): rr(nr) = DSin(90 * j / m): nr = nr + 1
+    NEXT
+    FOR j = 0 TO m ' (the right: from full to its tip)
+        rx(nr) = .5 - cl + cl * DSin(90 * j / m): rr(nr) = DCos(90 * j / m): nr = nr + 1
+    NEXT
+    mkFace = 0
+    FOR j = 0 TO nr - 2
+        IF ABS(rx(j + 1) - rx(j)) > 1E-6 OR ABS(rr(j + 1) - rr(j)) > 1E-6 THEN
+            IF j = 0 OR j = nr - 2 THEN mkFace = IIF(j = 0, 1, 2) ELSE mkFace = 0
+            IF cl >= .001 THEN mkFace = 0
+            FOR i = 0 TO s - 1
+                a0 = 360 * i / s: a1 = 360 * (i + 1) / s
+                IF cl < .001 AND (j = 0 OR j = nr - 2) THEN mkTriE = 2 ELSE mkTriE = 7
+                MkQuadC rx(j), rr(j), a0, rx(j), rr(j), a1, rx(j + 1), rr(j + 1), a1, rx(j + 1), rr(j + 1), a0
+                mkTriE = 7
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+' Four points round the x axis (x, radius, angle) as a quad of a shape convex round (0, .5, 0)
+SUB MkQuadC (x0, r0, a0, x1, r1, a1, x2, r2, a2, x3, r3, a3)
+    DIM y(3), z(3)
+    y(0) = .5 + .5 * r0 * DCos(a0): z(0) = .5 * r0 * DSin(a0)
+    y(1) = .5 + .5 * r1 * DCos(a1): z(1) = .5 * r1 * DSin(a1)
+    y(2) = .5 + .5 * r2 * DCos(a2): z(2) = .5 * r2 * DSin(a2)
+    y(3) = .5 + .5 * r3 * DCos(a3): z(3) = .5 * r3 * DSin(a3)
+    MkQuad x0, y(0), z(0), x1, y(1), z(1), x2, y(2), z(2), x3, y(3), z(3), (x0 + x1 + x2 + x3) / 4, (y(0) + y(1) + y(2) + y(3)) / 4 - .5, (z(0) + z(1) + z(2) + z(3)) / 4
+END SUB
+
+' ---------------------------------------------------------------- sizes on the grid
+
+' Kind k fills its box but isn't box-shaped of itself: its own proportions go in its size
+FUNCTION FitKind (k)
+    FitKind = (k = K_DIE OR k = K_SPIKE OR k = K_STAR)
+END FUNCTION
+
+' Kind k's own proportions (s faces / points, amt): the longest 1 - a die times
+' dieSc, as big as it looks beside the others (a star: x and z only, ey 0)
+SUB ShapeNat (k, s, amt, ex#, ey#, ez#)
+    DIM d, lo#(2), hi#(2), m#, j, r#, a#, x#, z#
+    ex# = 1: ey# = 1: ez# = 1
+    SELECT CASE k
+        CASE K_DIE
+            d = DieIdx(s): DieMake d
+            ex# = dieEX(d): ey# = dieEY(d): ez# = dieEZ(d)
+        CASE K_SPIKE
+            d = DieIdx(s): DieMake d
+            SpikeMake d, amt, lo#(), hi#()
+            ex# = (hi#(0) - lo#(0)) * dieEX(d): ey# = (hi#(1) - lo#(1)) * dieEY(d): ez# = (hi#(2) - lo#(2)) * dieEZ(d)
+        CASE K_STAR ' (its outline as MkStar makes it)
+            lo#(0) = 1E9: lo#(2) = 1E9: hi#(0) = -1E9: hi#(2) = -1E9
+            FOR j = 0 TO 2 * s - 1
+                r# = .5: IF j AND 1 THEN r# = .5 * Clamp(amt, .05, 1)
+                a# = 180 * j / s: x# = r# * DSin(a#): z# = -r# * DCos(a#)
+                IF x# < lo#(0) THEN lo#(0) = x#
+                IF x# > hi#(0) THEN hi#(0) = x#
+                IF z# < lo#(2) THEN lo#(2) = z#
+                IF z# > hi#(2) THEN hi#(2) = z#
+            NEXT
+            ex# = hi#(0) - lo#(0): ez# = hi#(2) - lo#(2): ey# = 0
+    END SELECT
+    m# = ex#: IF ey# > m# THEN m# = ey#
+    IF ez# > m# THEN m# = ez#
+    IF m# > 0 THEN ex# = ex# / m#: ey# = ey# / m#: ez# = ez# / m#
+    IF k = K_DIE OR k = K_SPIKE THEN ex# = ex# * dieSc(d): ey# = ey# * dieSc(d): ez# = ez# * dieSc(d)
+END SUB
+
+' Part i's base size: for a FitKind, how big its box would be were it a full
+' one - the size that fits its sizes best (least squares: what ShapeFit made
+' gives back what it was made from, nothing creeping); else its longest way across
+FUNCTION ShapeBase# (i)
+    DIM ex#, ey#, ez#, b#, n#, d#
+    IF FitKind(pKind(i)) THEN
+        ShapeNat pKind(i), SegsOf(i), pAmt(i), ex#, ey#, ez#
+        n# = pSX(i) * ex# + pSZ(i) * ez# + pSY(i) * ey#: d# = ex# * ex# + ez# * ez# + ey# * ey#
+        IF d# > 0 THEN b# = n# / d#
+    ELSE
+        b# = pSX(i): IF pSZ(i) > b# THEN b# = pSZ(i)
+    END IF
+    ShapeBase# = b#
+END FUNCTION
+
+' Part i's base: b0# (the one remembered) if that's what its sizes were made
+' from, else read from them (ShapeBase#) - sizes changed by hand
+FUNCTION FitBase# (i, b0#)
+    DIM sx, sy, sz, ok
+    IF NOT FitKind(pKind(i)) OR b0# <= 0 THEN FitBase# = ShapeBase#(i): EXIT FUNCTION
+    sx = pSX(i): sy = pSY(i): sz = pSZ(i)
+    ShapeFit i, snapStep, b0#
+    ok = (pSX(i) = sx AND pSY(i) = sy AND pSZ(i) = sz)
+    pSX(i) = sx: pSY(i) = sy: pSZ(i) = sz
+    IF ok THEN FitBase# = b0# ELSE FitBase# = ShapeBase#(i)
+END FUNCTION
+
+' Part i (a FitKind) sized to its own proportions at base b0# (ShapeBase#,
+' taken before what changed it), each way on the grid g# (x and z 2 g# apart -
+' they stand in the middle - y g#). g# 0: exactly its proportions
+SUB ShapeFit (i, g#, b0#)
+    DIM ex#, ey#, ez#, b#
+    IF NOT FitKind(pKind(i)) THEN EXIT SUB
+    ShapeNat pKind(i), SegsOf(i), pAmt(i), ex#, ey#, ez#
+    b# = b0#: IF b# < .001 THEN b# = .25
+    pSX(i) = SizeOn#(b# * ex#, 2 * g#): pSZ(i) = SizeOn#(b# * ez#, 2 * g#)
+    IF ey# > 0 THEN pSY(i) = SizeOn#(b# * ey#, g#)
+END SUB
+
+' A size v# on the grid q# apart (at least a step; q# 0: as it is)
+FUNCTION SizeOn# (v#, q#)
+    DIM r#
+    r# = v#
+    IF q# > 0 THEN r# = INT(r# / q# + .5) * q#: IF r# < q# THEN r# = q#
+    IF r# < .001 THEN r# = .001
+    SizeOn# = VAL(Fmt$(r#))
+END FUNCTION

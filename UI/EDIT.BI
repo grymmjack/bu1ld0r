@@ -22,3 +22,4 @@ REDIM SHARED edPkA(0) AS LONG, edPkB(0) AS LONG ' (the edges clicked in EDGES, i
 REDIM SHARED wkPkA(0) AS LONG, wkPkB(0) AS LONG ' (the same while an edit's made: the work's points)
 DIM SHARED edPkN AS LONG, wkPkN AS LONG
 REDIM SHARED edPkIn(0) AS _BYTE ' (the mesh's points on a clicked edge still picked: EdPkInMake)
+DIM SHARED edNb(16) AS LONG ' (EdFan&: a point's neighbours in turn round it)

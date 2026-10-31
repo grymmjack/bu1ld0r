@@ -250,12 +250,12 @@ SUB ListClick
         pSel(i) = NOT pSel(i)
     ELSE
         IF listClickP = i AND TIMER(.001) - listClickT < .45 AND TIMER(.001) >= listClickT THEN ' (twice: rename it)
-            SelNone: pSel(i) = -1
+            SelNone: pSel(i) = -1: samFirst = i
             listEdit = i: TypeStart F_PNAME, ListName$(i), -1
             listClickP = 0: ovDirty = -1
             EXIT SUB
         END IF
-        SelNone: pSel(i) = -1
+        SelNone: pSel(i) = -1: samFirst = i
     END IF
     listClickP = i: listClickT = TIMER(.001)
     ovDirty = -1

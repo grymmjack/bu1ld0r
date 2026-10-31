@@ -7,7 +7,7 @@
 CONST APP_NAME$ = "bu1ld0r"
 CONST APP_VERSION$ = "0.5.0"
 CONST MIN_SW = 800, MIN_SH = 700 ' (the smallest our screen is laid out at)
-CONST BIN_MIN = 150, PANEL_MIN = 250 ' (the bin, down the left, and the panel, down the right: at their narrowest)
+CONST BIN_MIN = 200, PANEL_MIN = 250 ' (the bin, down the left, and the panel, down the right: at their narrowest)
 DIM SHARED BIN_W, PANEL_W ' (the bin as wide as it's dragged: bin_w= in bu1ld0r.cfg; the panel stays PANEL_MIN)
 DIM SHARED dockDrag, dockCur ' (the bin's edge being dragged: 1; the pointer showing it)
 CONST TOP_H = 28, BAR_H = 26 ' (the bar along the top, the message line along the bottom)
@@ -49,7 +49,7 @@ DIM SHARED cDim AS _UNSIGNED LONG, cHi AS _UNSIGNED LONG, cSel AS _UNSIGNED LONG
 DIM SHARED cHover AS _UNSIGNED LONG, cWarn AS _UNSIGNED LONG
 
 ' The command line's (tests): --open FILE, --export, --shot FILE, --quit, --neon DIR
-DIM SHARED argOpen$, argExport, argShot$, argQuit, argFrames, argBench, argSave
+DIM SHARED argOpen$, argExport, argShot$, argQuit, argFrames, argBench, argSave, argKeyLog$
 
 ' Words of a line split at spaces (Words): wd$(1 to wdN)
 DIM SHARED wd$(1000), wdN

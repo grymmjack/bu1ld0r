@@ -1,8 +1,9 @@
 # bu1ld0r
 
 A 3D model builder in QB64 Phoenix Edition. Put simple shapes together
-(boxes, cylinders, spheres, cones, wedges and tubes), size, turn and colour
-them, and save the model. It saves as its own file to edit again, as an
+(boxes, cylinders, spheres, cones, wedges and tubes; dice from 4 to 30
+faces, stars, gears, donuts, diamonds, spikes, pills and arrows), size,
+turn and colour them, and save the model. It saves as its own file to edit again, as an
 OBJ for any 3D program, and as a ready-made NEON-CASTER prop.
 
 ![bu1ld0r: the bin of shapes and prefabs on the left, the parts list, the view, and the panel on the right](docs/screenshots/overview.png)
@@ -23,7 +24,16 @@ them, so you can change one and export it back.
 The bin starts with a set of prefabs in `starter/`: toggle, button, knob,
 dial, screen, vent, handle, pipes (straight, elbow, T), lamp and antenna.
 
-Coming next (see [PLAN.md](PLAN.md)): painting straight onto the model.
+A face's picture can be painted right here (Ctrl+P): pencil, brush,
+shapes, fills, gradients, mirrors, and textures made from two colours
+(brick, wood, noise, plates...). An SVG opens as a model: each filled
+shape made thick, ready to extrude, inset and bevel. Draw your own flat
+shapes with the pen, or type text in any TrueType font: each letter a part
+of its own. MERGE joins overlapping parts into one solid. Reference
+pictures on the ground and the walls behind let you model over a drawing
+or a photo.
+
+Coming next (see [PLAN.md](PLAN.md)): painting straight onto the model, in 3D.
 
 ## Build
 
@@ -49,6 +59,23 @@ for the port.
    out from it (here, the desk's slope), or on the grid.
 4. Shift+click keeps putting more down; Esc stops.
 
+### More shapes: dice, stars, gears...
+
+![The new shapes: dice from 4 to 30 faces, a spike, a diamond, a donut, a gear, a star, a pill and an arrow; a d20 selected, its FACES in the panel](docs/screenshots/shapes.png)
+
+After the first six in the bin come DIE, STAR, GEAR, DONUT, DIAMOND,
+SPIKE, PILL and ARROW. Each has its own fields in the panel:
+
+- **DIE:** FACES - 4, 6, 8, 10, 12, 20 or 30 (the wheel steps through
+  them). It rests on one face, as a die does.
+- **SPIKE:** a die with a point on every face (SPIKES, LENGTH).
+- **STAR, GEAR:** POINTS / TEETH, and INNER / DEPTH for how far in they go.
+- **DONUT:** SLICES and HOLE.  **DIAMOND:** SIDES and TOP (its table).
+- **PILL, ARROW:** ROUND for the ends; HEAD for the arrow's head (it
+  points to the front).
+
+E turns any of them into a mesh part, to edit like any other.
+
 ### Selecting, moving and lining up
 
 ![The lamp selected: the move arrows, and ALIGN / FLIP / GROW / TURN in the panel](docs/screenshots/select.png)
@@ -63,6 +90,11 @@ for the port.
   FLIP, GROW / SHRINK, TURN L / R.
 - G groups the selection; GRID shadows it on the floor and walls so you
   can see where it is from any angle.
+- Ctrl+Alt shows the selection box's middle, side middles and corners;
+  Ctrl+Alt+click one (or a spot on the shape) and SCALE grows from there,
+  the far side staying put, and TURN goes round it.
+- SAME gives every selected part the first one's place, size or turn on
+  the axes you pick; AS SEEN matches width, height or depth on screen.
 
 ### Prefabs
 
@@ -75,7 +107,7 @@ for the port.
 - U (UNLINK) makes a placed prefab the model's own parts; TINT shades it
   towards a colour.
 
-### Holes
+### Holes and merging
 
 ![A block with three holes: a drill through the top (selected), a notch and a bore](docs/screenshots/holes.png)
 
@@ -85,6 +117,9 @@ for the port.
 - A hole put down on a face drills into it.
 - K (KEEP) keeps only the overlap instead.
 - A (APPLY) cuts it for good, leaving mesh parts you can edit.
+- M (MERGE) is the boolean add: select two or more overlapping parts and
+  they become one mesh part, the faces inside the overlap gone. Colours
+  and pictures stay.
 
 ### Editing faces, edges and points
 
@@ -92,7 +127,8 @@ for the port.
 
 1. Select one part and press E: it becomes a mesh part and its faces show.
 2. Press 1 for points, 3 for edges, 2 for faces (Tab goes round them).
-   Click picks, Shift adds, drag a box round several.
+   Click picks, Shift adds, drag a box round several. In edges,
+   Ctrl+click picks an edge's whole loop (Shift+Ctrl adds another).
 3. Drag what's picked to move it, or use the panel: CENTRE, TURN BY,
    SIZE, PUSH OUT.
 4. The tools: EXTRUDE (E), INSET (I), BEVEL (B), DIVIDE across / down
@@ -158,6 +194,31 @@ Drag the bin's edge to make it wider, and Shift + wheel over the pictures
 to make the tiles bigger or smaller (40 to 256 pixels). The path box
 under the tabs opens any folder of PNGs.
 
+### Painting a face's picture
+
+![The painter: a brick texture made from two colours, the tools on the left, colours, MAKE and FILTERS on the right](docs/screenshots/paint.png)
+
+1. Point at a face and press Ctrl+P (or pick faces in E and press
+   Ctrl+P, or PAINT IT in the panel, or right-click a picture in the bin).
+   A face with no picture gets a new one in its colour, put on first.
+2. The picture fills the window. Left button paints in the first colour,
+   right in the second; Ctrl+click picks a colour up. The wheel zooms,
+   middle drag moves it.
+3. Tools: pencil, brush, line, box, ellipse (filled or not), fill,
+   gradient (down, across, slanted, round, or out from the middle), pick.
+   Mirror left-right or up-down, wrap round the edges, or see it tiled.
+4. MAKE makes a whole picture from the two colours: noise, grid, plates,
+   bumps, wood, carpet, brick, sand, stone, tiles, stripes, checker,
+   scratches, patches. Each repeats without a seam; click again for
+   another. FILTERS: blur, sharpen, emboss, pixelate, brighter, darker,
+   contrast, posterize, invert, grey. CLEAN / RAND: only the two colours,
+   or random tints too; SIZE: how big its bricks, tiles, rings come out.
+   With a gradient, drag from where it starts to where it ends, then drag
+   its ends or its line to change it; it can repeat (PAD, REP, BNC).
+   SELECT (S) drags a box: move it, copy it (Alt), flip, turn or scale it.
+5. Ctrl+S saves the PNG and the faces show it. Esc goes back (it asks
+   first if it isn't saved).
+
 ### Seeing it: TEX, WIRE, GRID
 
 ![TEX at 46% and WIRE on: the edges behind the faces show through](docs/screenshots/views.png)
@@ -166,7 +227,7 @@ The buttons at the top each have a slider beside them:
 
 - **TEX** (Shift+W): the faces on or off. The slider sets how solid they
   are; less shows the grid and the edges behind.
-- **WIRE** (W): every part's edges drawn over it in its colour.
+- **WIRE** (W): every part's edges drawn over it, each pixel the opposite of the one under it, so they show on white faces and the dark backdrop alike.
 - **GRID**: the grid up the two walls behind the model, with the
   selection shadowed on them.
 
@@ -178,12 +239,66 @@ OPEN (Ctrl+O) lists your models, then NEON-CASTER's props. A prop opens
 with its texture on it, ready to change and EXPORT back to the game (see
 [NEON-CASTER](#neon-caster)).
 
+### The MODELS tab
+
+![The bin's MODELS tab: a picture of each saved model](docs/screenshots/models.png)
+
+The bin's third tab shows every model in `models/` as a picture; click
+one to open it (the one open is lit). If the model open isn't saved, the
+first click says so and a second opens it anyway.
+
+### SVGs made thick
+
+![An SVG emblem opened as a model: a shield, a disc with a star cut out of it, and a bar across](docs/screenshots/svg.png)
+
+OPEN lists the SVGs in `models/`, and an SVG dropped on the window opens
+too. Each filled shape becomes a mesh part, all of them one group:
+
+- Paths (curves and arcs too), rects (rounded too), circles, ellipses,
+  polygons and polylines, through their transforms and their groups'.
+- Holes stay holes (a ring, the inside of a letter O, a star cut out).
+- The fill colour comes with it; a gradient gives the average of its
+  colours. Glows and shadows (a `filter`) and see-through overlays are
+  left out, as are lines with no fill.
+- It's 1 cell across, a tenth of that thick, facing the front. A shape
+  lying over earlier ones stands a step further out, so the layers don't
+  fight.
+
+Then E extrudes, insets and bevels its faces as any mesh part's, and
+Ctrl+S saves it as a model.
+
+### Your own shapes: the pen and text
+
+- **The pen (P):** click corners on the ground (click and drag for a
+  curve); click the first point again and the outline becomes a flat part,
+  ready to thicken, extrude and bevel.
+- **Text (X):** type, pick a font from the list in the view (fonts in
+  `fonts/`, DRAW's fonts, and the system's), click where it starts, Enter.
+  Each letter is a flat mesh part, all one group: Alt+click one letter to
+  move it on its own. Up / Down sizes it, Left / Right thickens it, Tab
+  stands it up.
+
+### Reference pictures
+
+The view's top right has **[REF] (slider) [TR] [B] [L] [R]**: a picture
+on the ground (B), on the back wall (L) or on the side wall (R), drawn
+see-through behind the model so you can build over it from any angle.
+
+- B, L or R picks which one the rest works on. REF picks a picture from
+  disk (PNG, JPG, BMP...); a PICTURES tile dragged onto REF, or a file
+  dropped on it, works too.
+- The slider sets how solid it is (middle click: 50%).
+- TR moves it: drag in the view, or the arrow keys; the wheel sizes it.
+- Shift+click B, L or R hides that one; Shift+click REF hides them all;
+  right-click REF takes it off.
+- They're saved with the model.
+
 ### Help in the program
 
 ![HELP, on its EDIT page](docs/screenshots/help.png)
 
 H (or F1) shows every key by topic: click a topic, or Left / Right, or
-1-8. The same list is below.
+1-9. The same list is below.
 
 ## Keys
 
@@ -204,13 +319,27 @@ This list is the in-program HELP. Click a topic to open it.
 | Home | the start view |
 | Arrows | turn round by steps (with nothing selected) |
 
+#### THE NUMPAD
+
+| Keys | What it does |
+|---|---|
+| 1 / 2 / 3 | the start view, from above, from under |
+| 4 / 6 | from the left, from the right |
+| 7 / 8 / 9 | from above: the front-left corner, the front, the front-right corner |
+| 5 | flat (no perspective) / perspective |
+| 0 / . | frame it all; the start view again |
+| + / - / * / / | nearer, further, turn right / left 15 |
+| Enter | frame what's selected |
+| Num Lock | on or off: the same (the numpad's keys tell themselves apart from Home, the arrows...). Typing in a box: they type |
+
 #### SEEING IT
 
 | Keys | What it does |
 |---|---|
 | TEX / Shift+W | the faces on / off - the slider beside it: how solid (less shows the grid and the edges behind) |
-| W or WIRE | each part's edges drawn over it in its colour - the slider: how strong |
-| GRID | the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines |
+| W or WIRE | each part's edges drawn over it, each pixel the opposite of what's under it (so they show on white or dark) - the slider: how strong |
+| GRID | the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines. The ground's grid never ends: it thins and fades out with distance |
+| Ctrl+H / GUIDES | hide every guide (edges, points, picked colours, outlines, the widget) to see just the model; again: back |
 | The bin's edge | drag it: wider or narrower (no narrower than at first; remembered) |
 | The sliders | drag one, or the wheel over it. TEX, WIRE, GRID and their sliders are remembered |
 | L or PARTS | the parts list |
@@ -241,21 +370,35 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Esc | stop |
 | The panel | sets it up before the click: size, turn, colour... |
 
+#### MORE SHAPES (the bin, after the first six)
+
+| Keys | What it does |
+|---|---|
+| DIE | 4, 6, 8, 10, 12, 20 or 30 faces: the buttons under FACES (or the wheel on it). It sits on a face |
+| SPIKE | a die with a point on every face: SPIKES, and LENGTH |
+| STAR / GEAR | POINTS / TEETH, and INNER / DEPTH: how far in they go |
+| DONUT | SLICES round, HOLE: how big its middle |
+| DIAMOND | SIDES, TOP: how wide its flat top |
+| PILL / ARROW | ROUND: how round its ends;  HEAD: how long the arrow's head (it points to the front) |
+| Fitting the grid | every shape fills its box, and its sizes land on the snap (x and z two steps, y one), so its sides sit on grid lines |
+
 #### MOVING PARTS
 
 | Keys | What it does |
 |---|---|
 | Click | select (Shift: add) |
+| Drag a box | from empty space: every part whose middle is in it (Shift: added) |
 | Tab | the next part |
 | Drag | along the ground (Shift: up and down) |
 | Alt + drag | off the grid (no snap) |
-| Arrows | nudge across;  PgUp / PgDn: up and down |
+| Arrows | nudge across a grid step;  PgUp / PgDn: up and down (Shift: 10 steps, Alt: a tenth - the same for the wheel and GROW) |
 | R / Shift+R | turn 15 degrees |
 | FLIP X Y Z | (the panel) each part mirrored in its own axes, about its own middle - a shape that isn't the same mirrored becomes a mesh part |
-| GROW / SHRINK | a quarter bigger / smaller, standing where it stands (several: as one piece) |
+| GROW / SHRINK | a grid step bigger / smaller each way, standing where it stands (several: as one piece) |
 | TURN L / R | 90 degrees round the up axis (Shift: 15) |
 | = / - | bigger, smaller |
 | Ctrl+D | copy |
+| Ctrl+C / X / V | copy, cut, paste the selected parts (pasted two snap steps along, selected; in E: a face's picture) |
 | Delete | take away |
 
 #### THE PANEL
@@ -265,7 +408,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Type | a number, then Enter |
 | Wheel | over a field: a step (a turn: 1, Shift 10, Alt 0.1) |
 | Middle click | a field back to usual |
-| SNAP | what moves snap to: 1/8 to 1/64 of a cell, or OFF |
+| 1/8 .. 1/64 / OFF | (the top bar, beside GRID) what moves and sizes snap to, in cells - and the ground's finest lines |
 
 </details>
 
@@ -278,6 +421,13 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 |---|---|
 | The arrows | on what's selected: drag X (red), Y (green) or Z (blue) and it moves only that way |
 | Hold X, Y, Z | while dragging: kept to that axis. Its line is drawn, with a tick at each snap step |
+
+#### TRANSFORM (the panel)
+
+| Keys | What it does |
+|---|---|
+| MOVE / SCALE / TURN | what dragging the widget does |
+| X / Y / Z | which ways (any of them on): the widget shows only those. SCALE with only Y: taller; TURN: 15 at a time (Alt: 1) |
 
 #### ALIGN (the panel - as you see it)
 
@@ -302,6 +452,20 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 |---|---|
 | GRID | shadows of what's selected on the floor and walls |
 
+#### WHERE IT GROWS AND TURNS FROM
+
+| Keys | What it does |
+|---|---|
+| Ctrl+Alt | shows the selection box's points: the middle, each side's middle, each corner |
+| Ctrl+Alt+click | one of them (or a spot on the shape) - the widget sits there: SCALE grows from it (that side stays put), TURN goes round it. It follows a MOVE; the middle, or another selection: back to usual |
+
+#### SAME (the panel: as the first picked)
+
+| Keys | What it does |
+|---|---|
+| PLACE SIZE TURN | each selected part given the first one's place / size / turn - on the X Y Z beside them |
+| WIDTH HEIGHT DEPTH | (AS SEEN) each part's reach across / up / into the screen made the first one's |
+
 #### GROUPS
 
 | Keys | What it does |
@@ -321,6 +485,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | E | edit the selected part (it becomes a mesh part) |
 | 1 / 3 / 2 | points, edges, faces (Tab: the next) |
 | Click | pick one (Shift adds) - an edge: click its line |
+| Ctrl+click | an edge: its whole loop - on across four-sided corners till it comes round or stops (Shift+Ctrl: adds it) |
 | Drag a box | pick all in it;  Ctrl+A: all |
 | Drag a picked one | move it (Shift: up and down; X / Y / Z held: one axis). An edge moves its two points: the faces on it follow |
 | Arrows PgUp PgDn | nudge |
@@ -382,6 +547,14 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | REPEAT | more or fewer times across |
 | Arrow buttons | slide it |
 | NO PICTURE | take it off (a colour from the palette does too) |
+| Ctrl+C | copy the picture on the picked face (or the one pointed at) as it lies on it - how big, turned, where |
+| Ctrl+V / Ctrl+Shift+V | put it on the picked faces (none picked: the one pointed at); on every face of the part |
+
+#### PAINTING ONE HERE
+
+| Keys | What it does |
+|---|---|
+| Ctrl+P / PAINT IT | paint the picture of the face under the pointer (in E: of the picked faces) - no picture on it: a new one, its colour, put on first. The PAINT topic has the keys |
 
 #### PAINTING ONE IN DRAW
 
@@ -392,17 +565,126 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 </details>
 
 <details>
+<summary><b>PAINT</b></summary>
+
+#### THE PAINTER (Ctrl+P on a face)
+
+| Keys | What it does |
+|---|---|
+| Left / right button | paint in the first / second colour |
+| Ctrl+click | pick up a colour (with any tool) |
+| Wheel | zoom (at the pointer);  middle drag or Space + drag: move it;  0: fit;  - +: zoom |
+| Ctrl+S | save: it shows on its faces.  Esc: back (asks first if not saved) |
+| Ctrl+Z / Ctrl+Y | undo, redo |
+
+#### TOOLS
+
+| Keys | What it does |
+|---|---|
+| P / B | pencil, brush ([ ]: its size) |
+| L | line (Shift: straight or at 45) |
+| R / Shift+R | box, filled box (Shift while dragging: square) |
+| O / Shift+O | ellipse, filled ellipse |
+| F | fill the colour where you click |
+| G | gradient, first colour to second - V H D R M: down, across, slanted, round, from the middle. Click: the region FILL would take; Shift+click: the whole picture; right click: the other way |
+| Gradient: drag | from where it starts to where it ends (any way). Then drag an end: stretch / turn it; the line: move it.  x - +: repeat it 1-16 times;  PAD REP BNC: past its ends the end colour, again, back and forth |
+| I | pick a colour |
+| X | swap the two colours.  The palette: left / right click.  TYPE: a hex colour |
+| CLEAR / Del | the picture filled with the second colour (Shift: see-through) |
+
+#### HOW IT PAINTS
+
+| Keys | What it does |
+|---|---|
+| M / Shift+M | mirror left-right / up-down |
+| W | wrap round the edges (paint off one side, on at the other) |
+| T | tiled: seen with its neighbours, as it repeats |
+| Shift+G | the pixel grid |
+
+</details>
+
+<details>
+<summary><b>PAINT 2</b></summary>
+
+#### SELECT (S)
+
+| Keys | What it does |
+|---|---|
+| Drag | a box.  Drag inside it: move what's in it (Alt: a copy) |
+| Ctrl+C X V / Ctrl+A | copy, cut, paste (at the pointer), all.  Del: empty it |
+| FLIP L-R / U-D / TURN | the box's pixels mirrored, turned;  x2  1/2: bigger, smaller |
+| Enter / Esc | let go (another tool does too) |
+
+#### MAKE AND FILTERS (the right)
+
+| Keys | What it does |
+|---|---|
+| MAKE | a new picture from the two colours: NOISE GRID PLATES BUMPS WOOD CARPET BRICK SAND STONE TILES STRIPES CHECKER SCRATCH PATCHES - each repeats seamlessly, new each click. Shift: over what's there |
+| CLEAN / RAND | MAKE with only the two colours and its shading; or with random tints (each brick a little different) |
+| SIZE x | how big MAKE's parts come out (bricks, tiles, rings...);  STR: how strongly Shift+MAKE lays it over what's there |
+| FILTERS | BLUR SHARPEN EMBOSS PIXELATE BRIGHTER DARKER CONTRAST POSTERIZE INVERT GREY |
+
+</details>
+
+<details>
+<summary><b>PEN, TEXT</b></summary>
+
+#### PEN: YOUR OWN FLAT SHAPE
+
+| Keys | What it does |
+|---|---|
+| P or the pen tile | (after the shapes) draw an outline on the ground, on the snap (Alt: a tenth of it) |
+| Click | a corner;  click + drag: a curve (its handles mirrored; Ctrl: only the side you drag) |
+| The first point | click it (or Enter) to close: a flat part a snap step thick, selected |
+| Then | thicker: TRANSFORM SCALE with only Y on (or its Y size); E to extrude, bevel... |
+| Backspace / Esc | back a point; let the outline go (Esc again or P: put the pen away) |
+
+#### LETTERS IN A FONT
+
+| Keys | What it does |
+|---|---|
+| X or the Aa tile | (after the pen) then type |
+| The font list | (in the view) click one, the wheel over it, or PgUp / PgDn - fonts from fonts/, DRAW's fonts, and the system's |
+| Click | the ground: where it starts (it follows the pointer till then) |
+| Up / Down | bigger, smaller (Shift: by more) |
+| Left / Right | thinner, thicker |
+| Tab | lying on the ground / standing up |
+| Enter | made: each letter a flat mesh part, all one group, each named by its letter |
+| Then | click: the word; Alt+click: one letter, to move, turn, colour... E: extrude, bevel it |
+| Esc | stop |
+
+</details>
+
+<details>
+<summary><b>REFERENCE</b></summary>
+
+#### A PICTURE TO MODEL OVER (the view's top right)
+
+| Keys | What it does |
+|---|---|
+| B / L / R | which one the rest works on: the ground, the back wall (left as the view opens), the side wall (right). The walls are the far ones: they swap round as you turn |
+| REF | a picture from disk for it (PNG, JPG, BMP...) - or drag a PICTURES tile onto REF, or drop a file on it |
+| The slider | how solid it is (the wheel: 5 at a time; middle click: 50) |
+| TR | move it: drag in the view (on its plane; on an arrow: only that way), the arrows a grid step at a time, the wheel or PgUp / PgDn sizes it. Esc / TR: done |
+| Shift+click B L R | hide / show that one;  Shift+click REF: all of them |
+| Right-click REF | take it away |
+| Saved | with the model (its file stays where it is: the model keeps the path) |
+
+</details>
+
+<details>
 <summary><b>HOLES</b></summary>
 
 #### HOLES
 
 | Keys | What it does |
 |---|---|
-| C or HOLE | a hole: cut out of the solid parts before it in the list. Seen see-through grey (click to pick it) |
+| C or HOLE | a hole: cut out of the solid parts before it in the list (so a part after it can sit in it). Seen see-through grey (click to pick it) |
 | Put down as one | it drills into the face it's put on |
 | K or KEEP | only where it overlaps the parts before it stays |
-| A or APPLY | a hole or KEEP cut for good (mesh parts, editable) |
-| In a group | a hole cuts only its own group |
+| M or MERGE | (two or more solid parts selected) made one mesh part: their outsides kept, the insides where they overlap gone - a boolean add. Colours and pictures kept; Ctrl+Z: back |
+| A or APPLY | a hole or KEEP cut for good (mesh parts, editable) - select solid parts with it and it cuts just those, wherever they're listed |
+| In a group | a hole cuts every solid part of its group, wherever it's listed - and nothing else |
 
 #### THE PARTS LIST (L)
 
@@ -440,6 +722,8 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 |---|---|
 | Ctrl+N / NEW | a new model |
 | Ctrl+O / OPEN | open one (models/, and NEON-CASTER's props) |
+| MODELS tab | in the bin: every saved model, as a picture - click one to open it (not saved: asks first). Drag one into the view: its parts added to this model, one group |
+| An SVG | OPEN one in models/, or drop one on the window: each filled shape made thick (a mesh part, all one group, 1 cell across, facing the front). Holes stay holes; shapes over others stand a step out. Then E: extrude, inset... and Ctrl+S saves it as a model |
 | Ctrl+S / SAVE | save (models/NAME.bld) |
 | Ctrl+Z / Ctrl+Y | undo, redo |
 | Ctrl+A | select all |
@@ -466,7 +750,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 - **Turning several parts:** with more than one part selected, R and the panel's TURN ALL AS ONE turn them together round their middle, as one object (not each on its own spot).
 - **Editing faces and points** (E, or EDIT in the panel, with one part selected): the part becomes a mesh part (a shape's size and turns are kept) and its faces show. 2: faces, 1: points, 3: edges, Tab goes round them. Click picks (Shift adds; an edge: click its line), drag a box round several, Ctrl+A all. Drag a picked one to move them (Shift: up and down), or the arrows and PgUp/PgDn. An edge moves its two points, so the faces on it follow (a box's top edge dragged out makes a wedge). The part's edges are drawn over it in a colour that shows on it, and what's picked is drawn wide: faces orange, edges and points cyan. A part set to lines only in the parts list can still have its faces picked. The panel has their CENTRE, TURN BY, SIZE (0 flattens them) and PUSH OUT (along the way they face); = and - size them, R turns them. E extrudes the picked faces, I insets them, H and V divide them across and down, M joins picked faces that touch into one (the edges between them gone; faces at an angle are laid flat on the biggest one's plane; picked points or an edge: made one), Shift+M draws each picked face to a point (a cone, a pyramid), N flips them, Delete takes them away (an edge: the faces along it), and the palette colours them. Esc lets go of the picked ones, then leaves. For example, a 12-slice cylinder with its top face picked: SIZE X and Z 0.7 taper it, I insets a smaller face in it, and PUSH OUT -0.8 sinks that one: a cup.
 - **Bevel** (B, or BEVEL in E's panel, with edges or faces picked; faces: all their edges): a mode, as MOVE IT is for pictures. Each face beside a picked edge moves in from it by WIDTH, and a strip of SEGMENTS faces fills the gap: 1 is a flat chamfer, more are round. Where bevelled edges meet, a corner face fills in. The view shows it as it'll be while you drag the sliders (or turn the wheel over them); WIDTH goes as far as the faces beside the edge allow. Enter or APPLY makes it (one undo step) and leaves the new faces picked; Esc puts the part back as it was. Pictures on the faces stay on them, trimmed. Edges where the faces are flat to each other, or on the model's open rim, aren't bevelled; nor is one folded flat (two faces back to back, as when a face is inset and then pushed in exactly as far as the inset - push in less and its edges have a corner to cut).
-- **Loop cut, split, connect** (E, edges): O (LOOP) puts a ring of new edges round the part across the picked edge, through each four-sided face in turn (until it comes round, or meets a face that isn't four-sided); a mode as BEVEL is: POSITION slides it across those faces (near an edge: a thin face along it), CUTS (1-10) spaces more evenly, Enter or APPLY makes it with its new edges picked, Esc drops it. S (SPLIT) puts a point in the middle of each picked edge, shared by the faces both sides. J (CONNECT) cuts a face in two with a new edge between the middles of two of its picked edges, or between two of its picked corners (in points). Picking two opposite sides of a four-sided face picks all four corners; the clicks say which sides were meant, so the other two aren't counted.
+- **Loop cut, split, connect** (E, edges): O (LOOP) puts a ring of new edges round the part across the picked edge, through each four-sided face in turn (until it comes round, or meets a face that isn't four-sided); a mode as BEVEL is: POSITION slides it across those faces (near an edge: a thin face along it), CUTS (1-10) spaces more evenly, Enter or APPLY makes it with its new edges picked, Esc drops it. S (SPLIT) puts a point in the middle of each picked edge, shared by the faces both sides. J (CONNECT) cuts a face in two with a new edge between the middles of two of its picked edges, or between two of its picked corners (in points). Picking two opposite sides of a four-sided face picks all four corners; the clicks say which sides were meant, so the other two aren't counted. Ctrl+click on an edge picks its whole loop: from each end it goes on through the point straight across (only where four edges meet), until it comes round or reaches a point where more or fewer meet; Shift+Ctrl adds the loop to what's picked.
 - **Edge lines in E** are drawn dark on light faces and light on dark ones, judged by how solid TEX shows the faces: with TEX off (or faint) they're all light against the dark backdrop.
 - **Pictures on faces:** the bin's PICTURES tab shows the PNGs in `pictures/` (in folders: + FOLDER makes one). Drag one onto a face, or click it and then click faces (Shift: every face of that part); Esc stops. Shift + wheel over the pictures makes the tiles bigger or smaller (40 to 256 pixels, as wide as the bin allows; `pic_size=` in bu1ld0r.cfg). A picture on a face that a hole cuts stays on what's left of the face. Drop a PNG from your desktop onto the window and it's copied into `pictures/` and put on the face it lands on. In E with faces picked, clicking a picture puts it straight on them. A shape that gets a picture becomes a mesh part. With faces picked in E the panel's PICTURE buttons: FIT (fills each face's box), DEFORM (the picture's corners pinned to the face's corners, so it bends to a slanted or pointed face), MOVE IT or P (by hand: drag a picked face to slide the picture, the wheel sizes it, Shift + wheel turns it; it snaps to the picture's pixels, Alt: not), ACROSS ALL (one picture over all the picked faces), TURN, FLIP, REPEAT MORE / LESS, the arrows slide it, NO PICTURE. EDIT IN DRAW opens the picked face's picture in DRAW (no picture on it: a new PNG is made first, 64 pixels on its long side, the face's shape and colour, and put on the picked faces); each time DRAW saves it, bu1ld0r shows it. DRAW is `~/git/DRAW/DRAW.run` unless `draw=` in bu1ld0r.cfg says where. A picture changed in DRAW any other way shows when the model is opened again. **Other folders:** the path box under the bin's tabs shows the folder open; click it and type or paste (Ctrl+V) any folder (`~` is home, a PNG's path opens its folder, a `file://` link works too), then Enter. Its PNGs show in the bin (the PICTURES tile goes back to `pictures/`); one you put on a face is copied into `pictures/` first (the same picture already there: that one). The folder is remembered (`pic_outside=` / `pic_dir=` in bu1ld0r.cfg), and a folder dropped on the window opens too. Right-click a picture: EDIT IN DRAW, or OPEN IN KALEIDOTRON (its folder, with it picked); right-click a folder, or the bin's empty space for the one open: OPEN IN KALEIDOTRON (`kaleidotron=` in bu1ld0r.cfg says where it is, else `~/.local/bin/kaleidotron`). The game doesn't repeat textures, so EXPORT cuts a repeated face where the repeats meet.
 - **Moving along one axis** (as Blender): what's selected (parts, or the picked points and faces in E) shows a widget of three arrows, X red, Y green, Z blue: drag one and it moves only that way. Or hold X, Y or Z while dragging. The axis is drawn through it, with a tick at each snap step (where it snaps). The grid shows the three axes through the middle: X red, Z blue, Y green going up.
@@ -482,7 +766,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 
   Moves snap to the grid (SNAP in the panel); hold Alt for none.
 - **Exact numbers:** the panel on the right has the position, turn, size, slices (round shapes), the amount (a cone's top, a tube's hole, how much of a sphere) and the colour. Click a field and type (Enter), or turn the wheel over it: 1 a step, 10 with Shift, 0.1 with Alt. A middle click puts a field back to its usual value (position and turn 0, the shape's own size, a prefab's scale 1).
-- **The view:** right drag turns round it, middle drag (or Shift + right drag) pans, the wheel zooms, F frames the model, Home goes back to the start. At the top, TEX, WIRE and GRID each have a slider beside them (drag it, or the wheel over it); all are remembered in bu1ld0r.cfg (`tex_on`, `tex_op`, `wire_on`, `wire_op`, `grid_walls`, `grid_bright`). TEX (Shift+W) shows the faces or not, its slider how solid they are: less shows the grid through them, and the edges behind them as faint as the faces are see-through. WIRE (W) draws every part's edges over it in its own colour, its slider how strong. With TEX off, clicking still picks parts and faces.
+- **The view:** right drag turns round it, middle drag (or Shift + right drag) pans, the wheel zooms, F frames the model, Home goes back to the start. At the top, TEX, WIRE and GRID each have a slider beside them (drag it, or the wheel over it); all are remembered in bu1ld0r.cfg (`tex_on`, `tex_op`, `wire_on`, `wire_op`, `grid_walls`, `grid_bright`). TEX (Shift+W) shows the faces or not, its slider how solid they are: less shows the grid through them, and the edges behind them as faint as the faces are see-through. WIRE (W) draws every part's edges over it, each pixel the colour under it with its top bit of red, green and blue flipped (XOR 808080: white gives grey, dark gives light), its slider how strong. With TEX off, clicking still picks parts and faces.
 - **Edit:** Ctrl+Z undo, Ctrl+Y redo, Ctrl+D copy, Delete removes, Ctrl+A selects everything.
 - **Files:**
   - Ctrl+S saves `models/NAME.bld` (the NAME box at the top);
@@ -503,7 +787,11 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 - **Typing in a box** (the name, the sizes, the pictures path...): click puts the cursor there (double click picks all of it, drag or Shift+click picks some); Left / Right / Home / End move it (Shift picks, Ctrl goes a word at a time); Ctrl+A / C / X / V; Backspace and Delete (Ctrl: a word).
 - **Divide** (E, faces, H across / V down): a four-sided face is cut between its edges' middles; any other shape is cut by a line through its middle, across the screen or down it (a house-shaped end: the house above, a rectangle below).
 - **Wider bin:** drag the edge between the bin and the view (or the parts list, if it's shown) - the pointer shows <->. A wider bin shows more tiles across. It goes no narrower than it starts, and is remembered (`bin_w=` in bu1ld0r.cfg). The panel on the right stays as it is.
-- **Help:** H (or F1): every key, by topic (VIEW, BUILD, LINE UP, EDIT, PICTURES, HOLES, PREFABS, FILES) - click a topic, or Left/Right, or 1-8. Esc closes it.
+- **More shapes:** DIE (FACES 4, 6, 8, 10, 12, 20 or 30; the wheel steps through those; a d10 is a pentagonal trapezohedron, a d30 a rhombic triacontahedron; each rests on a face, fitted to its box), SPIKE (a pyramid on each of a die's faces: SPIKES, LENGTH), STAR (POINTS, INNER: how far in the points' roots are), GEAR (TEETH, DEPTH), DONUT (SLICES round, HOLE: how big the middle), DIAMOND (SIDES, TOP: the table's width; the point at the bottom), PILL (lying along X: SLICES, ROUND: how round its ends) and ARROW (pointing to the front, -Z: HEAD, how long its head). In `.bld` they're `die`, `star`, `gear`, `donut`, `diamond`, `spike`, `pill`, `arrow`, with their faces / points in the slices column.
+- **Painting a picture** (Ctrl+P with the pointer on a face, or with faces picked in E; PAINT IT in E's panel; PAINT IT in a picture's right-click menu in the bin): the face's picture opens over the whole window. A face with none gets a new PNG in `pictures/` in its colour (64 x 64; from E, 64 on its long side, the picked faces' shape), put on it first. A prefab put down isn't painted where it is: paint it in the prefab (EDIT IT). Left / right button: the two colours (the swatches top right; the palette with either button; TYPE a hex colour; R G B - and + nudge the first, Shift by 1); Ctrl+click picks a colour up with any tool. Tools: PENCIL (P), BRUSH (B, [ ] its size), LINE (L), BOX (R / Shift+R filled), ELLIPSE (O / Shift+O filled) - Shift keeps a line straight or at 45 and a box square -, FILL (F), GRADIENT (G: the first colour to the second over the region FILL would take, Shift+click the whole picture, right click the other way; V H D R M: down, across, slanted, round, out from the middle) and PICK (I). MIRROR L-R / U-D (M / Shift+M), WRAP (W: off one edge, on at the other), TILED (T: seen with its neighbours), GRID (Shift+G). MAKE (14) fills it with a texture made from the two colours, seeded so each click is another, all repeating seamlessly (Shift: half over what's there); FILTERS (10) change what's there. Undo / redo: 40 steps. Ctrl+S saves the PNG and every face with it shows it; Esc asks once if it isn't saved.
+- **The MODELS tab** (the bin's third): each model in `models/` as a picture, made one a frame, the open one lit; click to open (unsaved: the first click warns, the second opens). Saving relists it.
+- **SVGs:** OPEN (models/*.svg), a drop on the window, or `--open NAME.svg`. Read: path (M L H V C S Q T A Z, either case), rect (rx / ry), circle, ellipse, polygon, polyline; `transform` (matrix, translate, scale, rotate, skewX / skewY) on them and their groups (g, svg, a); fill as an attribute or in `style`, inherited, `#rgb` / `#rrggbb` / `rgb()` / names, a gradient its stops' average. Left out: defs, clip paths, masks, text, shapes with no fill, hidden ones, ones with a filter (glows, shadows), and ones under half opaque. Each shape's outlines are nested by what's inside what: inside an odd number of others is a hole. Each becomes a mesh part (one group), fitted 1 cell across, standing on the ground, 0.1 thick, read the right way round from the front (-Z); a shape over earlier ones it overlaps stands a fiftieth further out. Points closer than a thousandth of its size are made one. Ctrl+S saves it as `models/NAME.bld`.
+- **Help:** H (or F1): every key, by topic (VIEW, BUILD, LINE UP, EDIT, PICTURES, PAINT, HOLES, PREFABS, FILES) - click a topic, or Left/Right, or 1-9. Esc closes it.
 
 Sizes are NEON-CASTER map cells: 1 is a wall's width, and the purple
 square on the grid is one cell. A model's foot is the middle of that
@@ -569,7 +857,7 @@ loses detail - look at it with T before switching it on for the export.
 ## Command line
 
 ```
-bu1ld0r.run [FILE.bld | FILE.obj] [--open NAME | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N]
+bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N]
 ```
 
 `--drop FILE.png` acts as if the file were dropped on the window (where

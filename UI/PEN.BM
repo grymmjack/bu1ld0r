@@ -1,0 +1,220 @@
+''
+' bu1ld0r - UI/PEN.BM
+' =============================================================================
+' The pen: an outline on the ground made a flat part (see PEN.BI)
+'
+
+SUB PenToggle
+    IF penOn THEN PenStop: EXIT SUB
+    IF edPart THEN Msg "Leave E first (Esc), then P draws a shape": EXIT SUB
+    IF placeKind THEN PlaceStop
+    IF txOn THEN TxStop
+    SelNone: ovDirty = -1
+    penOn = -1: penN = 0: penDown = 0
+    Msg "PEN: click corners on the ground, click + drag for a curve (Ctrl: one side). Click the first point or Enter: made. Backspace: back a point. Esc / P: stop"
+END SUB
+
+SUB PenStop
+    penOn = 0: penN = 0: penDown = 0
+    Msg "Pen put away"
+END SUB
+
+' Where the pointer (lx, ly in the view) meets the ground, on the snap (Alt: a tenth of it)
+FUNCTION PenGround (lx, ly, x#, z#)
+    DIM o AS V3, n AS V3, h AS V3, ok, st#
+    n.y = 1
+    RayPlane lx, ly, o, n, h, ok
+    IF ok = 0 THEN EXIT FUNCTION
+    x# = h.x: z# = h.z
+    st# = snapStep: IF kAlt THEN st# = st# / 10
+    IF st# > 0 THEN x# = VAL(Fmt$(INT(x# / st# + .5) * st#)): z# = VAL(Fmt$(INT(z# / st# + .5) * st#))
+    PenGround = -1
+END FUNCTION
+
+' A press in the view: a new point, or the first one again (closing)
+SUB PenPress (lx, ly)
+    DIM x#, z#
+    IF PenGround(lx, ly, x#, z#) = 0 THEN Msg "Point at the ground (turn the view to look down at it)": EXIT SUB
+    penPX = mX: penPY = mY
+    IF penN >= 3 AND penHot THEN penDown = 2: EXIT SUB
+    IF penN >= PEN_MAX THEN Msg "That's as many points as a shape takes: Enter makes it": EXIT SUB
+    IF penN > 0 THEN
+        IF ABS(x# - penAX#(penN)) < 1E-9 AND ABS(z# - penAZ#(penN)) < 1E-9 THEN penDown = 1: EXIT SUB ' (on the last one: its handles)
+    END IF
+    penN = penN + 1
+    penAX#(penN) = x#: penAZ#(penN) = z#
+    penOX#(penN) = x#: penOZ#(penN) = z#: penIX#(penN) = x#: penIZ#(penN) = z#
+    penDown = 1
+END SUB
+
+' Each frame: what the pointer's over, a handle dragged, a let go
+SUB PenFrame (lx, ly)
+    DIM x#, z#, sx, sy, ok, i
+    penHOk = PenGround(lx, ly, x#, z#)
+    IF penHOk THEN penHX# = x#: penHZ# = z#
+    penHot = 0
+    IF penN >= 3 AND penDown <> 1 THEN
+        ScrPt penAX#(1), 0, penAZ#(1), sx, sy, ok
+        IF ok THEN penHot = (ABS(sx - mX) <= 10 AND ABS(sy - mY) <= 10)
+        IF penHOk THEN ' (or the pointer's snapped onto it)
+            IF ABS(penHX# - penAX#(1)) < 1E-9 AND ABS(penHZ# - penAZ#(1)) < 1E-9 THEN penHot = -1
+        END IF
+    END IF
+    IF penDown AND mB1 AND penHOk THEN
+        IF ABS(mX - penPX) + ABS(mY - penPY) > 3 THEN
+            i = penN: IF penDown = 2 THEN i = 1
+            penOX#(i) = x#: penOZ#(i) = z#
+            IF NOT kCtrl THEN penIX#(i) = 2 * penAX#(i) - x#: penIZ#(i) = 2 * penAZ#(i) - z#
+        END IF
+    END IF
+    IF penDown AND NOT mB1 THEN
+        IF penDown = 2 THEN penDown = 0: PenMake: EXIT SUB
+        penDown = 0
+    END IF
+END SUB
+
+' Keys while the pen's out: -1 if it took the key
+FUNCTION PenKey (k&)
+    SELECT CASE k&
+        CASE 13
+            IF penN >= 3 THEN PenMake ELSE Msg "A shape needs 3 points at least"
+        CASE 27
+            IF penN > 0 THEN penN = 0: penDown = 0: Msg "Outline let go (Esc again: put the pen away)" ELSE PenStop
+        CASE 8
+            IF penN > 0 THEN penN = penN - 1: penDown = 0
+        CASE 112, 80
+            PenStop
+        CASE ELSE
+            EXIT FUNCTION
+    END SELECT
+    PenKey = -1
+END FUNCTION
+
+' A point along the curve from point i to point j (t 0..1)
+SUB PenBez (i, j, t#, x#, z#)
+    DIM m#
+    m# = 1 - t#
+    x# = m# * m# * m# * penAX#(i) + 3 * m# * m# * t# * penOX#(i) + 3 * m# * t# * t# * penIX#(j) + t# * t# * t# * penAX#(j)
+    z# = m# * m# * m# * penAZ#(i) + 3 * m# * m# * t# * penOZ#(i) + 3 * m# * t# * t# * penIZ#(j) + t# * t# * t# * penAZ#(j)
+END SUB
+
+' How many pieces the way from point i to j is (1: straight)
+FUNCTION PenSteps (i, j)
+    IF penOX#(i) = penAX#(i) AND penOZ#(i) = penAZ#(i) AND penIX#(j) = penAX#(j) AND penIZ#(j) = penAZ#(j) THEN PenSteps = 1 ELSE PenSteps = 16
+END FUNCTION
+
+' The way from point i to j drawn on the screen
+SUB PenSegDraw (i, j, c AS _UNSIGNED LONG)
+    DIM k, n, x#, z#, sx, sy, ok, px, py, pok
+    n = PenSteps(i, j)
+    FOR k = 0 TO n
+        PenBez i, j, k / n, x#, z#
+        ScrPt x#, 0, z#, sx, sy, ok
+        IF ok AND pok THEN LINE (px, py)-(sx, sy), c
+        px = sx: py = sy: pok = ok
+    NEXT
+END SUB
+
+SUB PenDraw
+    DIM i, sx, sy, ok, hx, hy, hok, c AS _UNSIGNED LONG, cH AS _UNSIGNED LONG, x#, z#, k, px, py, pok
+    VIEW SCREEN (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
+    cH = _RGB32(60, 180, 255)
+    FOR i = 1 TO penN - 1
+        PenSegDraw i, i + 1, cHi
+    NEXT
+    IF penDown = 2 THEN PenSegDraw penN, 1, cHi
+    IF penN >= 1 AND penDown = 0 AND penHOk THEN ' (the next piece, as it'd be)
+        penAX#(0) = penHX#: penAZ#(0) = penHZ#: penIX#(0) = penHX#: penIZ#(0) = penHZ#
+        IF penHot THEN penIX#(0) = penIX#(1): penIZ#(0) = penIZ#(1): penAX#(0) = penAX#(1): penAZ#(0) = penAZ#(1)
+        PenSegDraw penN, 0, _RGB32(150, 140, 190)
+    END IF
+    FOR i = 1 TO penN ' (handles)
+        ScrPt penAX#(i), 0, penAZ#(i), sx, sy, ok
+        IF ok AND (penOX#(i) <> penAX#(i) OR penOZ#(i) <> penAZ#(i)) THEN
+            ScrPt penOX#(i), 0, penOZ#(i), hx, hy, hok
+            IF hok THEN LINE (sx, sy)-(hx, hy), cH: LINE (hx - 2, hy - 2)-(hx + 2, hy + 2), cH, BF
+        END IF
+        IF ok AND (penIX#(i) <> penAX#(i) OR penIZ#(i) <> penAZ#(i)) THEN
+            ScrPt penIX#(i), 0, penIZ#(i), hx, hy, hok
+            IF hok THEN LINE (sx, sy)-(hx, hy), cH: LINE (hx - 2, hy - 2)-(hx + 2, hy + 2), cH, BF
+        END IF
+    NEXT
+    FOR i = 1 TO penN ' (the points; the first ringed once it can close)
+        ScrPt penAX#(i), 0, penAZ#(i), sx, sy, ok
+        IF ok THEN
+            LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), _RGB32(10, 8, 18), BF
+            LINE (sx - 2, sy - 2)-(sx + 2, sy + 2), _RGB32(240, 240, 250), BF
+            IF i = 1 AND penN >= 3 THEN
+                c = IIFC~&(penHot, _RGB32(255, 220, 90), cH)
+                CIRCLE (sx, sy), 7, c: CIRCLE (sx, sy), 6, c
+            END IF
+        END IF
+    NEXT
+    IF penHOk AND penDown = 0 THEN ' (where a click puts a point)
+        ScrPt penHX#, 0, penHZ#, sx, sy, ok
+        IF ok THEN LINE (sx - 5, sy)-(sx + 5, sy), cHi: LINE (sx, sy - 5)-(sx, sy + 5), cHi
+    END IF
+    VIEW
+    Txt vX0 + 8, vY0 + 24, "PEN - click: a corner, drag: a curve (Ctrl: one side), the first point / Enter: made. Backspace: back one. Esc: stop", cHi
+END SUB
+
+' The outline closed and made a flat mesh part a snap step thick, on the ground, selected
+SUB PenMake
+    DIM i, j, k, n, cnt AS LONG, x#, z#, a#, th#, lx#, hx#, lz#, hz#, p, t0 AS LONG, t AS LONG, id AS LONG, w AS LONG, v AS LONG
+    IF penN < 3 THEN EXIT SUB
+    cnt = 0
+    FOR i = 1 TO penN: cnt = cnt + PenSteps(i, (i MOD penN) + 1): NEXT
+    REDIM svPX(cnt + 1) AS DOUBLE, svPY(cnt + 1) AS DOUBLE
+    REDIM svR0(1) AS LONG, svRN(1) AS LONG, svRE(1) AS LONG, svRA(1) AS DOUBLE, svRD(1) AS LONG, svRP(1) AS LONG
+    svPN = 0: lx# = 1E+30: hx# = -1E+30: lz# = 1E+30: hz# = -1E+30
+    FOR i = 1 TO penN ' (ground x, z as the outline's x, y: y = -z)
+        j = (i MOD penN) + 1: n = PenSteps(i, j)
+        FOR k = 0 TO n - 1
+            PenBez i, j, k / n, x#, z#
+            IF svPN > 0 THEN
+                IF ABS(svPX(svPN) - x#) < 1E-7 AND ABS(svPY(svPN) + z#) < 1E-7 THEN x# = 1E+30
+            END IF
+            IF x# < 1E+29 THEN
+                svPN = svPN + 1: svPX(svPN) = x#: svPY(svPN) = -z#
+                IF x# < lx# THEN lx# = x#
+                IF x# > hx# THEN hx# = x#
+                IF z# < lz# THEN lz# = z#
+                IF z# > hz# THEN hz# = z#
+            END IF
+        NEXT
+    NEXT
+    svRC = 1: svR0(1) = 1: svRN(1) = svPN: svRE(1) = 1: svRD(1) = 0: svRP(1) = 0: svFull = 0
+    SvStraighten 1
+    a# = 0
+    FOR j = 0 TO svRN(1) - 1
+        v = svR0(1) + j: w = svR0(1) + (j + 1) MOD svRN(1)
+        a# = a# + svPX(v) * svPY(w) - svPX(w) * svPY(v)
+    NEXT
+    svRA(1) = a# / 2
+    IF svRN(1) < 3 OR ABS(svRA(1)) < 1E-9 THEN Msg "That outline has no area: points along one line?": EXIT SUB
+    th# = snapStep: IF th# <= 0 THEN th# = 1 / 32
+    UndoPush
+    p = pN + 1: IF p >= MAX_PARTS - 2 THEN Msg "No room for another part": EXIT SUB
+    a# = snapStep: IF a# <= 0 THEN a# = 1 / 64 ' (its place: the middle, on the snap - the points are where they were drawn)
+    PartFresh p, K_MESH, VAL(Fmt$(INT((lx# + hx#) / 2 / a# + .5) * a#)), 0, VAL(Fmt$(INT((lz# + hz#) / 2 / a# + .5) * a#))
+    pSX(p) = 1: pSY(p) = 1: pSZ(p) = 1
+    t0 = tN
+    SvSolid 1, pCol(p), 0, th#
+    FOR t = t0 + 1 TO tN ' (the outline's x, y, thickness -> the ground's x, -z, height: a turn, so faces stay facing out)
+        PenTurn tA(t): PenTurn tB(t): PenTurn tC(t)
+    NEXT
+    IF tN <= t0 THEN tN = t0: Msg "Nothing came of that outline (does it cross itself?)": EXIT SUB
+    id = EmFromTris&(t0 + 1, tN, p, -1)
+    tN = t0
+    pN = p
+    MakeMeshPart p, id
+    SelNone: pSel(p) = -1
+    penN = 0: penDown = 0: penOn = 0
+    ModelChanged
+    Msg "Made: a flat shape" + STR$(th#) + " thick. Make it thicker: TRANSFORM SCALE with only Y on, or the panel's Y size; E edits its faces (extrude, bevel...). Ctrl+Z: gone"
+END SUB
+
+SUB PenTurn (p AS V3)
+    DIM y#
+    y# = p.y: p.y = p.z: p.z = -y#
+END SUB

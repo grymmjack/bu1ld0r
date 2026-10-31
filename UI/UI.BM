@@ -31,7 +31,7 @@ SUB FieldRect (f, x, y, w, h)
         CASE F_NAME: y = 3: x = 56: w = 200: h = 22
         CASE F_BUDGET: y = 128: x = PX0 + 100
         CASE F_DIR, F_PFNAME: BinBtn x, y, w, h
-        CASE F_PICPATH: x = 6: y = 171: w = BIN_W - 12: h = 20
+        CASE F_PICPATH: x = 6: y = BinTabY + 19: w = BIN_W - 12: h = 20
         CASE F_PNAME ' (in its row of the parts list)
             ListRowsMake: k = ListRowOf(listEdit)
             x = BIN_W + 58: w = LIST_W - 64: h = LIST_ROW: y = ListY0 + (k - listTop - 1) * LIST_ROW
@@ -83,8 +83,8 @@ FUNCTION FieldShown (f)
         p = P_TPL
     END IF
     SELECT CASE f
-        CASE F_SEG: FieldShown = (pKind(p) <> K_BOX AND pKind(p) <> K_WEDGE AND pKind(p) <> K_USE AND pKind(p) <> K_MESH)
-        CASE F_AMT: FieldShown = (pKind(p) = K_CONE OR pKind(p) = K_TUBE OR pKind(p) = K_SPHERE OR pKind(p) = K_USE) ' (a prefab's: its tint's amount)
+        CASE F_SEG: FieldShown = (pKind(p) <> K_BOX AND pKind(p) <> K_WEDGE AND pKind(p) <> K_USE AND pKind(p) <> K_MESH AND pKind(p) <> K_ARROW)
+        CASE F_AMT: FieldShown = (LEN(AmtName$(pKind(p))) > 0) ' (a prefab's: its tint's amount)
         CASE ELSE: FieldShown = -1
     END SELECT
 END FUNCTION
@@ -95,6 +95,25 @@ FUNCTION AmtName$ (k)
         CASE K_TUBE: AmtName$ = "HOLE"
         CASE K_SPHERE: AmtName$ = "SHARE"
         CASE K_USE: AmtName$ = "TINT"
+        CASE K_STAR: AmtName$ = "INNER"
+        CASE K_GEAR: AmtName$ = "DEPTH"
+        CASE K_DONUT: AmtName$ = "HOLE"
+        CASE K_DIAMOND: AmtName$ = "TOP"
+        CASE K_SPIKE: AmtName$ = "LENGTH"
+        CASE K_PILL: AmtName$ = "ROUND"
+        CASE K_ARROW: AmtName$ = "HEAD"
+    END SELECT
+END FUNCTION
+
+' What the slices field counts, by kind
+FUNCTION SegName$ (k)
+    SELECT CASE k
+        CASE K_DIE: SegName$ = "FACES"
+        CASE K_SPIKE: SegName$ = "SPIKES"
+        CASE K_STAR: SegName$ = "POINTS"
+        CASE K_GEAR: SegName$ = "TEETH"
+        CASE K_DIAMOND: SegName$ = "SIDES"
+        CASE ELSE: SegName$ = "SLICES"
     END SELECT
 END FUNCTION
 
@@ -163,6 +182,28 @@ FUNCTION TopBtnName$ (k)
     END SELECT
 END FUNCTION
 
+' GUIDES / Ctrl+H: every guide drawn on the view (outlines, the widget, E's
+' points, edges and picked faces, the shadows on the walls) hidden, or back
+SUB GuidesToggle
+    guidesOn = NOT guidesOn: viewDirty = -1
+    Msg IIFS$(guidesOn, "Guides shown (Ctrl+H: hidden)", "Guides hidden: just the model (Ctrl+H: back)")
+END SUB
+
+' The snap set (0: none): the grid's finest lines follow it; a shape being put down is sized again on it
+SUB SnapSet (st)
+    snapStep = st: viewDirty = -1
+    IF st > 0 THEN Msg "Snap: " + SnapName$(SnapIdx(st)) + " of a cell - the grid's finest lines too (Alt: free)" ELSE Msg "Snap OFF: moves and sizes are free"
+    IF TplOn THEN ShapeFit P_TPL, snapStep, kindB(pKind(P_TPL)): GhostRemake
+END SUB
+
+FUNCTION SnapIdx (st)
+    DIM k
+    FOR k = 0 TO 3
+        IF SnapOf(k) = st THEN SnapIdx = k
+    NEXT
+    IF st <= 0 THEN SnapIdx = 4
+END FUNCTION
+
 FUNCTION SnapOf (k)
     SELECT CASE k
         CASE 0: SnapOf = 1 / 8
@@ -191,13 +232,15 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 2: x = PX0 + 118: y = 486: w = 112
         CASE 3: x = PX0: y = 514: w = 112
         CASE 4: x = PX0 + 118: y = 514: w = 112
-        CASE 11 TO 15: x = PX0 + (k - 11) * 46: y = 450: w = 44
+        CASE 11 TO 15: SliderRect 3, x, w: x = x + w + 14 + (k - 11) * 42: y = 3: w = 40 ' (the snap: in the top bar, after GRID's slider)
+        CASE 16: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6: y = 3: w = 64 ' (GUIDES, after it)
         CASE 21: x = PX0 + 100: y = 58: w = 24
         CASE 22: x = PX0 + 206: y = 58: w = 24
         CASE 23: x = PX0 + 158: y = 32: w = 72
         CASE 24 TO 27: x = PX0 + ((k - 24) MOD 2) * 118: y = 542 + ((k - 24) \ 2) * 28: w = 112
         CASE 28: x = PX0: y = 156: w = 230
         CASE 29: x = PX0: y = 184: w = 230
+        CASE 31 TO 37: x = PX0 + (k - 31) * 33: y = 252: w = 31 ' (a die's faces: 4 6 8 10 12 20 30)
         CASE ELSE: x = -100: y = -100: w = 0
     END SELECT
 END SUB
@@ -213,11 +256,13 @@ FUNCTION PanelBtnName$ (k)
         CASE 22: PanelBtnName$ = ">"
         CASE 23: PanelBtnName$ = "HOLE"
         CASE 24: PanelBtnName$ = "EDIT E"
-        CASE 25: PanelBtnName$ = IIFS$(SelHasHole, "APPLY A", "UNLINK U")
+        CASE 25: PanelBtnName$ = IIFS$(SelHasHole, "APPLY A", IIFS$(SelHasUse, "UNLINK U", "MERGE M"))
         CASE 26: PanelBtnName$ = "GROUP G"
         CASE 27: PanelBtnName$ = "KEEP K"
         CASE 28: PanelBtnName$ = IIFS$(tidyView, "AS BUILT  T", "TIDY VIEW  T")
         CASE 29: PanelBtnName$ = IIFS$(mdlTidy, "EXPORT: TIDIED", "EXPORT: AS BUILT")
+        CASE 31 TO 37: PanelBtnName$ = LTRIM$(STR$(dieN(k - 30)))
+        CASE 16: PanelBtnName$ = "GUIDES"
     END SELECT
 END FUNCTION
 
@@ -231,10 +276,26 @@ FUNCTION PanelBtnOn (k)
             FOR i = 1 TO pN
                 IF pSel(i) AND (pHole(i) <> 0 OR pKind(i) = K_USE) THEN PanelBtnOn = -1: EXIT FUNCTION
             NEXT
+            PanelBtnOn = (SelCount > 1) ' (MERGE)
         CASE 26: PanelBtnOn = (SelCount > 0)
         CASE 28, 29: PanelBtnOn = (SelCount = 0 AND placeKind = 0)
+        CASE 31 TO 37: PanelBtnOn = (PanelDie > 0)
         CASE ELSE: PanelBtnOn = -1
     END SELECT
+END FUNCTION
+
+' The die the panel shows (the first selected, or the one being put down), if it is one
+FUNCTION PanelDie
+    DIM p
+    p = SelFirst: IF p = 0 AND TplOn THEN p = P_TPL
+    IF p > 0 THEN IF pKind(p) = K_DIE THEN PanelDie = p
+END FUNCTION
+
+FUNCTION SelHasUse
+    DIM i
+    FOR i = 1 TO pN
+        IF pSel(i) AND pKind(i) = K_USE THEN SelHasUse = -1: EXIT FUNCTION
+    NEXT
 END FUNCTION
 
 FUNCTION SelHasHole
@@ -248,15 +309,151 @@ SUB PalRect (i, x, y, w, h)
     x = PX0 + (i MOD 8) * 28: y = 312 + (i \ 8) * 28: w = 24: h = 24
 END SUB
 
+' ---------------------------------------------------------------- the numpad: views
+
+' _KEYHIT doesn't tell the numpad from the others (numpad 1 is "1", or End
+' with Num Lock off), but _KEYDOWN does, by QB64's own codes (NumpadHeld):
+' a key the numpad could have sent (NumpadOf) while that numpad key is held
+' (or was just pressed: npT#, from it or the keyboard device's queue) is a view key (NumpadKey). Not while typing,
+' painting, in a list: there it's the key it is.
+SUB NumpadPoll
+    DIM b, h
+    NumpadDev
+    FOR b = 1 TO NP_N
+        h = NumpadHeld(b)
+        IF h AND npHeld(b) = 0 THEN npT#(b) = TIMER(.001)
+        npHeld(b) = h
+    NEXT
+END SUB
+
+' The keyboard device's queue: a numpad key's press marked (npT#) - a tap quicker than a frame, which _KEYDOWN
+' can miss. Its numbers are X11's key codes + 1 (QB64's GLFW is X11 only); QB64 queues it before the key itself
+SUB NumpadDev
+    DIM b, id, d
+    d = _DEVICEINPUT ' (each call takes the next event: once a turn)
+    DO WHILE d
+        IF d = 1 THEN
+            FOR b = 1 TO NP_N
+                id = NumpadId(b)
+                IF id <= _LASTBUTTON(1) THEN IF _BUTTONCHANGE(id) = -1 THEN npT#(b) = TIMER(.001)
+            NEXT
+        END IF
+        d = _DEVICEINPUT
+    LOOP
+END SUB
+
+' Is numpad key b held? (QB64's own codes: Num Lock on 100256 + n..., off 200000 + n - so either way, any system)
+' b: 1-9, 10 0, 11 ., 12 +, 13 -, 14 *, 15 /, 16 Enter
+FUNCTION NumpadHeld (b)
+    SELECT CASE b
+        CASE 1 TO 9: NumpadHeld = _KEYDOWN(100256 + b) OR _KEYDOWN(200000 + b)
+        CASE 10: NumpadHeld = _KEYDOWN(100256) OR _KEYDOWN(200000)
+        CASE 11: NumpadHeld = _KEYDOWN(100266) OR _KEYDOWN(200010)
+        CASE 12: NumpadHeld = _KEYDOWN(100270)
+        CASE 13: NumpadHeld = _KEYDOWN(100269)
+        CASE 14: NumpadHeld = _KEYDOWN(100268)
+        CASE 15: NumpadHeld = _KEYDOWN(100267)
+        CASE 16: NumpadHeld = _KEYDOWN(100271)
+    END SELECT
+END FUNCTION
+
+' Numpad key b as the keyboard device numbers it (Linux X11: the key code + 1, Enter and / + 256)
+FUNCTION NumpadId (b)
+    SELECT CASE b
+        CASE 1: NumpadId = 88
+        CASE 2: NumpadId = 89
+        CASE 3: NumpadId = 90
+        CASE 4: NumpadId = 84
+        CASE 5: NumpadId = 85
+        CASE 6: NumpadId = 86
+        CASE 7: NumpadId = 80
+        CASE 8: NumpadId = 81
+        CASE 9: NumpadId = 82
+        CASE 10: NumpadId = 91
+        CASE 11: NumpadId = 92
+        CASE 12: NumpadId = 87
+        CASE 13: NumpadId = 83
+        CASE 14: NumpadId = 64
+        CASE 15: NumpadId = 363
+        CASE 16: NumpadId = 361
+    END SELECT
+END FUNCTION
+
+' The numpad key (b) a plain key's code could have come from: its digit with Num Lock on, or Home, the arrows... with it off (0: none)
+FUNCTION NumpadOf (k&)
+    SELECT CASE k&
+        CASE 49 TO 57: NumpadOf = k& - 48
+        CASE 48: NumpadOf = 10
+        CASE 46: NumpadOf = 11
+        CASE 43: NumpadOf = 12
+        CASE 45: NumpadOf = 13
+        CASE 42: NumpadOf = 14
+        CASE 47: NumpadOf = 15
+        CASE 13: NumpadOf = 16
+        CASE 20224: NumpadOf = 1 ' (End)
+        CASE 20480: NumpadOf = 2 ' (Down)
+        CASE 20736: NumpadOf = 3 ' (PgDn)
+        CASE 19200: NumpadOf = 4 ' (Left)
+        CASE 19456: NumpadOf = 5 ' (the middle: no key of its own)
+        CASE 19712: NumpadOf = 6 ' (Right)
+        CASE 18176: NumpadOf = 7 ' (Home)
+        CASE 18432: NumpadOf = 8 ' (Up)
+        CASE 18688: NumpadOf = 9 ' (PgUp)
+        CASE 20992: NumpadOf = 10 ' (Ins)
+        CASE 21248: NumpadOf = 11 ' (Del)
+    END SELECT
+END FUNCTION
+
+' Key k& - did the numpad send it? (its key held now, or pressed a moment ago: a quick tap)
+FUNCTION NumpadSent (k&)
+    DIM b, t#
+    b = NumpadOf(k&): IF b = 0 THEN EXIT FUNCTION
+    NumpadDev ' (pressed since this frame's look)
+    t# = TIMER(.001)
+    IF npHeld(b) OR NumpadHeld(b) OR (t# - npT#(b) < .25 AND t# >= npT#(b)) THEN NumpadSent = b
+END FUNCTION
+
+' --keylog: key k& taken (b: as numpad key b), and the view after it
+SUB KeyLog (k&, b)
+    DIM ff
+    ff = FREEFILE
+    OPEN argKeyLog$ FOR APPEND AS #ff
+    PRINT #ff, "key"; k&; "numpad"; b; "yaw"; camYaw; "pitch"; camPitch; "flat"; camOrtho; "dist"; camDist
+    CLOSE #ff
+END SUB
+
+' Numpad key b (as NumpadHeld) done
+SUB NumpadKey (b)
+    SELECT CASE b
+        CASE 1: ViewAngle 30, 24: Msg "View: as it opens (numpad 1)"
+        CASE 2: ViewAngle 0, 89: Msg "View: from above (numpad 2)"
+        CASE 3: ViewAngle 0, -89: Msg "View: from under (numpad 3)"
+        CASE 4: ViewAngle -90, 0: Msg "View: from the left (numpad 4)"
+        CASE 5: camOrtho = NOT camOrtho: viewDirty = -1: Msg IIFS$(camOrtho, "View: FLAT - no perspective (numpad 5 again: perspective)", "View: perspective (numpad 5)")
+        CASE 6: ViewAngle 90, 0: Msg "View: from the right (numpad 6)"
+        CASE 7: ViewAngle -45, 35: Msg "View: from above, left (numpad 7)"
+        CASE 8: ViewAngle 0, 24: Msg "View: the front, from a little above (numpad 8)"
+        CASE 9: ViewAngle 45, 35: Msg "View: from above, right (numpad 9)"
+        CASE 10: ViewFrame 0: Msg "View: the whole model (numpad 0)"
+        CASE 11: ViewHome: Msg "View: back as it was at the start (numpad .)"
+        CASE 12: camDist = Clamp(camDist / 1.25, .03, 60): viewDirty = -1
+        CASE 13: camDist = Clamp(camDist * 1.25, .03, 60): viewDirty = -1
+        CASE 14: camYaw = camYaw - 15: viewDirty = -1
+        CASE 15: camYaw = camYaw + 15: viewDirty = -1
+        CASE 16: ViewFrame SelCount > 0: Msg IIFS$(SelCount > 0, "View: the selection (numpad Enter)", "View: the whole model (numpad Enter: the selection, when there is one)")
+    END SELECT
+END SUB
+
 ' ---------------------------------------------------------------- each frame
 
 SUB UiFrame
-    DIM k&, lx, ly, inView, t AS LONG, p, f, k, x, y, w, h, s, oldHover
+    DIM k&, lx, ly, inView, t AS LONG, p, f, k, x, y, w, h, s, oldHover, onRef
     IF _EXIT THEN
         IF mdlDirty AND quitAsk = 0 THEN quitAsk = 1: Msg "Not saved: close again to leave anyway (Ctrl+S saves)" ELSE quitWant = -1
     END IF
     ' The keys, in the order they came: Ctrl, Shift and Alt followed through the
     ' same queue (they come as keys too), so a quick Ctrl+S is still Ctrl+S
+    NumpadPoll
     DO
         k& = _KEYHIT: IF k& = 0 THEN EXIT DO
         SELECT CASE k&
@@ -268,14 +465,33 @@ SUB UiFrame
             CASE -100307, -100308: qAlt = 0
             CASE IS > 0
                 kCtrl = qCtrl: kShift = qShift: kAlt = qAlt
-                UiKey k&
+                IF k& >= 100000 THEN ' (Num Lock, Caps Lock...: nothing to do)
+                ELSE
+                    f = NumpadSent(k&) ' (the numpad's: a view key - unless typing, painting, a list or HELP is up: then the key it is)
+                    IF f > 0 AND typeField = 0 AND pntOn = 0 AND openOn = 0 AND helpOn = 0 AND askOn = 0 AND txOn = 0 AND kCtrl = 0 AND kAlt = 0 THEN
+                        NumpadKey f: npT#(f) = -1
+                    ELSE
+                        UiKey k&: f = 0
+                    END IF
+                    IF LEN(argKeyLog$) THEN KeyLog k&, f
+                END IF
         END SELECT
     LOOP
     kShift = _KEYDOWN(100304) OR _KEYDOWN(100303) ' (the mouse goes by what's held now)
     kCtrl = _KEYDOWN(100306) OR _KEYDOWN(100305)
     kAlt = _KEYDOWN(100308) OR _KEYDOWN(100307)
     IF NOT kCtrl THEN qCtrl = 0
+    IF pntOn THEN PntFrame: EXIT SUB ' (painting: the window's the painter's)
+    IF askOn THEN AskFrame: EXIT SUB
     IF openOn THEN OpenFrame: EXIT SUB
+    IF LEN(mdlPress$) THEN ' (a MODELS tile pressed: let go on it opens it, dragged into the view puts it in)
+        IF mB1 AND InRect(mX, mY, vX0, vY0, vW, vH) THEN
+            MdlPlaceStart mdlPress$: mdlPress$ = ""
+        ELSEIF NOT mB1 THEN
+            IF BinItemAt(mX, mY) = mdlPressI AND binTab = 2 THEN MdlBinOpen mdlPress$
+            mdlPress$ = ""
+        END IF
+    END IF
     IF helpOn THEN HelpFrame: EXIT SUB
     DropFrame
     PicWatchFrame
@@ -283,14 +499,17 @@ SUB UiFrame
 
     lx = mX - vX0: ly = mY - vY0
     inView = InRect(mX, mY, vX0, vY0, vW, vH)
+    onRef = 0: IF inView THEN onRef = RefAt(mX, mY) ' (REF's controls, in the view's top right)
     GzUpdate
 
     ' The camera: right drag turns round, middle (or Shift + right) drag pans, the wheel zooms
-    IF mP2 AND inView THEN
+    IF mP2 AND onRef THEN RefRight onRef
+    IF mP3 AND onRef THEN RefMiddle onRef
+    IF mP2 AND inView AND onRef = 0 THEN
         IF kShift THEN panOn = -1 ELSE orbitOn = -1
         lmX = mX: lmY = mY
     END IF
-    IF mP3 AND inView THEN panOn = -1: lmX = mX: lmY = mY
+    IF mP3 AND inView AND onRef = 0 THEN panOn = -1: lmX = mX: lmY = mY
     IF mP3 AND NOT inView THEN ' (a middle click on a field: back to its usual value)
         f = FieldAt(mX, mY)
         IF f > 0 AND NOT FieldWords(f) THEN FieldReset f
@@ -328,6 +547,12 @@ SUB UiFrame
         f = FieldAt(mX, mY)
         IF BvSlideAt(mX, mY) > 0 THEN
             BvWheel -SGN(mWheel) ' (bevelling: a slider)
+        ELSEIF onRef = 2 THEN
+            RefOpSet refOp(refSel) - 5 * SGN(mWheel) ' (REF's slider)
+        ELSEIF inView AND refTr THEN
+            RefWheel -SGN(mWheel) ' (TR: the reference sized, up: bigger)
+        ELSEIF inView AND txOn AND TxListAt(mX, mY) <> 0 THEN
+            TxWheel -SGN(mWheel) ' (the font list)
         ELSEIF inView AND PvWheelOn THEN
             PvWheel SGN(mWheel) ' (moving the picture: the wheel sizes it, up: bigger)
         ELSEIF f > 0 AND f <> F_COL AND NOT FieldWords(f) THEN
@@ -367,6 +592,12 @@ SUB UiFrame
                 TopBtn k, x, y, w, h
                 IF InRect(mX, mY, x, y, w, h) THEN TopAction k
             NEXT
+            FOR k = 11 TO 15 ' (the snap - and the grid's finest lines)
+                PanelBtn k, x, y, w, h
+                IF InRect(mX, mY, x, y, w, h) THEN SnapSet SnapOf(k - 11)
+            NEXT
+            PanelBtn 16, x, y, w, h
+            IF InRect(mX, mY, x, y, w, h) THEN GuidesToggle
             topSlide = SliderAt(mX, mY)
         ELSEIF mX < BIN_W THEN
             BinClick
@@ -374,6 +605,16 @@ SUB UiFrame
             ListClick
         ELSEIF mX >= scrW - PANEL_W THEN
             PanelClick
+        ELSEIF onRef THEN
+            RefClick onRef
+        ELSEIF inView AND kCtrl AND kAlt AND gzOk THEN
+            PivPick lx, ly
+        ELSEIF inView AND refTr THEN
+            RefPress lx, ly
+        ELSEIF inView AND penOn THEN
+            PenPress lx, ly
+        ELSEIF inView AND txOn THEN
+            TxPress lx, ly
         ELSEIF inView AND LEN(pmRef$) > 0 THEN
             PicPutAt lx, ly, pmRef$, kShift: pmDrag = 0
         ELSEIF inView AND GzPress THEN
@@ -390,13 +631,14 @@ SUB UiFrame
                     IF kShift THEN
                         pSel(p) = NOT pSel(p)
                     ELSEIF pSel(p) = 0 THEN
-                        SelNone: pSel(p) = -1
+                        SelNone: pSel(p) = -1: samFirst = p
                     END IF
                     IF NOT kAlt THEN GroupSelect p ' (a group: all of it - Alt: just this one)
                     IF pSel(p) THEN dragArm = -1: dragPX = mX: dragPY = mY: DragGrab t, lx, ly, p
                     listFollow = -1
                 ELSE
                     IF NOT kShift THEN SelNone
+                    selRect = -1: selRX0 = lx: selRY0 = ly ' (a drag from here: a box round parts picks them)
                 END IF
                 ovDirty = -1
             END IF
@@ -408,6 +650,9 @@ SUB UiFrame
         IF ABS(mX - dragPX) + ABS(mY - dragPY) > 3 THEN DragStart
     END IF
     IF dragOn THEN DragUpdate lx, ly
+    IF penOn THEN PenFrame lx, ly
+    IF txOn THEN TxFrame lx, ly
+    IF refSlide OR refDrag THEN RefFrame lx, ly
     IF edArm AND mB1 AND edDrag = 0 THEN
         IF ABS(mX - dragPX) + ABS(mY - dragPY) > 3 THEN EdDragStart
     END IF
@@ -422,13 +667,15 @@ SUB UiFrame
         IF dragOn THEN dragOn = 0: Msg "Moved"
         IF edDrag THEN Msg "Moved (Ctrl+Z: back)"
         IF edRect THEN EdRectEnd lx, ly
+        IF selRect THEN SelRectEnd lx, ly
         dragArm = 0: edArm = 0: edDrag = 0
         IF placeDrag AND inView AND placeKind THEN PlaceDrop
         placeDrag = 0
+        IF pmDrag AND LEN(pmRef$) > 0 AND onRef > 0 THEN RefSet refSel, PicPath$(pmRef$): pmRef$ = "" ' (dragged onto REF: the reference)
         IF pmDrag AND LEN(pmRef$) > 0 AND inView THEN PicPutAt lx, ly, pmRef$, kShift: pmRef$ = "" ' (dragged from the bin: put on, and let go)
         pmDrag = 0
     END IF
-    IF NOT mB1 THEN dragArm = 0: dragOn = 0: edArm = 0: edDrag = 0: edRect = 0: gzAxis = 0: dragAxis = 0: pvArm = 0: pvDrag = 0
+    IF NOT mB1 THEN dragArm = 0: dragOn = 0: edArm = 0: edDrag = 0: edRect = 0: selRect = 0: gzAxis = 0: dragAxis = 0: pvArm = 0: pvDrag = 0
 
     ' The ghost follows the pointer
     IF placeKind THEN
@@ -469,7 +716,13 @@ END FUNCTION
 
 SUB UiKey (k&)
     DIM p, st, ax, i
+    IF pntOn THEN PntKey k&: EXIT SUB
     IF typeField THEN TypeKey k&: EXIT SUB
+    IF askOn THEN
+        IF k& = 27 THEN AskAnswer 3
+        IF k& = 13 THEN AskAnswer 1
+        EXIT SUB
+    END IF
     IF openOn THEN
         IF k& = 27 THEN openOn = 0
         EXIT SUB
@@ -482,6 +735,15 @@ SUB UiKey (k&)
             CASE 49 TO 57: IF k& - 48 <= hpN THEN helpPage = k& - 48
         END SELECT
         EXIT SUB
+    END IF
+    IF refTr THEN
+        IF RefKey(k&) THEN EXIT SUB
+    END IF
+    IF penOn THEN
+        IF PenKey(k&) THEN EXIT SUB
+    END IF
+    IF txOn THEN
+        IF TxKey(k&) THEN EXIT SUB
     END IF
     IF binMenu AND k& = 27 THEN binMenu = 0: EXIT SUB
     IF LEN(pmRef$) > 0 AND k& = 27 THEN pmRef$ = "": Msg "": EXIT SUB
@@ -502,6 +764,8 @@ SUB UiKey (k&)
             TopAction 1
         ELSEIF CtrlIs(k&, "e") THEN
             ExportAll
+        ELSEIF CtrlIs(k&, "p") THEN
+            IF bvOn = 0 THEN PntFromPointer
         ELSEIF CtrlIs(k&, "d") THEN
             SelDuplicate
         ELSEIF CtrlIs(k&, "a") THEN
@@ -514,12 +778,22 @@ SUB UiKey (k&)
             UiScaleStep 1
         ELSEIF k& = 45 OR k& = 95 THEN ' (Ctrl + -: smaller)
             UiScaleStep -1
+        ELSEIF CtrlIs(k&, "h") THEN
+            GuidesToggle
+        ELSEIF CtrlIs(k&, "c") OR CtrlIs(k&, "x") THEN ' (by what you're on: E's faces - the picture on one; else the parts)
+            IF edPart THEN
+                IF CtrlIs(k&, "c") THEN FaceLookCopy
+            ELSE
+                SelCopy: IF CtrlIs(k&, "x") AND SelCount > 0 THEN SelDelete
+            END IF
+        ELSEIF CtrlIs(k&, "v") THEN
+            IF edPart THEN FaceLookPaste kShift ELSE SelPaste
         ELSEIF CtrlIs(k&, "q") THEN
             IF mdlDirty AND quitAsk = 0 THEN quitAsk = 1: Msg "Not saved: Ctrl+Q again to leave anyway" ELSE quitWant = -1
         END IF
         EXIT SUB
     END IF
-    st = snapStep: IF st <= 0 THEN st = 1 / 64
+    st = GridStep#
     SELECT CASE k&
         CASE 27
             IF placeKind THEN
@@ -543,7 +817,10 @@ SUB UiKey (k&)
         CASE 103, 71: GroupToggle ' (G)
         CASE 107, 75: KeepToggle ' (K)
         CASE 97, 65: HoleApply ' (A)
+        CASE 112, 80: PenToggle ' (P: the pen)
+        CASE 120, 88: TxToggle ' (X: text)
         CASE 117, 85: UseUnlink ' (U)
+        CASE 109, 77: SelMerge ' (M: the selected parts made one)
         CASE 116, 84: TidyToggle ' (T)
         CASE 18176: ViewHome ' (Home)
         CASE 9 ' (Tab: the next part)
@@ -566,14 +843,14 @@ SUB UiKey (k&)
                     IF ABS(cFX) >= ABS(cFZ) THEN ax = 1 * SGN(cFX) ELSE ax = 3 * SGN(cFZ)
                     IF k& = 20480 THEN ax = -ax
                 END IF
-                IF ABS(ax) = 1 THEN SelMove st * SGN(ax), 0, 0 ELSE SelMove 0, 0, st * SGN(ax)
+                IF ABS(ax) = 1 THEN SelMove st * SGN(ax), 0, 0: SelSnapAxis 1 ELSE SelMove 0, 0, st * SGN(ax): SelSnapAxis 3
             END IF
-        CASE 18688: SelMove 0, st, 0 ' (PgUp)
-        CASE 20736: SelMove 0, -st, 0 ' (PgDn)
+        CASE 18688: SelMove 0, st, 0: SelSnapAxis 2 ' (PgUp)
+        CASE 20736: SelMove 0, -st, 0: SelSnapAxis 2 ' (PgDn)
         CASE 114: SelTurn 15 ' (R)
         CASE 82: SelTurn -15 ' (Shift+R)
-        CASE 61, 43: SelGrow 1.1 ' (=, +)
-        CASE 45, 95: SelGrow 1 / 1.1 ' (-)
+        CASE 61, 43: SelSizeBy 1 ' (=, +)
+        CASE 45, 95: SelSizeBy -1 ' (-)
     END SELECT
 END SUB
 
@@ -598,7 +875,7 @@ SUB HoleToggle
     Msg IIFS$(mk, "A hole: it cuts every solid part made before it (C: solid again)", "Solid again")
 END SUB
 
-' WIRE (W): every part's edges drawn over its faces, in its colour
+' WIRE (W): every part's edges drawn over its faces, each pixel the opposite of the one under it
 SUB WireToggle
     wireOn = NOT wireOn: viewDirty = -1
     CfgSet "wire_on", IIFS$(wireOn, "1", "0")
@@ -654,6 +931,12 @@ SUB SelTurnBy (ax, d)
         IF n = 0 THEN EXIT SUB
         cx# = cx# / n: cy# = cy# / n: cz# = cz# / n
     END IF
+    SelTurnAbout ax, d, cx#, cy#, cz#
+END SUB
+
+' The selected parts turned d degrees round axis ax (0 X, 1 Y, 2 Z) through (cx#, cy#, cz#)
+SUB SelTurnAbout (ax, d, cx#, cy#, cz#)
+    DIM i, a(8), b(8), m(8), x#, y#, z#, ex, ey, ez
     SELECT CASE ax
         CASE 0: RotMat d, 0, 0, a()
         CASE 1: RotMat 0, d, 0, a()
@@ -682,20 +965,6 @@ FUNCTION AngleNorm (a)
     DO WHILE b <= -180: b = b + 360: LOOP
     AngleNorm = b
 END FUNCTION
-
-SUB SelGrow (k)
-    DIM i
-    IF TplOn THEN
-        i = P_TPL: pSX(i) = PosSize(pSX(i) * k): pSY(i) = PosSize(pSY(i) * k): pSZ(i) = PosSize(pSZ(i) * k)
-        GhostRemake: EXIT SUB
-    END IF
-    IF SelCount = 0 THEN EXIT SUB
-    UndoPush
-    FOR i = 1 TO pN
-        IF pSel(i) THEN pSX(i) = PosSize(pSX(i) * k): pSY(i) = PosSize(pSY(i) * k): pSZ(i) = PosSize(pSZ(i) * k)
-    NEXT
-    ModelChanged
-END SUB
 
 ' ---------------------------------------------------------------- the bars' and panel's buttons
 
@@ -747,34 +1016,41 @@ SUB GridToggle
 END SUB
 
 SUB PanelClick
-    DIM k, x, y, w, h, i, p, c AS _UNSIGNED LONG
+    DIM k, x, y, w, h, i, p, c AS _UNSIGNED LONG, b#
     IF edPart THEN EdPanelClick: EXIT SUB
+    IF TfClick THEN EXIT SUB
     IF SelCount > 0 THEN IF AlClick(604) THEN EXIT SUB
     IF SelCount > 0 THEN IF ShClick(684) THEN EXIT SUB
-    FOR k = 1 TO 29
+    IF SelCount > 0 THEN IF SmClick(790) THEN EXIT SUB
+    FOR k = 1 TO 37
         PanelBtn k, x, y, w, h
         IF w > 0 AND InRect(mX, mY, x, y, w, h) AND PanelBtnOn(k) THEN
             SELECT CASE k
+                CASE 31 TO 37
+                    IF SelFirst THEN UndoPush
+                    IF typeField = F_SEG THEN typeField = 0
+                    FieldApply F_SEG, LTRIM$(STR$(dieN(k - 30)))
+                    Msg "A die of " + LTRIM$(STR$(dieN(k - 30))) + " faces"
                 CASE 28: TidyToggle
                 CASE 29: TidyExportToggle
                 CASE 23: HoleToggle
                 CASE 24: EdToggle
-                CASE 25: IF SelHasHole THEN HoleApply ELSE UseUnlink
+                CASE 25: IF SelHasHole THEN HoleApply ELSE IF SelHasUse THEN UseUnlink ELSE SelMerge
                 CASE 26: GroupToggle
                 CASE 27: KeepToggle
                 CASE 1: SelDuplicate
                 CASE 2: SelDelete
                 CASE 3: ViewFrameAll
                 CASE 4: ViewHome
-                CASE 11 TO 15: snapStep = SnapOf(k - 11): Msg "Snap: " + SnapName$(k - 11) + IIFS$(snapStep > 0, " of a cell", "")
                 CASE 21, 22
                     IF TplOn THEN
                         i = P_TPL
                         IF pKind(i) <> K_USE AND pKind(i) <> K_MESH THEN
-                            pKind(i) = pKind(i) + IIF(k = 22, 1, -1)
+                            b# = FitBase#(i, kindB(pKind(i))): pKind(i) = pKind(i) + IIF(k = 22, 1, -1)
                             IF pKind(i) > NUM_KINDS THEN pKind(i) = 1
                             IF pKind(i) < 1 THEN pKind(i) = NUM_KINDS
                             IF pAmt(i) = 0 THEN pAmt(i) = kindAmt(pKind(i))
+                            ShapeFit i, snapStep, b#
                             placeKind = pKind(i): GhostRemake
                         END IF
                         EXIT SUB
@@ -785,10 +1061,11 @@ SUB PanelClick
                         UndoPush
                         FOR i = 1 TO pN
                             IF pSel(i) AND pKind(i) <> K_USE AND pKind(i) <> K_MESH THEN
-                                pKind(i) = pKind(i) + IIF(k = 22, 1, -1)
+                                b# = FitBase#(i, kindB(pKind(i))): pKind(i) = pKind(i) + IIF(k = 22, 1, -1)
                                 IF pKind(i) > NUM_KINDS THEN pKind(i) = 1
                                 IF pKind(i) < 1 THEN pKind(i) = NUM_KINDS
                                 IF pAmt(i) = 0 THEN pAmt(i) = kindAmt(pKind(i))
+                                ShapeFit i, snapStep, b#
                             END IF
                         NEXT
                         ModelChanged
@@ -863,7 +1140,7 @@ END FUNCTION
 ' A field's new value put on every selected part: a place moves them all
 ' by the same (the first selected lands on it), the rest are set outright
 SUB FieldApply (f, v$)
-    DIM p, i, v, d, ok, c AS _UNSIGNED LONG
+    DIM p, i, v, d, ok, c AS _UNSIGNED LONG, b#
     IF f = F_NAME THEN mdlName$ = SafeName$(v$): mdlDirty = -1: EXIT SUB
     IF f = F_PNAME THEN
         IF listEdit >= 1 AND listEdit <= pN THEN pName$(listEdit) = PartNameSafe$(v$): ModelChanged
@@ -928,12 +1205,12 @@ SUB FieldApply (f, v$)
                 CASE F_SX: pSX(i) = PosSize(v)
                 CASE F_SY: pSY(i) = PosSize(v)
                 CASE F_SZ: pSZ(i) = PosSize(v)
-                CASE F_SEG: pSeg(i) = INT(Clamp(v, 3, 64))
+                CASE F_SEG: b# = ShapeBase#(i): pSeg(i) = INT(Clamp(v, 3, 64)): ShapeFit i, snapStep, b# ' (a die of other faces: its own proportions)
                 CASE F_AMT
                     IF pKind(i) = K_USE THEN
                         pTint(i) = _RGBA32(_RED32(pTint(i)), _GREEN32(pTint(i)), _BLUE32(pTint(i)), Clamp(v, 0, 1) * 255)
                     ELSE
-                        pAmt(i) = Clamp(v, 0, 1)
+                        b# = ShapeBase#(i): pAmt(i) = Clamp(v, 0, 1): ShapeFit i, snapStep, b#
                     END IF
                 CASE F_COL: PartColour i, c
             END SELECT
@@ -1099,9 +1376,46 @@ SUB TypePaste
     TypeIns t$
 END SUB
 
-' The wheel over a field: 1 up or down (Shift: 10, Alt: 0.1)
+' A step for the keys, the wheel, GROW / SHRINK: the grid's (Shift 10 of them, Alt a tenth)
+FUNCTION GridStep#
+    DIM g#
+    g# = snapStep: IF g# <= 0 THEN g# = 1 / 64
+    IF kShift THEN g# = g# * 10 ELSE IF kAlt THEN g# = g# / 10
+    GridStep# = g#
+END FUNCTION
+
+' v put on the grid, q apart - not with Alt (a fine step) or the snap OFF;
+' a size at least a step (and never 0)
+FUNCTION GridSnap# (v#, q#, isSize)
+    DIM r#
+    r# = v#
+    IF q# > 0 AND snapStep > 0 AND kAlt = 0 THEN
+        r# = INT(r# / q# + .5) * q#
+        IF isSize AND r# < q# THEN r# = q#
+    END IF
+    IF isSize AND r# < .001 THEN r# = .001
+    GridSnap# = r#
+END FUNCTION
+
+' The selected parts' places on axis ax (1 x, 2 y, 3 z) put on the grid
+SUB SelSnapAxis (ax)
+    DIM i
+    IF snapStep <= 0 OR kAlt THEN EXIT SUB
+    FOR i = 1 TO pN
+        IF pSel(i) THEN
+            SELECT CASE ax
+                CASE 1: pX(i) = GridSnap#(pX(i), snapStep, 0)
+                CASE 2: pY(i) = GridSnap#(pY(i), snapStep, 0)
+                CASE ELSE: pZ(i) = GridSnap#(pZ(i), snapStep, 0)
+            END SELECT
+        END IF
+    NEXT
+    ModelChanged
+END SUB
+
+' The wheel over a field: 1 up or down (Shift: 10, Alt: 0.1); a place or size a grid step
 SUB FieldWheel (f, dir)
-    DIM st, v, p
+    DIM st, v, p, k, q
     IF edPart THEN EdFieldWheel f, dir: EXIT SUB
     IF f = F_BUDGET THEN ' (10 a turn, Shift 100: one undo step a run of turns)
         IF typeField = f THEN typeField = 0
@@ -1118,6 +1432,21 @@ SUB FieldWheel (f, dir)
     IF f = F_SEG AND st < 1 THEN st = 1 ' (slices are whole)
     IF f = F_AMT THEN st = st / 20 ' (an amount is 0 to 1: a twentieth a turn)
     v = VAL(FieldValue$(f)) + st * dir
+    ' (places and sizes: grid steps, landing on the grid - a size across x or z
+    ' a step each side, as it stands in the middle; a prefab's or mesh's scale: steps)
+    k = pKind(IIF(p > 0, p, P_TPL))
+    IF f >= F_PX AND f <= F_PZ THEN v = GridSnap#(VAL(FieldValue$(f)) + GridStep# * dir, snapStep, 0)
+    IF f >= F_SX AND f <= F_SZ THEN
+        IF k = K_USE OR k = K_MESH THEN
+            v = PosSize(VAL(FieldValue$(f)) + GridStep# * dir)
+        ELSE
+            q = 1: IF f <> F_SY THEN q = 2
+            v = GridSnap#(VAL(FieldValue$(f)) + q * GridStep# * dir, q * snapStep, -1)
+        END IF
+    END IF
+    IF f = F_SEG THEN ' (a die's faces: the next die there is)
+        IF DieLike(pKind(IIF(p > 0, p, P_TPL))) THEN v = DieStep(VAL(FieldValue$(f)), dir * IIF(kShift, 3, 1))
+    END IF
     FieldApply f, Fmt$(v)
 END SUB
 
@@ -1176,7 +1505,7 @@ END SUB
 
 ' A field's new value put on the shape being put down (no undo: it isn't in the model yet)
 SUB TplApply (f, v$, c AS _UNSIGNED LONG)
-    DIM i, v
+    DIM i, v, b#
     i = P_TPL: v = VAL(v$)
     SELECT CASE f
         CASE F_RX: pRX(i) = AngleNorm(v)
@@ -1185,8 +1514,8 @@ SUB TplApply (f, v$, c AS _UNSIGNED LONG)
         CASE F_SX: pSX(i) = PosSize(v)
         CASE F_SY: pSY(i) = PosSize(v)
         CASE F_SZ: pSZ(i) = PosSize(v)
-        CASE F_SEG: pSeg(i) = INT(Clamp(v, 3, 64))
-        CASE F_AMT: pAmt(i) = Clamp(v, 0, 1)
+        CASE F_SEG: b# = FitBase#(i, kindB(pKind(i))): pSeg(i) = INT(Clamp(v, 3, 64)): ShapeFit i, snapStep, b#
+        CASE F_AMT: b# = FitBase#(i, kindB(pKind(i))): pAmt(i) = Clamp(v, 0, 1): ShapeFit i, snapStep, b#
         CASE F_COL: IF pKind(i) <> K_USE THEN pCol(i) = c
     END SELECT
     GhostRemake
@@ -1278,6 +1607,13 @@ SUB PlaceDrop
     UndoPush
     p = PartFromGhost: IF p = 0 THEN EXIT SUB
     SelNone: pSel(p) = -1
+    IF pKind(p) = K_USE AND LEFT$(pRef$(p), 1) = "*" THEN ' (a model from MODELS: its parts made this model's own)
+        UseUnlink: IF undoN > 0 THEN undoN = undoN - 1 ' (one undo step: the PlaceDrop's)
+        IF NOT kShift THEN PlaceStop ELSE ghostKey$ = ""
+        ModelChanged
+        Msg MID$(pRef$(P_SWAP), 2) + " put in: its parts are this model's now, one group (G: ungroup; Ctrl+Z: out again)"
+        EXIT SUB
+    END IF
     IF NOT kShift THEN PlaceStop ELSE ghostKey$ = ""
     ModelChanged
     IF pKind(p) = K_USE THEN
@@ -1302,7 +1638,13 @@ SUB DragStart
     DIM i, l
     UndoPush
     dragOn = -1: dragVert = kShift: dragLX0 = dragPX - vX0: dragLY0 = dragPY - vY0
-    FOR i = 1 TO pN: dragX0(i) = pX(i): dragY0(i) = pY(i): dragZ0(i) = pZ(i): NEXT
+    FOR i = 1 TO pN
+        dragX0(i) = pX(i): dragY0(i) = pY(i): dragZ0(i) = pZ(i)
+        dragSX0(i) = pSX(i): dragSY0(i) = pSY(i): dragSZ0(i) = pSZ(i): dragRX0(i) = pRX(i): dragRY0(i) = pRY(i): dragRZ0(i) = pRZ(i)
+    NEXT
+    IF tfMode = 1 THEN TfNatAll ' (SCALE: each scaled part's own size, so its size can land on the grid)
+    dragC = gzC: MeshBounds dragLo, dragHi, -1 ' (SCALE / TURN: round the widget's middle)
+    IF NOT gzOk THEN dragC.x = (dragLo.x + dragHi.x) / 2: dragC.y = (dragLo.y + dragHi.y) / 2: dragC.z = (dragLo.z + dragHi.z) / 2
     IF dragVert THEN ' (a wall facing you, through the grab: only its up and down is used)
         dragN.x = cFX: dragN.y = 0: dragN.z = cFZ
         l = SQR(dragN.x * dragN.x + dragN.z * dragN.z): IF l < 1E-6 THEN dragN.x = 0: dragN.z = 1: l = 1
@@ -1313,8 +1655,30 @@ SUB DragStart
 END SUB
 
 SUB DragUpdate (lx, ly)
-    DIM hit AS V3, ok, dx, dy, dz, i, tx, ty, tz, a, ax, ay, az, d#, t0
-    a = DragAxisNow: dragAxis = a
+    DIM hit AS V3, ok, dx, dy, dz, i, tx, ty, tz, a, ax, ay, az, d#, t0, offA
+    IF tfMode THEN TfPartsUpdate lx, ly: EXIT SUB ' (SCALE, TURN)
+    a = DragAxisNow
+    IF a = 0 AND TfCount = 1 THEN a = TfFirst ' (MOVE on one way only)
+    IF a = 0 AND TfCount = 2 THEN ' (two ways: on the plane they make)
+        offA = 1: IF tfAx(1) THEN offA = 2: IF tfAx(2) THEN offA = 3
+        AxisVec offA, dragN.x, dragN.y, dragN.z
+        RayPlane lx, ly, dragG, dragN, hit, ok
+        IF ok = 0 THEN EXIT SUB
+        tx = dragX0(dragFirst) + (hit.x - dragG.x): ty = dragY0(dragFirst) + (hit.y - dragG.y): tz = dragZ0(dragFirst) + (hit.z - dragG.z)
+        IF snapStep > 0 AND NOT kAlt THEN
+            tx = INT(tx / snapStep + .5) * snapStep: ty = INT(ty / snapStep + .5) * snapStep: tz = INT(tz / snapStep + .5) * snapStep
+        END IF
+        dx = tx - dragX0(dragFirst): dy = ty - dragY0(dragFirst): dz = tz - dragZ0(dragFirst)
+        IF offA = 1 THEN dx = 0
+        IF offA = 2 THEN dy = 0
+        IF offA = 3 THEN dz = 0
+        FOR i = 1 TO pN
+            IF pSel(i) THEN pX(i) = dragX0(i) + dx: pY(i) = dragY0(i) + dy: pZ(i) = dragZ0(i) + dz
+        NEXT
+        ModelChanged
+        EXIT SUB
+    END IF
+    dragAxis = a
     IF a THEN ' (along one axis: the grabbed part's place on it snaps)
         AxisVec a, ax, ay, az
         d# = AxisAt#(lx, ly, dragG, a) - AxisAt#(dragLX0, dragLY0, dragG, a)
@@ -1360,6 +1724,11 @@ SUB OpenList
         IF LCASE$(RIGHT$(f$, 4)) = ".bld" THEN openN = openN + 1: openName$(openN) = LEFT$(f$, LEN(f$) - 4)
         f$ = _FILES$
     LOOP
+    f$ = _FILES$(appDir$ + "models/*.svg") ' (SVGs: opened made thick)
+    DO WHILE LEN(f$) AND openN < 500
+        IF LCASE$(RIGHT$(f$, 4)) = ".svg" THEN openN = openN + 1: openName$(openN) = f$
+        f$ = _FILES$
+    LOOP
     d$ = NeonInDir$ ' (then NEON-CASTER's props: opened as mesh parts with their texture)
     IF LEN(d$) THEN
         f$ = _FILES$(d$ + "models/*.obj")
@@ -1385,7 +1754,7 @@ SUB OpenFrame
         FOR i = 1 TO 24
             ry = y + 36 + (i - 1) * 18
             IF openTop + i <= openN AND InRect(mX, mY, x + 8, ry, w - 16, 18) THEN
-                openOn = 0: ModelLoad openName$(openTop + i): EXIT SUB
+                openOn = 0: MdlBinOpen openName$(openTop + i): EXIT SUB
             END IF
         NEXT
     END IF
@@ -1395,18 +1764,26 @@ END SUB
 
 SUB UiDraw
     DIM x, y, w, h, k, i, p, t$, c AS _UNSIGNED LONG, n
+    IF pntOn THEN PntDraw: EXIT SUB
     CLS , cBg
     ' The view
     IF ovDirty THEN ViewOverlay
     _PUTIMAGE (vX0, vY0), viewImg&
-    _PUTIMAGE (vX0, vY0), ovImg&
-    GzDraw
-    IF edRect THEN LINE (vX0 + edRX0, vY0 + edRY0)-(mX, mY), cHi, B
+    IF guidesOn THEN ' (GUIDES / Ctrl+H off: just the model)
+        _PUTIMAGE (vX0, vY0), ovImg&
+        GzDraw
+        PivDraw
+        IF edRect THEN LINE (vX0 + edRX0, vY0 + edRY0)-(mX, mY), cHi, B
+    END IF
+    IF penOn THEN PenDraw
+    IF txOn THEN TxDraw
+    RefDraw
+    IF selRect AND (ABS(mX - vX0 - selRX0) > 2 OR ABS(mY - vY0 - selRY0) > 2) THEN LINE (vX0 + selRX0, vY0 + selRY0)-(mX, mY), cHi, B
     LINE (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1), cLine, B
     IF TidyOn THEN
         Txt vX0 + 8, vY0 + 6, "parts" + STR$(pN) + "   TIDIED: triangles" + STR$(tdOut) + " (from" + STR$(tdIn) + ", budget" + STR$(mdlBudget) + "," + STR$(tdMs) + " ms) - T: as built", IIFC~&(mdlBudget > 0 AND tdOut > mdlBudget, cWarn, cHi)
     ELSE
-        Txt vX0 + 8, vY0 + 6, "parts" + STR$(pN) + "   triangles" + STR$(sceneTN), cDim
+        Txt vX0 + 8, vY0 + 6, "parts" + STR$(pN) + "   triangles" + STR$(sceneTN) + IIFS$(camOrtho, "   FLAT (numpad 5)", ""), cDim
     END IF
     IF edPart THEN
         Txt vX0 + 8, vY0 + 24, "EDITING PART" + STR$(edPart) + "'S " + IIFS$(edMode = ED_POINTS, "POINTS (1)", IIFS$(edMode = ED_EDGES, "EDGES (3)", "FACES (2)")) + " - Esc: done", _RGB32(255, 190, 60)
@@ -1428,7 +1805,10 @@ SUB UiDraw
         TopBtn k, x, y, w, h: Btn x, y, w, h, TopBtnName$(k), (k = 5 AND helpOn) OR (k = 7 AND listOn) OR (k = 8 AND viewWire = 0) OR (k = 9 AND wireOn) OR (k = 10 AND gridWalls)
     NEXT
     FOR k = 1 TO 3: SliderDraw k: NEXT
-    SliderRect 3, x, w
+    FOR k = 11 TO 15
+        PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (snapStep = SnapOf(k - 11))
+    NEXT
+    PanelBtn 16, x, y, w, h: Btn x, y, w, h, PanelBtnName$(16), guidesOn
     t$ = APP_NAME$ + " " + APP_VERSION$
     IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
     IF mdlDirty THEN t$ = "* not saved   " + t$
@@ -1450,6 +1830,7 @@ SUB UiDraw
     IF binMenu THEN BinMenuDraw
     IF helpOn THEN HelpDraw
     IF openOn THEN OpenDraw
+    IF askOn THEN AskDraw
 END SUB
 
 SUB FieldDraw (f)
@@ -1537,9 +1918,14 @@ SUB PanelDraw
             Txt PX0, 132, IIFS$(n > 1, "TURN ALL AS ONE  X  Y  Z", "TURN        X  Y  Z"), cDim
         END IF
         Txt PX0, 178, IIFS$(pKind(p) = K_USE, "SCALE       X  Y  Z", "SIZE        X  Y  Z"), cDim
-        IF FieldShown(F_SEG) THEN Txt PX0, 228, "SLICES", cDim
+        IF FieldShown(F_SEG) THEN Txt PX0, 228, SegName$(pKind(p)), cDim
         IF FieldShown(F_AMT) THEN Txt PX0, 254, AmtName$(pKind(p)), cDim
         FOR k = F_PX TO F_AMT: FieldDraw k: NEXT
+        IF PanelDie THEN
+            FOR k = 31 TO 37
+                PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (dieN(k - 30) = dieN(DieIdx(SegsOf(PanelDie))))
+            NEXT
+        END IF
     END IF
     c = curCol: IF p THEN c = pCol(p)
     t$ = "COLOUR"
@@ -1554,10 +1940,7 @@ SUB PanelDraw
         LINE (x, y)-(x + w - 1, y + h - 1), palCol(k), BF
         LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(palCol(k) = c, cHi, cLine), B
     NEXT
-    Txt PX0, 432, "SNAP (OF A CELL)  Alt: none", cDim
-    FOR k = 11 TO 15
-        PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (snapStep = SnapOf(k - 11))
-    NEXT
+    TfDraw
     FOR k = 1 TO 4
         PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), 0
     NEXT
@@ -1568,6 +1951,7 @@ SUB PanelDraw
     IF SelCount > 0 AND edPart = 0 THEN
         AlDraw 604
         ShDraw 684
+        SmDraw 790
     ELSEIF y + 80 < scrH - BAR_H THEN
         Txt PX0, y, "1 = a NEON-CASTER cell", cDim
         Txt PX0, y + 16, "(the purple square)", cDim
@@ -1705,10 +2089,20 @@ SUB HelpSetup
     HelpAdd "F|frame what's selected (nothing selected: all of it)"
     HelpAdd "Home|the start view"
     HelpAdd "Arrows|turn round by steps (with nothing selected)"
+    HelpAdd "#THE NUMPAD"
+    HelpAdd "1  2  3|the start view, from above, from under"
+    HelpAdd "4  6|from the left, from the right"
+    HelpAdd "7  8  9|from above: the front-left corner, the front, the front-right corner"
+    HelpAdd "5|flat (no perspective) / perspective"
+    HelpAdd "0  .|frame it all; the start view again"
+    HelpAdd "+  -  *  /|nearer, further, turn right / left 15"
+    HelpAdd "Enter|frame what's selected"
+    HelpAdd "Num Lock|on or off: the same (the numpad's keys tell themselves apart from Home, the arrows...). Typing in a box: they type"
     HelpAdd "#SEEING IT"
     HelpAdd "TEX  Shift+W|the faces on / off - the slider beside it: how solid (less shows the grid and the edges behind)"
-    HelpAdd "W  or  WIRE|each part's edges drawn over it in its colour - the slider: how strong"
-    HelpAdd "GRID|the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines"
+    HelpAdd "W  or  WIRE|each part's edges drawn over it, each pixel the opposite of what's under it (so they show on white or dark) - the slider: how strong"
+    HelpAdd "GRID|the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines. The ground's grid never ends: it thins and fades out with distance"
+    HelpAdd "Ctrl+H  GUIDES|hide every guide (edges, points, picked colours, outlines, the widget) to see just the model; again: back"
     HelpAdd "The bin's edge|drag it: wider or narrower (no narrower than at first; remembered)"
     HelpAdd "The sliders|drag one, or the wheel over it. TEX, WIRE, GRID and their sliders are remembered"
     HelpAdd "L  or  PARTS|the parts list"
@@ -1725,29 +2119,42 @@ SUB HelpSetup
     HelpAdd "Shift+click|keep putting them down"
     HelpAdd "Esc|stop"
     HelpAdd "The panel|sets it up before the click: size, turn, colour..."
+    HelpAdd "#MORE SHAPES (the bin, after the first six)"
+    HelpAdd "DIE|4, 6, 8, 10, 12, 20 or 30 faces: the buttons under FACES (or the wheel on it). It sits on a face"
+    HelpAdd "SPIKE|a die with a point on every face: SPIKES, and LENGTH"
+    HelpAdd "STAR  GEAR|POINTS / TEETH, and INNER / DEPTH: how far in they go"
+    HelpAdd "DONUT|SLICES round, HOLE: how big its middle"
+    HelpAdd "DIAMOND|SIDES, TOP: how wide its flat top"
+    HelpAdd "PILL  ARROW|ROUND: how round its ends;  HEAD: how long the arrow's head (it points to the front)"
+    HelpAdd "Fitting the grid|every shape fills its box, and its sizes land on the snap (x and z two steps, y one), so its sides sit on grid lines"
     HelpAdd "#MOVING PARTS"
     HelpAdd "Click|select (Shift: add)"
+    HelpAdd "Drag a box|from empty space: every part whose middle is in it (Shift: added)"
     HelpAdd "Tab|the next part"
     HelpAdd "Drag|along the ground (Shift: up and down)"
     HelpAdd "Alt + drag|off the grid (no snap)"
-    HelpAdd "Arrows|nudge across;  PgUp / PgDn: up and down"
+    HelpAdd "Arrows|nudge across a grid step;  PgUp / PgDn: up and down (Shift: 10 steps, Alt: a tenth - the same for the wheel and GROW)"
     HelpAdd "R  Shift+R|turn 15 degrees"
     HelpAdd "FLIP X Y Z|(the panel) each part mirrored in its own axes, about its own middle - a shape that isn't the same mirrored becomes a mesh part"
-    HelpAdd "GROW  SHRINK|a quarter bigger / smaller, standing where it stands (several: as one piece)"
+    HelpAdd "GROW  SHRINK|a grid step bigger / smaller each way, standing where it stands (several: as one piece)"
     HelpAdd "TURN L  R|90 degrees round the up axis (Shift: 15)"
     HelpAdd "=  -|bigger, smaller"
     HelpAdd "Ctrl+D|copy"
+    HelpAdd "Ctrl+C  X  V|copy, cut, paste the selected parts (pasted two snap steps along, selected; in E: a face's picture)"
     HelpAdd "Delete|take away"
     HelpAdd "#THE PANEL"
     HelpAdd "Type|a number, then Enter"
     HelpAdd "Wheel|over a field: a step (a turn: 1, Shift 10, Alt 0.1)"
     HelpAdd "Middle click|a field back to usual"
-    HelpAdd "SNAP|what moves snap to: 1/8 to 1/64 of a cell, or OFF"
+    HelpAdd "1/8 .. 1/64  OFF|(the top bar, beside GRID) what moves and sizes snap to, in cells - and the ground's finest lines"
 
     HelpTopic "LINE UP"
     HelpAdd "#ALONG ONE AXIS"
     HelpAdd "The arrows|on what's selected: drag X (red), Y (green) or Z (blue) and it moves only that way"
     HelpAdd "Hold X, Y, Z|while dragging: kept to that axis. Its line is drawn, with a tick at each snap step"
+    HelpAdd "#TRANSFORM (the panel)"
+    HelpAdd "MOVE  SCALE  TURN|what dragging the widget does"
+    HelpAdd "X  Y  Z|which ways (any of them on): the widget shows only those. SCALE with only Y: taller; TURN: 15 at a time (Alt: 1)"
     HelpAdd "#ALIGN (the panel - as you see it)"
     HelpAdd "LEFT CENTRE RIGHT|across the screen"
     HelpAdd "TOP MIDDLE BOTTOM|up the screen"
@@ -1759,6 +2166,12 @@ SUB HelpSetup
     HelpAdd "Ctrl+A C X V|all, copy, cut, paste. Backspace / Delete (Ctrl: a word)"
     HelpAdd "#SEEING WHERE"
     HelpAdd "GRID|shadows of what's selected on the floor and walls"
+    HelpAdd "#WHERE IT GROWS AND TURNS FROM"
+    HelpAdd "Ctrl+Alt|shows the selection box's points: the middle, each side's middle, each corner"
+    HelpAdd "Ctrl+Alt+click|one of them (or a spot on the shape) - the widget sits there: SCALE grows from it (that side stays put), TURN goes round it. It follows a MOVE; the middle, or another selection: back to usual"
+    HelpAdd "#SAME (the panel: as the first picked)"
+    HelpAdd "PLACE SIZE TURN|each selected part given the first one's place / size / turn - on the X Y Z beside them"
+    HelpAdd "WIDTH HEIGHT DEPTH|(AS SEEN) each part's reach across / up / into the screen made the first one's"
     HelpAdd "#GROUPS"
     HelpAdd "G|group the selected parts (G on a group: ungroup)"
     HelpAdd "Click|picks the whole group (Alt+click: one part)"
@@ -1768,6 +2181,7 @@ SUB HelpSetup
     HelpAdd "E|edit the selected part (it becomes a mesh part)"
     HelpAdd "1  3  2|points, edges, faces (Tab: the next)"
     HelpAdd "Click|pick one (Shift adds) - an edge: click its line"
+    HelpAdd "Ctrl+click|an edge: its whole loop - on across four-sided corners till it comes round or stops (Shift+Ctrl: adds it)"
     HelpAdd "Drag a box|pick all in it;  Ctrl+A: all"
     HelpAdd "Drag a picked one|move it (Shift: up and down; X / Y / Z held: one axis). An edge moves its two points: the faces on it follow"
     HelpAdd "Arrows PgUp PgDn|nudge"
@@ -1810,16 +2224,85 @@ SUB HelpSetup
     HelpAdd "REPEAT|more or fewer times across"
     HelpAdd "Arrow buttons|slide it"
     HelpAdd "NO PICTURE|take it off (a colour from the palette does too)"
+    HelpAdd "Ctrl+C|copy the picture on the picked face (or the one pointed at) as it lies on it - how big, turned, where"
+    HelpAdd "Ctrl+V  Ctrl+Shift+V|put it on the picked faces (none picked: the one pointed at); on every face of the part"
+    HelpAdd "#PAINTING ONE HERE"
+    HelpAdd "Ctrl+P  PAINT IT|paint the picture of the face under the pointer (in E: of the picked faces) - no picture on it: a new one, its colour, put on first. The PAINT topic has the keys"
     HelpAdd "#PAINTING ONE IN DRAW"
     HelpAdd "EDIT IN DRAW|(E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first. Save it in DRAW (Ctrl+S) and it shows here straight away"
 
+    HelpTopic "PAINT"
+    HelpAdd "#THE PAINTER (Ctrl+P on a face)"
+    HelpAdd "Left / right button|paint in the first / second colour"
+    HelpAdd "Ctrl+click|pick up a colour (with any tool)"
+    HelpAdd "Wheel|zoom (at the pointer);  middle drag or Space + drag: move it;  0: fit;  - +: zoom"
+    HelpAdd "Ctrl+S|save: it shows on its faces.  Esc: back (asks first if not saved)"
+    HelpAdd "Ctrl+Z  Ctrl+Y|undo, redo"
+    HelpAdd "#TOOLS"
+    HelpAdd "P  B|pencil, brush ([ ]: its size)"
+    HelpAdd "L|line (Shift: straight or at 45)"
+    HelpAdd "R  Shift+R|box, filled box (Shift while dragging: square)"
+    HelpAdd "O  Shift+O|ellipse, filled ellipse"
+    HelpAdd "F|fill the colour where you click"
+    HelpAdd "G|gradient, first colour to second - V H D R M: down, across, slanted, round, from the middle. Click: the region FILL would take; Shift+click: the whole picture; right click: the other way"
+    HelpAdd "Gradient: drag|from where it starts to where it ends (any way). Then drag an end: stretch / turn it; the line: move it.  x - +: repeat it 1-16 times;  PAD REP BNC: past its ends the end colour, again, back and forth"
+    HelpAdd "I|pick a colour"
+    HelpAdd "X|swap the two colours.  The palette: left / right click.  TYPE: a hex colour"
+    HelpAdd "CLEAR  Del|the picture filled with the second colour (Shift: see-through)"
+    HelpAdd "#HOW IT PAINTS"
+    HelpAdd "M  Shift+M|mirror left-right / up-down"
+    HelpAdd "W|wrap round the edges (paint off one side, on at the other)"
+    HelpAdd "T|tiled: seen with its neighbours, as it repeats"
+    HelpAdd "Shift+G|the pixel grid"
+
+    HelpTopic "PAINT 2"
+    HelpAdd "#SELECT (S)"
+    HelpAdd "Drag|a box.  Drag inside it: move what's in it (Alt: a copy)"
+    HelpAdd "Ctrl+C X V  Ctrl+A|copy, cut, paste (at the pointer), all.  Del: empty it"
+    HelpAdd "FLIP L-R  U-D  TURN|the box's pixels mirrored, turned;  x2  1/2: bigger, smaller"
+    HelpAdd "Enter  Esc|let go (another tool does too)"
+    HelpAdd "#MAKE AND FILTERS (the right)"
+    HelpAdd "MAKE|a new picture from the two colours: NOISE GRID PLATES BUMPS WOOD CARPET BRICK SAND STONE TILES STRIPES CHECKER SCRATCH PATCHES - each repeats seamlessly, new each click. Shift: over what's there"
+    HelpAdd "CLEAN  RAND|MAKE with only the two colours and its shading; or with random tints (each brick a little different)"
+    HelpAdd "SIZE x|how big MAKE's parts come out (bricks, tiles, rings...);  STR: how strongly Shift+MAKE lays it over what's there"
+    HelpAdd "FILTERS|BLUR SHARPEN EMBOSS PIXELATE BRIGHTER DARKER CONTRAST POSTERIZE INVERT GREY"
+
+    HelpTopic "PEN, TEXT"
+    HelpAdd "#PEN: YOUR OWN FLAT SHAPE"
+    HelpAdd "P  or  the pen tile|(after the shapes) draw an outline on the ground, on the snap (Alt: a tenth of it)"
+    HelpAdd "Click|a corner;  click + drag: a curve (its handles mirrored; Ctrl: only the side you drag)"
+    HelpAdd "The first point|click it (or Enter) to close: a flat part a snap step thick, selected"
+    HelpAdd "Then|thicker: TRANSFORM SCALE with only Y on (or its Y size); E to extrude, bevel..."
+    HelpAdd "Backspace  Esc|back a point; let the outline go (Esc again or P: put the pen away)"
+    HelpAdd "#LETTERS IN A FONT"
+    HelpAdd "X  or  the Aa tile|(after the pen) then type"
+    HelpAdd "The font list|(in the view) click one, the wheel over it, or PgUp / PgDn - fonts from fonts/, DRAW's fonts, and the system's"
+    HelpAdd "Click|the ground: where it starts (it follows the pointer till then)"
+    HelpAdd "Up  Down|bigger, smaller (Shift: by more)"
+    HelpAdd "Left  Right|thinner, thicker"
+    HelpAdd "Tab|lying on the ground / standing up"
+    HelpAdd "Enter|made: each letter a flat mesh part, all one group, each named by its letter"
+    HelpAdd "Then|click: the word; Alt+click: one letter, to move, turn, colour... E: extrude, bevel it"
+    HelpAdd "Esc|stop"
+
+    HelpTopic "REFERENCE"
+    HelpAdd "#A PICTURE TO MODEL OVER (the view's top right)"
+    HelpAdd "B  L  R|which one the rest works on: the ground, the back wall (left as the view opens), the side wall (right). The walls are the far ones: they swap round as you turn"
+    HelpAdd "REF|a picture from disk for it (PNG, JPG, BMP...) - or drag a PICTURES tile onto REF, or drop a file on it"
+    HelpAdd "The slider|how solid it is (the wheel: 5 at a time; middle click: 50)"
+    HelpAdd "TR|move it: drag in the view (on its plane; on an arrow: only that way), the arrows a grid step at a time, the wheel or PgUp / PgDn sizes it. Esc / TR: done"
+    HelpAdd "Shift+click B L R|hide / show that one;  Shift+click REF: all of them"
+    HelpAdd "Right-click REF|take it away"
+    HelpAdd "Saved|with the model (its file stays where it is: the model keeps the path)"
+
     HelpTopic "HOLES"
     HelpAdd "#HOLES"
-    HelpAdd "C  or  HOLE|a hole: cut out of the solid parts before it in the list. Seen see-through grey (click to pick it)"
+    HelpAdd "C  or  HOLE|a hole: cut out of the solid parts before it in the list (so a part after it can sit in it). Seen see-through grey (click to pick it)"
     HelpAdd "Put down as one|it drills into the face it's put on"
     HelpAdd "K  or  KEEP|only where it overlaps the parts before it stays"
-    HelpAdd "A  or  APPLY|a hole or KEEP cut for good (mesh parts, editable)"
-    HelpAdd "In a group|a hole cuts only its own group"
+    HelpAdd "M  or  MERGE|(two or more solid parts selected) made one mesh part: their outsides kept, the insides where they overlap gone - a boolean add. Colours and pictures kept; Ctrl+Z: back"
+    HelpAdd "A  or  APPLY|a hole or KEEP cut for good (mesh parts, editable) - select solid parts with it and it cuts just those, wherever they're listed"
+    HelpAdd "In a group|a hole cuts every solid part of its group, wherever it's listed - and nothing else"
     HelpAdd "#THE PARTS LIST (L)"
     HelpAdd "The dot|show / hide"
     HelpAdd "The square|lines only"
@@ -1839,6 +2322,8 @@ SUB HelpSetup
     HelpAdd "#THE MODEL"
     HelpAdd "Ctrl+N  NEW|a new model"
     HelpAdd "Ctrl+O  OPEN|open one (models/, and NEON-CASTER's props)"
+    HelpAdd "MODELS tab|in the bin: every saved model, as a picture - click one to open it (not saved: asks first). Drag one into the view: its parts added to this model, one group"
+    HelpAdd "An SVG|OPEN one in models/, or drop one on the window: each filled shape made thick (a mesh part, all one group, 1 cell across, facing the front). Holes stay holes; shapes over others stand a step out. Then E: extrude, inset... and Ctrl+S saves it as a model"
     HelpAdd "Ctrl+S  SAVE|save (models/NAME.bld)"
     HelpAdd "Ctrl+Z  Ctrl+Y|undo, redo"
     HelpAdd "Ctrl+A|select all"
@@ -1854,5 +2339,5 @@ SUB HelpTopic (n$)
 END SUB
 
 SUB HelpAdd (t$)
-    IF helpN < 240 THEN helpN = helpN + 1: helpLine$(helpN) = t$: helpPg(helpN) = hpN
+    IF helpN < 320 THEN helpN = helpN + 1: helpLine$(helpN) = t$: helpPg(helpN) = hpN
 END SUB

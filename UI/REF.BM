@@ -1,0 +1,457 @@
+''
+' bu1ld0r - UI/REF.BM
+' =============================================================================
+' Reference pictures (see REF.BI)
+'
+
+FUNCTION RefName$ (k)
+    SELECT CASE k
+        CASE 0: RefName$ = "the ground (B)"
+        CASE 1: RefName$ = "the back wall (L)"
+        CASE ELSE: RefName$ = "the side wall (R)"
+    END SELECT
+END FUNCTION
+
+' Picture k from file f$ (any picture QB64 reads: PNG, JPG, BMP, GIF...): -1 if it loaded
+FUNCTION RefLoad (k, f$, fresh)
+    DIM img&, sm&, w, h, m AS _MEM, i AS LONG, n AS LONG, c AS _UNSIGNED LONG, s#
+    IF NOT _FILEEXISTS(f$) THEN Msg "No such picture: " + f$: EXIT FUNCTION
+    img& = _LOADIMAGE(f$, 32)
+    IF img& >= -1 THEN Msg "Can't read that picture: " + f$: EXIT FUNCTION
+    w = _WIDTH(img&): h = _HEIGHT(img&)
+    IF w > 1024 OR h > 1024 THEN ' (shrunk to fit its room)
+        s# = 1024 / w: IF 1024 / h < s# THEN s# = 1024 / h
+        w = INT(w * s#): h = INT(h * s#): IF w < 1 THEN w = 1
+        IF h < 1 THEN h = 1
+        sm& = _NEWIMAGE(w, h, 32)
+        _PUTIMAGE (0, 0)-(w - 1, h - 1), img&, sm&
+        _FREEIMAGE img&: img& = sm&
+    END IF
+    IF UBOUND(refPix) < 3 * REF_PX THEN REDIM refPix(3 * REF_PX) AS _UNSIGNED LONG
+    m = _MEMIMAGE(img&): n = w * h
+    FOR i = 0 TO n - 1
+        _MEMGET m, m.OFFSET + i * 4, c: refPix(k * REF_PX + i) = c
+    NEXT
+    _MEMFREE m: _FREEIMAGE img&
+    refPath$(k) = f$: refPW(k) = w: refPH(k) = h
+    IF fresh THEN ' (a new one: 2 cells across, in the middle, standing on the ground)
+        refW#(k) = 2: refA#(k) = 0: refB#(k) = 0: refOp(k) = 50: refShow(k) = -1
+        IF k > 0 THEN refB#(k) = refW#(k) * h / w / 2
+    END IF
+    refHideAll = 0: viewDirty = -1
+    RefLoad = -1
+END FUNCTION
+
+SUB RefSet (k, f$)
+    IF RefLoad(k, f$, -1) THEN
+        refSel = k: mdlDirty = -1
+        Msg "Reference on " + RefName$(k) + ": " + Tilde$(f$) + " - TR moves / sizes it (drag, arrows, wheel); the slider: how solid"
+    END IF
+END SUB
+
+SUB RefClear (k)
+    refPath$(k) = "": refPW(k) = 0: refPH(k) = 0: refTr = 0: viewDirty = -1
+END SUB
+
+SUB RefClearAll
+    DIM k
+    FOR k = 0 TO 2: RefClear k: NEXT
+    refSel = 0: refHideAll = 0
+END SUB
+
+' The model's ref lines, for its .bld
+SUB RefLines (fh)
+    DIM k
+    FOR k = 0 TO 2
+        IF LEN(refPath$(k)) THEN PRINT #fh, "ref" + STR$(k) + STR$(refOp(k)) + STR$(-(refShow(k) <> 0)) + " " + Fmt$(refA#(k)) + " " + Fmt$(refB#(k)) + " " + Fmt$(refW#(k)) + " " + refPath$(k)
+    NEXT
+END SUB
+
+' A .bld's ref lines read (the others left alone)
+SUB RefFromText (t$)
+    DIM p AS LONG, j AS LONG, l$, k, i, q, w$(7), f$
+    RefClearAll
+    p = 1
+    DO WHILE p <= LEN(t$)
+        j = INSTR(p, t$, CHR$(10)): IF j = 0 THEN j = LEN(t$) + 1
+        l$ = MID$(t$, p, j - p): p = j + 1
+        IF RIGHT$(l$, 1) = CHR$(13) THEN l$ = LEFT$(l$, LEN(l$) - 1)
+        IF LEFT$(l$, 4) = "ref " THEN
+            q = 1
+            FOR i = 1 TO 7 ' (seven words, then the path - spaces and all)
+                DO WHILE MID$(l$, q, 1) = " ": q = q + 1: LOOP
+                j = INSTR(q, l$, " "): IF j = 0 THEN j = LEN(l$) + 1
+                w$(i) = MID$(l$, q, j - q): q = j
+            NEXT
+            DO WHILE MID$(l$, q, 1) = " ": q = q + 1: LOOP
+            f$ = MID$(l$, q): k = VAL(w$(2))
+            IF k >= 0 AND k <= 2 AND LEN(f$) > 0 THEN
+                IF RefLoad(k, f$, 0) THEN
+                    refOp(k) = INT(Clamp(VAL(w$(3)), 0, 100)): refShow(k) = (VAL(w$(4)) <> 0)
+                    refA#(k) = VAL(w$(5)): refB#(k) = VAL(w$(6)): refW#(k) = VAL(w$(7)): IF refW#(k) <= 0 THEN refW#(k) = 2
+                ELSE
+                    refPath$(k) = f$ ' (missing: kept, so saving doesn't lose it)
+                    refOp(k) = INT(Clamp(VAL(w$(3)), 0, 100)): refShow(k) = (VAL(w$(4)) <> 0)
+                    refA#(k) = VAL(w$(5)): refB#(k) = VAL(w$(6)): refW#(k) = VAL(w$(7))
+                END IF
+            END IF
+        END IF
+    LOOP
+END SUB
+
+' ---------------------------------------------------------------- its plane
+
+' Point (s, t) of picture k (-.5..5 across, up) in the world
+SUB RefPt (k, s#, t#, p AS V3)
+    DIM h#, a#, b#
+    h# = refW#(k) * refPH(k) / refPW(k)
+    a# = refA#(k) - s# * refW#(k): b# = refB#(k) + t# * h#
+    SELECT CASE k
+        CASE 0: p.x = a#: p.y = 0: p.z = b#
+        CASE 1: p.x = a#: p.y = b#: p.z = gridWZ
+        CASE ELSE: p.x = gridWX: p.y = b#: p.z = a#
+    END SELECT
+END SUB
+
+' Where the pointer (lx, ly in the view) meets picture k's plane, as A, B (ok 0: it doesn't)
+SUB RefHit (k, lx, ly, a#, b#, ok)
+    DIM o AS V3, n AS V3, h AS V3
+    SELECT CASE k
+        CASE 0: n.y = 1
+        CASE 1: n.z = 1: o.z = gridWZ
+        CASE ELSE: n.x = 1: o.x = gridWX
+    END SELECT
+    RayPlane lx, ly, o, n, h, ok
+    IF ok = 0 THEN EXIT SUB
+    SELECT CASE k
+        CASE 0: a# = h.x: b# = h.z
+        CASE 1: a# = h.x: b# = h.y
+        CASE ELSE: a# = h.z: b# = h.y
+    END SELECT
+END SUB
+
+' ---------------------------------------------------------------- drawn (ViewRender: after the backdrop, before the grid)
+
+SUB RefRenderAll
+    DIM k, x0, x1, z0, z1
+    IF refHideAll THEN EXIT SUB
+    GridWallsAt x0, x1, z0, z1 ' (which walls are the far ones: where L and R are drawn)
+    FOR k = 0 TO 2
+        IF refPW(k) > 0 AND refShow(k) AND refOp(k) > 0 THEN RefRender k
+    NEXT
+END SUB
+
+' Picture k in 8 x 8 pieces (a piece reaching behind the eye is left out), each two triangles, see-through by its opacity
+SUB RefRender (k)
+    CONST N = 16 ' (pieces small enough to be drawn flat - no divide a pixel - without bending)
+    DIM i, j, p AS V3, vx, vy, vz, sx(N, N), sy(N, N), ok(N, N), pw, ph
+    pw = refPW(k): ph = refPH(k)
+    FOR i = 0 TO N
+        FOR j = 0 TO N
+            RefPt k, j / N - .5, .5 - i / N, p
+            CamSpace p.x, p.y, p.z, vx, vy, vz
+            ok(i, j) = (vz > .01)
+            IF ok(i, j) THEN sx(i, j) = cMidX + vx / vz * cFoc: sy(i, j) = cMidY - vy / vz * cFoc
+        NEXT
+    NEXT
+    FOR i = 0 TO N - 1
+        FOR j = 0 TO N - 1
+            IF ok(i, j) AND ok(i + 1, j) AND ok(i, j + 1) AND ok(i + 1, j + 1) THEN
+                RefTri sx(i, j), sy(i, j), j / N * pw, i / N * ph, sx(i, j + 1), sy(i, j + 1), (j + 1) / N * pw, i / N * ph, sx(i + 1, j + 1), sy(i + 1, j + 1), (j + 1) / N * pw, (i + 1) / N * ph, k
+                RefTri sx(i, j), sy(i, j), j / N * pw, i / N * ph, sx(i + 1, j + 1), sy(i + 1, j + 1), (j + 1) / N * pw, (i + 1) / N * ph, sx(i + 1, j), sy(i + 1, j), j / N * pw, (i + 1) / N * ph, k
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+$CHECKING:OFF
+' A triangle of picture k: (u, v) its pixel at each corner; a row at a time, the spot stepped flat
+' along it; blended over what's there by the pixel's alpha times the opacity, no depth
+SUB RefTri (ax, ay, au, av, bx, by, bu, bv, cx, cy, cu, cv, k)
+    DIM den, dudx, dudy, dvdx, dvdy, u, v, yc, xl, xr, t, y, y0, y1, x0, x1, x, pw AS LONG, ph AS LONG, po AS LONG
+    DIM ix AS LONG, iy AS LONG, c AS _UNSIGNED LONG, e AS _UNSIGNED LONG, al AS LONG, op AS LONG, o AS _OFFSET
+    DIM er AS LONG, eg AS LONG, eb AS LONG, na AS LONG, uf AS LONG, vf AS LONG, duf AS LONG, dvf AS LONG
+    den = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
+    IF ABS(den) < 1E-9 THEN EXIT SUB
+    dudx = ((bu - au) * (cy - ay) - (cu - au) * (by - ay)) / den: dudy = ((cu - au) * (bx - ax) - (bu - au) * (cx - ax)) / den
+    dvdx = ((bv - av) * (cy - ay) - (cv - av) * (by - ay)) / den: dvdy = ((cv - av) * (bx - ax) - (bv - av) * (cx - ax)) / den
+    y0 = ay: IF by < y0 THEN y0 = by
+    IF cy < y0 THEN y0 = cy
+    y1 = ay: IF by > y1 THEN y1 = by
+    IF cy > y1 THEN y1 = cy
+    y0 = -INT(-(y0 - .5)): y1 = INT(y1 - .5)
+    IF y0 < 0 THEN y0 = 0
+    IF y1 > rH - 1 THEN y1 = rH - 1
+    pw = refPW(k): ph = refPH(k): po = k * REF_PX: op = refOp(k) * 256 \ 100
+    duf = dudx * 65536: dvf = dvdx * 65536
+    FOR y = y0 TO y1
+        yc = y + .5: xl = 1E+30: xr = -1E+30
+        IF (yc - ay) * (yc - by) <= 0 AND ay <> by THEN t = ax + (yc - ay) * (bx - ax) / (by - ay): IF t < xl THEN xl = t
+        IF (yc - ay) * (yc - by) <= 0 AND ay <> by THEN IF t > xr THEN xr = t
+        IF (yc - by) * (yc - cy) <= 0 AND by <> cy THEN t = bx + (yc - by) * (cx - bx) / (cy - by): IF t < xl THEN xl = t
+        IF (yc - by) * (yc - cy) <= 0 AND by <> cy THEN IF t > xr THEN xr = t
+        IF (yc - cy) * (yc - ay) <= 0 AND cy <> ay THEN t = cx + (yc - cy) * (ax - cx) / (ay - cy): IF t < xl THEN xl = t
+        IF (yc - cy) * (yc - ay) <= 0 AND cy <> ay THEN IF t > xr THEN xr = t
+        x0 = -INT(-(xl - .5)): x1 = INT(xr - .5)
+        IF x0 < 0 THEN x0 = 0
+        IF x1 > rW - 1 THEN x1 = rW - 1
+        IF x0 <= x1 THEN
+            u = au + (x0 + .5 - ax) * dudx + (yc - ay) * dudy
+            v = av + (x0 + .5 - ax) * dvdx + (yc - ay) * dvdy
+            uf = u * 65536: vf = v * 65536 ' (16.16 fixed point)
+            o = rMem.OFFSET + (y * rW + x0) * 4
+            FOR x = x0 TO x1
+                ix = 0: IF uf > 0 THEN ix = _SHR(uf, 16): IF ix >= pw THEN ix = pw - 1
+                iy = 0: IF vf > 0 THEN iy = _SHR(vf, 16): IF iy >= ph THEN iy = ph - 1
+                c = refPix(po + iy * pw + ix)
+                al = _SHR(_SHR(c, 24) * op, 8)
+                IF al > 0 THEN
+                    _MEMGET rMem, o, e
+                    na = 256 - al
+                    er = _SHR((_SHR(c, 16) AND 255) * al + (_SHR(e, 16) AND 255) * na, 8)
+                    eg = _SHR((_SHR(c, 8) AND 255) * al + (_SHR(e, 8) AND 255) * na, 8)
+                    eb = _SHR((c AND 255) * al + (e AND 255) * na, 8)
+                    e = &HFF000000~& OR _SHL(er, 16) OR _SHL(eg, 8) OR eb
+                    _MEMPUT rMem, o, e
+                END IF
+                uf = uf + duf: vf = vf + dvf: o = o + 4
+            NEXT
+        END IF
+    NEXT
+END SUB
+$CHECKING:ON
+
+' ---------------------------------------------------------------- the controls (the view's top right)
+
+' Control c's box: 1 REF, 2 the slider, 3 TR, 4-6 B L R
+SUB RefBtn (c, x, y, w, h)
+    DIM x0
+    x0 = vX0 + vW - 8 - 236: y = vY0 + 4: h = 20
+    SELECT CASE c
+        CASE 1: x = x0: w = 40
+        CASE 2: x = x0 + 46: w = 80
+        CASE 3: x = x0 + 132: w = 28
+        CASE ELSE: x = x0 + 166 + (c - 4) * 24: w = 22
+    END SELECT
+END SUB
+
+FUNCTION RefAt (mx, my)
+    DIM c, x, y, w, h
+    FOR c = 1 TO 6
+        RefBtn c, x, y, w, h
+        IF InRect(mx, my, x, y, w, h) THEN RefAt = c: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+SUB RefOpSet (v)
+    IF v < 0 THEN v = 0
+    IF v > 100 THEN v = 100
+    v = INT(v + .5)
+    IF v <> refOp(refSel) THEN refOp(refSel) = v: viewDirty = -1: mdlDirty = -1
+    Msg "Reference on " + RefName$(refSel) + ":" + STR$(refOp(refSel)) + "% solid (middle click: 50)"
+END SUB
+
+' A left click on control c
+SUB RefClick (c)
+    DIM f$, x, y, w, h, k
+    SELECT CASE c
+        CASE 1
+            IF kShift THEN
+                refHideAll = NOT refHideAll: viewDirty = -1
+                Msg IIFS$(refHideAll, "References hidden (Shift+click REF: shown)", "References shown")
+            ELSEIF LEN(pmRef$) THEN ' (a PICTURES tile picked up: that one)
+                RefSet refSel, PicPath$(pmRef$): pmRef$ = "": pmDrag = 0
+            ELSE
+                f$ = _OPENFILEDIALOG$("A reference picture for " + RefName$(refSel), PicDir$, "*.png|*.jpg|*.jpeg|*.bmp|*.gif|*.tga", "Pictures", 0)
+                IF LEN(f$) THEN RefSet refSel, f$
+            END IF
+        CASE 2
+            refSlide = -1: RefBtn 2, x, y, w, h: RefOpSet (mX - x) / w * 100
+        CASE 3
+            IF refPW(refSel) = 0 THEN Msg "No reference on " + RefName$(refSel) + " yet: REF picks one (or drop a picture on REF)": EXIT SUB
+            refTr = NOT refTr: refShow(refSel) = -1: refHideAll = 0: viewDirty = -1
+            IF refTr THEN SelNone: Msg "TR: drag in the view moves the reference on " + RefName$(refSel) + " (on an arrow: that way only), arrows nudge, the wheel sizes it. Esc / TR: done"
+        CASE 4 TO 6
+            k = c - 4
+            IF kShift THEN
+                refShow(k) = NOT refShow(k): viewDirty = -1: mdlDirty = -1
+                Msg "Reference on " + RefName$(k) + IIFS$(refShow(k), " shown", " hidden")
+            ELSE
+                refSel = k: refTr = 0
+                Msg "REF, the slider and TR now work on " + RefName$(k) + IIFS$(refPW(k) > 0, "", " - none there yet: REF picks one")
+            END IF
+    END SELECT
+END SUB
+
+' Right-click REF: the picked one taken away; middle click on the slider: 50
+SUB RefRight (c)
+    IF c = 1 AND LEN(refPath$(refSel)) THEN RefClear refSel: mdlDirty = -1: Msg "Reference taken off " + RefName$(refSel)
+END SUB
+
+SUB RefMiddle (c)
+    IF c = 2 THEN RefOpSet 50
+END SUB
+
+' Each frame: the slider dragged, the picture dragged
+SUB RefFrame (lx, ly)
+    DIM x, y, w, h, a#, b#, ok, st#
+    IF refSlide THEN
+        IF mB1 THEN RefBtn 2, x, y, w, h: RefOpSet (mX - x) / w * 100 ELSE refSlide = 0
+    END IF
+    IF refDrag THEN
+        IF mB1 THEN
+            RefHit refSel, lx, ly, a#, b#, ok
+            IF ok THEN
+                IF refLock <> 2 THEN refA#(refSel) = refDA# + a# - refHA#
+                IF refLock <> 1 THEN refB#(refSel) = refDB# + b# - refHB#
+                st# = snapStep: IF kAlt THEN st# = 0
+                IF st# > 0 THEN
+                    refA#(refSel) = VAL(Fmt$(INT(refA#(refSel) / st# + .5) * st#)): refB#(refSel) = VAL(Fmt$(INT(refB#(refSel) / st# + .5) * st#))
+                END IF
+                viewDirty = -1: mdlDirty = -1
+            END IF
+        ELSE
+            refDrag = 0
+        END IF
+    END IF
+END SUB
+
+' TR: a press in the view - the picture dragged on its plane (from one of its arrows: that way only)
+SUB RefPress (lx, ly)
+    DIM a#, b#, ok
+    RefHit refSel, lx, ly, a#, b#, ok
+    IF ok = 0 THEN Msg "Point at " + RefName$(refSel) + "'s plane to drag the reference": EXIT SUB
+    refLock = RefArrowAt
+    refDrag = -1: refDA# = refA#(refSel): refDB# = refB#(refSel): refHA# = a#: refHB# = b#
+END SUB
+
+' Which of TR's arrows the pointer's on (1 along A, 2 along B, 0 neither)
+FUNCTION RefArrowAt
+    DIM c AS V3, e AS V3, sx, sy, ex, ey, ok, ok2, k, d
+    RefPt refSel, 0, 0, c
+    ScrPt c.x, c.y, c.z, sx, sy, ok: IF ok = 0 THEN EXIT FUNCTION
+    FOR k = 1 TO 2
+        RefArrowEnd k, e
+        ScrPt e.x, e.y, e.z, ex, ey, ok2
+        IF ok2 THEN
+            d = SegDist(mX, mY, sx, sy, ex, ey)
+            IF d <= 6 THEN RefArrowAt = k: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
+
+' The end of TR's arrow k: from the picture's middle, a quarter of its width (k 1: +A, 2: +B)
+SUB RefArrowEnd (k, e AS V3)
+    DIM s#, t#, l#
+    l# = refW#(refSel) / 4: s# = 0: t# = 0
+    IF k = 1 THEN s# = -l# / refW#(refSel) ELSE t# = l# / (refW#(refSel) * refPH(refSel) / refPW(refSel))
+    RefPt refSel, s#, t#, e
+END SUB
+
+FUNCTION SegDist (px, py, ax, ay, bx, by)
+    DIM dx, dy, l, t
+    dx = bx - ax: dy = by - ay: l = dx * dx + dy * dy
+    IF l = 0 THEN SegDist = SQR((px - ax) ^ 2 + (py - ay) ^ 2): EXIT FUNCTION
+    t = ((px - ax) * dx + (py - ay) * dy) / l
+    IF t < 0 THEN t = 0
+    IF t > 1 THEN t = 1
+    SegDist = SQR((px - ax - t * dx) ^ 2 + (py - ay - t * dy) ^ 2)
+END FUNCTION
+
+' TR: the wheel sizes it (up: bigger), round its middle
+SUB RefWheel (d)
+    refW#(refSel) = refW#(refSel) * 1.1 ^ d
+    IF refW#(refSel) < .05 THEN refW#(refSel) = .05
+    IF refW#(refSel) > 200 THEN refW#(refSel) = 200
+    viewDirty = -1: mdlDirty = -1
+    Msg "Reference" + STR$(VAL(Fmt$(refW#(refSel)))) + " across (wheel: bigger / smaller)"
+END SUB
+
+' Keys while TR is on: arrows move it (a grid step; Shift 10, Alt a tenth), PgUp / PgDn size it, Esc / Enter done
+FUNCTION RefKey (k&)
+    DIM st#
+    IF kCtrl OR CtrlCode(k&) THEN EXIT FUNCTION
+    st# = GridStep#
+    SELECT CASE k&
+        CASE 19200: refA#(refSel) = refA#(refSel) + st# ' (left: the picture's right is -A)
+        CASE 19712: refA#(refSel) = refA#(refSel) - st#
+        CASE 18432: refB#(refSel) = refB#(refSel) + st#
+        CASE 20480: refB#(refSel) = refB#(refSel) - st#
+        CASE 18688: RefWheel 1
+        CASE 20736: RefWheel -1
+        CASE 27, 13: refTr = 0: refDrag = 0: Msg "Reference left where it is": RefKey = -1: EXIT FUNCTION
+        CASE ELSE: EXIT FUNCTION
+    END SELECT
+    viewDirty = -1: mdlDirty = -1: RefKey = -1
+END FUNCTION
+
+' The controls, and with TR on the picture's edge and its arrows
+SUB RefDraw
+    DIM c, x, y, w, h, k, t$, p AS V3, q AS V3, sx, sy, ex, ey, ok, ok2, j, hot, col AS _UNSIGNED LONG
+    IF refTr AND refPW(refSel) > 0 THEN
+        VIEW SCREEN (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
+        FOR j = 0 TO 3 ' (its edge)
+            RefPt refSel, IIF(j = 1 OR j = 2, .5, -.5), IIF(j >= 2, -.5, .5), p
+            RefPt refSel, IIF(j = 0 OR j = 1, .5, -.5), IIF(j = 0 OR j = 3, .5, -.5), q
+            ScrPt p.x, p.y, p.z, sx, sy, ok: ScrPt q.x, q.y, q.z, ex, ey, ok2
+            IF ok AND ok2 THEN LINE (sx, sy)-(ex, ey), cHi, , &HF0F0
+        NEXT
+        hot = RefArrowAt: IF refDrag THEN hot = refLock
+        RefPt refSel, 0, 0, p
+        ScrPt p.x, p.y, p.z, sx, sy, ok
+        IF ok THEN
+            FOR k = 1 TO 2
+                RefArrowEnd k, q
+                ScrPt q.x, q.y, q.z, ex, ey, ok2
+                IF ok2 THEN
+                    col = RefAxisCol~&(k): IF hot = k THEN col = _RGB32(255, 220, 90)
+                    LINE (sx - 1, sy)-(ex - 1, ey), cBg: LINE (sx + 2, sy)-(ex + 2, ey), cBg ' (a dark edge: seen over any picture)
+                    LINE (sx, sy - 1)-(ex, ey - 1), cBg: LINE (sx, sy + 1)-(ex, ey + 1), cBg
+                    LINE (sx, sy)-(ex, ey), col: LINE (sx + 1, sy)-(ex + 1, ey), col
+                    CIRCLE (ex, ey), 5, cBg: CIRCLE (ex, ey), 4, col: CIRCLE (ex, ey), 3, col
+                END IF
+            NEXT
+            LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), cHi, BF
+        END IF
+        VIEW
+    END IF
+    FOR c = 1 TO 6
+        RefBtn c, x, y, w, h
+        SELECT CASE c
+            CASE 1
+                Btn x, y, w, h, "REF", (refPW(refSel) > 0 AND refHideAll = 0)
+                IF refHideAll THEN LINE (x + 4, y + h \ 2)-(x + w - 5, y + h \ 2), cHi
+            CASE 2
+                LINE (x, y + h \ 2)-(x + w - 1, y + h \ 2), cDim
+                FOR k = 0 TO 10: LINE (x + k * (w - 1) / 10, y + h \ 2 + 3)-(x + k * (w - 1) / 10, y + h \ 2 + 5), cLine: NEXT
+                k = x + refOp(refSel) * (w - 1) / 100
+                LINE (k - 2, y + 3)-(k + 2, y + h - 4), IIFC~&(InRect(mX, mY, x, y, w, h) OR refSlide, cHi, cText), BF
+            CASE 3
+                Btn x, y, w, h, "TR", refTr
+            CASE ELSE
+                k = c - 4
+                Btn x, y, w, h, MID$("BLR", k + 1, 1), (refSel = k)
+                IF refPW(k) = 0 THEN LINE (x + 3, y + h - 4)-(x + w - 4, y + h - 4), cLine ' (none there)
+                IF refPW(k) > 0 AND refShow(k) = 0 THEN LINE (x + 3, y + 3)-(x + w - 4, y + h - 4), cWarn ' (hidden)
+        END SELECT
+    NEXT
+    c = RefAt(mX, mY)
+    IF c THEN
+        SELECT CASE c
+            CASE 1: t$ = "REF: a picture from disk for " + RefName$(refSel) + " (or drop / drag one here); right-click: none; Shift: hide all"
+            CASE 2: t$ = "How solid the reference on " + RefName$(refSel) + " is (middle click: 50)"
+            CASE 3: t$ = "TR: move it (drag, arrows), size it (wheel)"
+            CASE ELSE: t$ = MID$("BLR", c - 3, 1) + ": " + RefName$(c - 4) + " (Shift+click: hide / show it)"
+        END SELECT
+        Txt vX0 + vW - 8 - LEN(t$) * 8, vY0 + 28, t$, cHi
+    END IF
+END SUB
+
+FUNCTION RefAxisCol~& (k)
+    ' (the world way its arrow goes: x red, y green, z blue)
+    SELECT CASE refSel
+        CASE 0: RefAxisCol~& = IIFC~&(k = 1, _RGB32(230, 70, 80), _RGB32(80, 140, 255))
+        CASE 1: RefAxisCol~& = IIFC~&(k = 1, _RGB32(230, 70, 80), _RGB32(90, 220, 110))
+        CASE ELSE: RefAxisCol~& = IIFC~&(k = 1, _RGB32(80, 140, 255), _RGB32(90, 220, 110))
+    END SELECT
+END FUNCTION

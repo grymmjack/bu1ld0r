@@ -29,10 +29,14 @@ DIM SHARED wheelField, wheelT AS DOUBLE ' (a run of wheel turns on one field is 
 DIM SHARED helpOn, openOn, openN, openTop
 ' The top bar's view buttons, each with a slider: TEX (the faces, how solid), WIRE (the
 ' edges, how strong), GRID (the walls; how bright). Buttons 8 to 10, sliders 1 to 3
-CONST TB_VIEW = 8, SL_W = 84
+CONST TB_VIEW = 8, SL_W = 64
 DIM SHARED topSlide ' (the slider being dragged: 1 to 3, 0 none)
 DIM SHARED openName$(500)
 DIM SHARED quitAsk
 DIM SHARED qCtrl, qShift, qAlt ' (the modifier keys as the key queue has them)
-DIM SHARED helpLine$(240), helpPg(240), helpN ' (HELP: its lines - "KEYS|what they do", "#HEADING" - and which page each is on)
+DIM SHARED helpLine$(320), helpPg(320), helpN ' (HELP: its lines - "KEYS|what they do", "#HEADING" - and which page each is on)
 DIM SHARED hpName$(16), hpN, helpPage ' (its pages, and the one shown)
+CONST NP_N = 16 ' (the numpad's keys: NumpadHeld)
+DIM SHARED npHeld(NP_N), npT#(NP_N) ' (each numpad key held last frame; when it was pressed: -1 once it's been used)
+DIM SHARED guidesOn ' (GUIDES, Ctrl+H: the view's guides shown)
+DIM SHARED selRect, selRX0, selRY0 ' (a box being dragged round parts, from: view coords)

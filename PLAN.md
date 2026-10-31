@@ -89,6 +89,8 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
 4. **Painting**: brushes straight onto the model, in 3D (every texel within
    the brush's reach, so strokes cross from part to part), on a layer of
    their own over the pictures. Export bakes it all into the one texture.
+   Meanwhile (UI/PAINT): a face's picture painted flat, over the whole
+   window (Ctrl+P) - tools, gradients, mirrors, made textures, filters.
 5. **Prefabs** (done, 0.4.0): what's left after stage 2 - unlink a use (its parts into
    the model as parts, as a group: turns combined into one Z-X-Y set, or a
    mesh part when a scale can't be one part's), a use's tint, renaming or
@@ -122,6 +124,43 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
 9. **Starter prefabs** (done, 0.4.0: `prefabs/starter/`): toggle, button, knob, dial, screen, vent, handle,
    pipe (straight, elbow, T), lamp, antenna (vents and dials use stage 7's
    cuts).
+
+10. **Materials** (planned; Rick asked 2026-10-31: see-through, light,
+   shine, roughness, glow, emit, refraction). What NEON-CASTER shows today
+   (read from its code; it reads only `v` / `vt` / `f` and `# frame` - the
+   .mtl is never opened, one texture `NAME_tex.png` a model):
+   - **Cut-out see-through: works now.** A texture pixel under alpha 128
+     isn't drawn (GL shader `discard`, the software path the same). So a
+     picture with clear pixels (the painter can make them) = holes, grilles,
+     leaves. No half see-through on models (only the game's glass panes and
+     liquids blend).
+   - **Glow: works now, through colour.** In GL, a texel that is bright
+     (a channel over ~.68) and strongly coloured lights itself whatever the
+     room's light (model textures get neon .6) and feeds the bloom. So a
+     bright saturated face or picture glows; dark or grey ones don't.
+   - **Lighting: the game's own.** Each triangle gets one brightness from
+     its facing and the cell's light (coloured, flickering lamps and all);
+     up to 4 moving lights, but on models they ignore the facing. Far away
+     the model is its 8 pictures, lit as baked by the export.
+   - **Shine, roughness, emissive maps, blended alpha, reflection,
+     refraction: not in the game for models** (shine exists only for walls
+     and floors; models are forced to shine 0).
+   The plan, in steps:
+   a. bu1ld0r: a face MATERIAL beside its picture - ALPHA, GLOW, SHINE,
+      ROUGH (0-100 each), kept per polygon (as `mfTex`) and on the .bld's
+      `f` lines; the view shows them (alpha blended, GLOW unlit and
+      haloed, SHINE a highlight from the light, ROUGH spreading it).
+   b. Export: the .mtl written properly (`d`, `Ks`, `Ns`, `Ke`, `map_Ke`)
+      for other programs, a `NAME_glow.png` (where it glows), and
+      `# mat` lines the game can read; until the game reads them, GLOW
+      pushes those faces' texels into the range the game already makes
+      glow, and ALPHA under half cuts them out - so it shows in the game
+      at once, as near as it can.
+   c. NEON-CASTER (its own work, Rick's call): read the `# mat` lines /
+      glow map - blended alpha for models, shine and roughness from the
+      normals (the walls' code has it), moving lights using the facing.
+      Refraction would need a copy of the screen behind the model (the
+      glass panes' ripple does something like it): last, if ever.
 
 And on NEON-CASTER's side (its own work, later): a thing to place any
 exported model in a sector (a `prop NAME` thing), the level editor's picker
