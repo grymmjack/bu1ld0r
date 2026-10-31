@@ -84,6 +84,10 @@ E turns any of them into a mesh part, to edit like any other.
 
 - Click a part to select it (Shift adds, Tab goes to the next). The parts
   list (L) between the bin and the view picks parts hidden inside others.
+  Drag a box from empty space to select every part inside it (Shift adds).
+
+  ![Drag a box from empty space: every part inside it is selected](docs/screenshots/box-select.png)
+
 - Drag it across the ground (Shift: up and down), or drag one of the
   arrows to keep it on that axis (or hold X, Y or Z while dragging).
   Moves snap to the SNAP step; Alt for none.
@@ -95,16 +99,25 @@ E turns any of them into a mesh part, to edit like any other.
 - Ctrl+Alt shows the selection box's middle, side middles and corners;
   Ctrl+Alt+click one (or a spot on the shape) and SCALE grows from there,
   the far side staying put, and TURN goes round it.
+
+  ![Ctrl+Alt held: the selection box's middle, side middles and corners as points to pick](docs/screenshots/pivot.png)
+
 - SAME gives every selected part the first one's place, size or turn on
   the axes you pick; AS SEEN matches width, height or depth on screen.
   In E it works on the picked points, edges and faces: each one (or each
   connected run) made like the one you clicked first - TURN turns faces
   to face the same way.
+
+  ![SAME: three boxes made the size and turn of the orange one, picked first](docs/screenshots/same.png)
+
 - SNAP TO GRID (under SAME, with its own X Y Z) moves each selected part
   so its box's low corner sits on the grid (the snap step's; OFF: 1/32).
   In E it puts the picked points - or the picked edges' and faces'
   corners, or every point when none are picked - on the nearest grid
   lines; points that land together become one.
+
+  ![SNAP TO GRID: a box off the grid lines moved onto the 1/8 grid](docs/screenshots/snap.png)
+
 - SMART GUIDES ([SG] in the top bar, on by default): while you drag, the
   selection's sides and middle snap to other parts' - lined up, or sitting
   on or beside them - and to the middle of the world, before the grid. A
@@ -138,6 +151,9 @@ E turns any of them into a mesh part, to edit like any other.
   they become one mesh part, the faces inside the overlap gone. Colours
   and pictures stay.
 
+  ![MERGE: a box and a cylinder become one mesh part](docs/screenshots/merge.png)
+
+
 ### Editing faces, edges and points
 
 ![E on the block: the recessed front face picked, and the edit tools in the panel](docs/screenshots/edit.png)
@@ -166,6 +182,11 @@ E turns any of them into a mesh part, to edit like any other.
    (the faces either side become one), a face is drawn in to a point (the
    faces round it close over). Shift+Delete takes the faces away instead.
    With TEX off a box picks the points behind too.
+
+   ![FLATTEN: a top bent by a raised corner, laid flat again](docs/screenshots/flatten.png)
+
+   ![DELETE in E: the roof's peak point taken out, the faces close over flat](docs/screenshots/dissolve.png)
+
    MEND closes cracks and holes. A merge or a hole cut leaves pieces
    that only touch - a corner of one sitting on another's edge without
    being one of its points - so moving one opened a crack. Merges now
@@ -268,6 +289,18 @@ under the tabs opens any folder of PNGs.
 5. Ctrl+S saves the PNG and the faces show it. Esc goes back (it asks
    first if it isn't saved).
 
+![A round gradient from pink to navy, repeated back and forth (BNC x3); drag its ends to change it](docs/screenshots/paint-gradient.png)
+
+![MAKE: all 14 textures from the same two colours](docs/screenshots/paint-make.png)
+
+![FILTERS: each one on a wood texture](docs/screenshots/paint-filters.png)
+
+![MIRROR left-right and up-down on: one brush stroke drawn four times](docs/screenshots/paint-mirror.png)
+
+![TILED: the picture seen with its neighbours, as it repeats on a face](docs/screenshots/paint-tiled.png)
+
+![Back in the view: the wood picture saved and on the box's face](docs/screenshots/paint-face.png)
+
 ### Seeing it: TEX, WIRE, GRID
 
 ![TEX at 46% and WIRE on: the edges behind the faces show through](docs/screenshots/views.png)
@@ -327,6 +360,9 @@ Ctrl+S saves it as a model.
   the view) and drag on the ground: Shift for a square, circle or 45
   degrees, Ctrl from the middle. F switches rects and ellipses between
   filled and an outline; [ ] sets the outline's or the line's width.
+
+  ![RECT, ELLIPSE and LINE: a filled rect, an outline rect, an outline ellipse (a ring), a filled ellipse and a line, each a flat part](docs/screenshots/pen-shapes.png)
+
 - **Text (X):** type, pick a font from the list in the view (fonts in
   `fonts/`, DRAW's fonts, and the system's), click where it starts, Enter.
   Each letter is a flat mesh part, all one group: Alt+click one letter to
@@ -363,6 +399,9 @@ see-through behind the model so you can build over it from any angle.
   `player`, and it becomes your body: feet on its bottom, eyes near its top.
 - Shift+V (FLY) goes straight through anything: E / Space up, Q / C down,
   the wheel for speed. Tab switches between them.
+
+  ![FLY: over the console, looking down at the desk](docs/screenshots/fly.png)
+
 - Esc, V or a right click goes back to orbiting, exactly as you left it.
 
 ### Help in the program
