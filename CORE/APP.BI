@@ -5,7 +5,7 @@
 ' them, and the messages along the bottom.
 '
 CONST APP_NAME$ = "bu1ld0r"
-CONST APP_VERSION$ = "0.5.0"
+CONST APP_VERSION$ = "0.6.0"
 CONST MIN_SW = 800, MIN_SH = 700 ' (the smallest our screen is laid out at)
 CONST BIN_MIN = 200, PANEL_MIN = 250 ' (the bin, down the left, and the panel, down the right: at their narrowest)
 DIM SHARED BIN_W, PANEL_W ' (the bin as wide as it's dragged: bin_w= in bu1ld0r.cfg; the panel stays PANEL_MIN)
@@ -50,6 +50,9 @@ DIM SHARED cHover AS _UNSIGNED LONG, cWarn AS _UNSIGNED LONG
 
 ' The command line's (tests): --open FILE, --export, --shot FILE, --quit, --neon DIR
 DIM SHARED argOpen$, argExport, argShot$, argQuit, argFrames, argBench, argSave, argKeyLog$
+DIM SHARED argSpin ' (--spin: the camera turned a degree a frame - timing tests)
+DIM SHARED argWalk, argYaw$ ' (--walk 1 / 2: WALK or FLY once open; --yaw N: looking that way - tests)
+DIM SHARED argProf, prT#(16), prK#, prN, prV, prT0# ' (--prof: ms per stage of a frame, averaged into prof.txt each 60 frames)
 
 ' Words of a line split at spaces (Words): wd$(1 to wdN)
 DIM SHARED wd$(1000), wdN

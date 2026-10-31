@@ -91,7 +91,7 @@ Also check `PLAN.md`: mark finished stages done, if any.
 ## Step 5 — Compile verification
 
 ```bash
-~/git/qb64pe/qb64pe -w -x bu1ld0r.bas -o bu1ld0r.test.run 2>&1 | grep -E 'Output:|in use|LINE|Caused|rror'
+~/git/qb64pe/qb64pe -w -x bu1ld0r.bas -o bu1ld0r.test.run -f:OptimizeCppProgram=true 2>&1 | grep -E 'Output:|in use|LINE|Caused|rror'
 ```
 
 Confirm `Output: .../bu1ld0r.test.run` appears and nothing else (QB64PE reports most mistakes as `Name already in use` plus a `LINE nnnn:`). CI builds with the QB64-PE commit pinned as `QB64PE_REF` in `.github/workflows/build-release.yml`; if the local `~/git/qb64pe` has moved on (`git -C ~/git/qb64pe rev-parse HEAD`), say so and ask whether to update the pin. Report any errors and fix before continuing. Then `mv bu1ld0r.test.run bu1ld0r.run`.

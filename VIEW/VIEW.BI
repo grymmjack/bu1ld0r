@@ -17,7 +17,7 @@ DIM SHARED rImg&, rW, rH, rMem AS _MEM
 ' (as many as the biggest picture drawn - the view, a model's picture: RCap)
 REDIM SHARED rZ(0) AS SINGLE, rId(0) AS LONG
 REDIM SHARED wMark(0) AS LONG, wOld(0) AS _UNSIGNED LONG: DIM SHARED wGen AS LONG ' (WIRE's lines: the pixels this render's drawn on - wGen * 256 + how strong - and what was there)
-REDIM SHARED rPart(0) AS INTEGER ' (the outlines' work: each pixel's part)
+REDIM SHARED ovWant(0) AS _BYTE ' (the parts outlined: selected, or under the pointer)
 DIM SHARED rCapN AS LONG
 DIM SHARED rOrtho, rSpan ' (rOrtho: a model's picture - flat, rSpan cells across)
 DIM SHARED rLX, rLY, rLZ ' (the light: which way it comes from)
@@ -36,4 +36,5 @@ DIM SHARED gridBright ' (0-100: the grid's lines from the backdrop's colour to b
 DIM SHARED gridWX, gridWZ, gridH ' (the walls drawn: x = gridWX, z = gridWZ, as tall as gridH)
 
 DIM SHARED viewImg&, ovImg&, viewDirty, ovDirty
+DIM SHARED bdImg&, bdW, bdH ' (the view's backdrop, made once a size)
 DIM SHARED hoverPart, hoverTri AS LONG

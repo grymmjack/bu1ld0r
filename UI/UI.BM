@@ -717,6 +717,8 @@ SUB UiAfterFrame
         IF argExport THEN ExportAll
         IF LEN(argShot$) THEN _SAVEIMAGE argShot$, uiImg&
         IF argQuit THEN quitWant = -1
+        IF argWalk THEN FpStart argWalk
+        IF LEN(argYaw$) THEN camYaw = VAL(argYaw$): IF fpOn THEN FpCamera
     END IF
 END SUB
 
@@ -1799,9 +1801,12 @@ SUB UiDraw
     DIM x, y, w, h, k, i, p, t$, c AS _UNSIGNED LONG, n
     IF pntOn THEN PntDraw: EXIT SUB
     CLS , cBg
+    PrAdd 11
     ' The view
-    IF ovDirty THEN ViewOverlay
-    _PUTIMAGE (vX0, vY0), viewImg&
+    IF ovDirty AND fpOn = 0 THEN ViewOverlay ' (walking / flying: not shown)
+    PrAdd 16
+    ImgBlit viewImg&, uiImg&, vX0, vY0 ' (the view is solid: copied a row at a time - _PUTIMAGE took 10 ms)
+    PrAdd 12
     IF guidesOn AND fpOn = 0 THEN ' (GUIDES / Ctrl+H off, or walking / flying: just the model)
         _PUTIMAGE (vX0, vY0), ovImg&
         GzDraw
@@ -1850,12 +1855,22 @@ SUB UiDraw
     IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
     IF mdlDirty THEN t$ = "* not saved   " + t$
     k = (scrW - 8 - (x + w + 12)) \ 8 ' (as much as fits after the buttons)
+    IF LEN(t$) > k THEN ' (too narrow: shorter - the version alone, "*" for not saved, the prefab's name cut)
+        t$ = "v" + APP_VERSION$
+        IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "  " + t$
+        IF mdlDirty THEN t$ = "* " + t$
+        IF LEN(t$) > k AND LEN(mdlPf$) > 0 THEN t$ = IIFS$(mdlDirty, "* ", "") + "v" + APP_VERSION$
+    END IF
     IF LEN(t$) > k AND k > 0 THEN t$ = RIGHT$(t$, k)
     IF k > 0 THEN Txt scrW - 8 - 8 * LEN(t$), 6, t$, IIFC~&(mdlDirty, cWarn, cDim)
 
+    PrAdd 9
     BinDraw
+    PrAdd 13
     IF listOn THEN ListDraw
+    PrAdd 14
     PanelDraw
+    PrAdd 15
     k = dockDrag: IF k = 0 THEN k = DockAt(mX, mY)
     IF k = 1 THEN LINE (BIN_W - 2, TOP_H)-(BIN_W - 1, scrH - BAR_H - 1), cHi, BF ' (the edge under the pointer: drag it)
 

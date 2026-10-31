@@ -36,6 +36,10 @@ SUB AppStart
             CASE "--tidy": tidyView = -1 ' (the view tidied, as T)
             CASE "--shot": i = i + 1: argShot$ = COMMAND$(i)
             CASE "--quit": argQuit = -1
+            CASE "--prof": argProf = -1
+            CASE "--spin": argSpin = -1
+            CASE "--walk": i = i + 1: argWalk = VAL(COMMAND$(i))
+            CASE "--yaw": i = i + 1: argYaw$ = COMMAND$(i)
             CASE "--keylog": i = i + 1: argKeyLog$ = COMMAND$(i) ' (each key taken: a line - the key, the numpad's, the view after: tests)
             CASE "--bench": i = i + 1: argBench = VAL(COMMAND$(i)) ' (the model made N times: bench.txt says how long)
             CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
@@ -415,3 +419,66 @@ END FUNCTION
 FUNCTION DCos (d)
     DCos = COS(d * 3.14159265 / 180)
 END FUNCTION
+
+' --prof: the time since the last mark put in stage k's total
+SUB PrAdd (k)
+    DIM t#
+    IF NOT argProf THEN EXIT SUB
+    t# = TIMER(.001)
+    IF k > 0 THEN IF t# >= prK# THEN prT#(k) = prT#(k) + t# - prK#
+    prK# = t#
+END SUB
+
+' --prof: a frame done; every 60, each stage's ms a frame to prof.txt
+SUB PrFrame
+    DIM fh, k, t#, n$
+    IF NOT argProf THEN EXIT SUB
+    prN = prN + 1
+    IF prN < 60 THEN EXIT SUB
+    t# = TIMER(.001)
+    fh = FREEFILE: OPEN appDir$ + "prof.txt" FOR APPEND AS #fh
+    PRINT #fh, "60 frames in"; INT((t# - prT0#) * 1000); "ms, view drawn"; prV; "times. ms a frame:";
+    FOR k = 1 TO 16
+        SELECT CASE k
+            CASE 16: n$ = "overlay"
+            CASE 11: n$ = "cls"
+            CASE 12: n$ = "put-view"
+            CASE 13: n$ = "bin"
+            CASE 14: n$ = "list"
+            CASE 15: n$ = "panel"
+            CASE 1: n$ = "backdrop"
+            CASE 2: n$ = "refs"
+            CASE 3: n$ = "grid"
+            CASE 4: n$ = "faces"
+            CASE 5: n$ = "edges"
+            CASE 6: n$ = "ghost"
+            CASE 7: n$ = "ui-logic"
+            CASE 8: n$ = "mesh"
+            CASE 9: n$ = "ui-draw"
+            CASE ELSE: n$ = "present"
+        END SELECT
+        PRINT #fh, " "; n$; INT(prT#(k) / 60 * 10000) / 10;
+        prT#(k) = 0
+    NEXT
+    PRINT #fh, ""
+    CLOSE #fh
+    prN = 0: prV = 0: prT0# = t#
+END SUB
+
+' Image src& copied onto dst& at (x, y), pixels as they are (no blending): a
+' row of memory at a time - _PUTIMAGE goes a pixel at a time. Both 32-bit.
+SUB ImgBlit (src&, dst&, x, y)
+    DIM ms AS _MEM, md AS _MEM, sw AS LONG, sh AS LONG, dw AS LONG, dh AS LONG, r AS LONG, x0 AS LONG, y0 AS LONG, x1 AS LONG, y1 AS LONG
+    sw = _WIDTH(src&): sh = _HEIGHT(src&): dw = _WIDTH(dst&): dh = _HEIGHT(dst&)
+    x0 = x: y0 = y: x1 = x + sw - 1: y1 = y + sh - 1
+    IF x0 < 0 THEN x0 = 0
+    IF y0 < 0 THEN y0 = 0
+    IF x1 > dw - 1 THEN x1 = dw - 1
+    IF y1 > dh - 1 THEN y1 = dh - 1
+    IF x1 < x0 OR y1 < y0 THEN EXIT SUB
+    ms = _MEMIMAGE(src&): md = _MEMIMAGE(dst&)
+    FOR r = y0 TO y1
+        _MEMCOPY ms, ms.OFFSET + ((r - y) * sw + (x0 - x)) * 4, (x1 - x0 + 1) * 4 TO md, md.OFFSET + (r * dw + x0) * 4
+    NEXT
+    _MEMFREE ms: _MEMFREE md
+END SUB

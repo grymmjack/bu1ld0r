@@ -56,7 +56,7 @@ END SUB
 SUB RCap (n AS LONG)
     IF n <= rCapN THEN EXIT SUB
     rCapN = n
-    REDIM rZ(n) AS SINGLE, rId(n) AS LONG, rPart(n) AS INTEGER
+    REDIM rZ(n) AS SINGLE, rId(n) AS LONG
     REDIM wMark(n) AS LONG, wOld(n) AS _UNSIGNED LONG
 END SUB
 
@@ -83,12 +83,22 @@ SUB ViewRender
     LightFromCamera .5, .55
     RenderBegin viewImg&, vW, vH
     _DEST viewImg&
-    FOR y = 0 TO vH - 1 ' (the backdrop: darker towards the top)
-        k = y / vH
-        LINE (0, y)-(vW - 1, y), _RGB32(10 + 14 * k, 9 + 10 * k, 20 + 18 * k)
-    NEXT
+    IF bdImg& = 0 OR bdW <> vW OR bdH <> vH THEN ' (the backdrop, darker towards the top: made once a size)
+        IF bdImg& < -1 THEN _FREEIMAGE bdImg&
+        bdImg& = _NEWIMAGE(vW, vH, 32): bdW = vW: bdH = vH
+        _DEST bdImg&
+        FOR y = 0 TO vH - 1
+            k = y / vH
+            LINE (0, y)-(vW - 1, y), _RGB32(10 + 14 * k, 9 + 10 * k, 20 + 18 * k)
+        NEXT
+        _DEST viewImg&
+    END IF
+    ImgBlit bdImg&, viewImg&, 0, 0
+    PrAdd 1
     RefRenderAll ' (reference pictures: on the ground and the far walls, under the grid)
+    PrAdd 2
     DrawGrid
+    PrAdd 3
     rOrtho = 0: rCull = NOT viewBacks: rBacks = viewBacks: rGhost = 0
     IF viewWire THEN ' (TEX off: filled unseen, so a click still finds the part and the face)
         rNoInk = -1
@@ -115,6 +125,7 @@ SUB ViewRender
         END IF
         IF texOp < 100 THEN TexFade bg&: _FREEIMAGE bg&
     END IF
+    PrAdd 4
     ' The edges: WIRE's (those behind the faces as faint as the faces are solid), and a part shown as lines alone
     kSeen = INT(wireOp * 2.55 + .5): kHid = kSeen: IF viewWire = 0 THEN kHid = INT(kSeen * (100 - texOp) / 100 + .5)
     FOR t = 1 TO holeTN
@@ -124,6 +135,7 @@ SUB ViewRender
             WireTriZ t, IIFC~&(t > sceneTN, HOLE_WIRE, WireCol~&(tCol(t))), kSeen, kHid
         END IF
     NEXT
+    PrAdd 5
     IF viewWire THEN
         FOR t = holeTN + 1 TO tN: WireTri t, _RGB32(235, 235, 245): NEXT
     ELSE
@@ -132,6 +144,7 @@ SUB ViewRender
         rGhost = 0
     END IF
     RenderEnd
+    PrAdd 6
     _DEST d
     viewDirty = 0: ovDirty = -1
 END SUB
@@ -482,7 +495,9 @@ END SUB
 
 ' FillTri with picture tx on it: each corner's spot (u, w), p how much it
 ' counts (1 / depth: the spots follow the face, not the screen; 1 flat)
+$CHECKING:OFF
 SUB FillTriT (ax, ay, aq, ap, au, aw, bx, by, bq, bp, bu, bw, cx, cy, cq, cp, cu, cw, tx, id AS LONG)
+    DIM sLo, sHi, xs AS LONG, xe AS LONG
     DIM den, x0, x1, y0, y1, x, y, w0, w1, w2, a0, b0, a1, b1, q, i AS LONG, yy, fx, pw, u, v, c AS _UNSIGNED LONG
     DIM aup, awp, bup, bwp, cup, cwp, pw0 AS LONG, ph0 AS LONG, po AS LONG, ix AS LONG, iy AS LONG, r, g, b, sh
     den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
@@ -508,8 +523,14 @@ SUB FillTriT (ax, ay, aq, ap, au, aw, bx, by, bq, bp, bu, bw, cx, cy, cq, cp, cu
     FOR y = y0 TO y1
         yy = y + .5 - cy
         w0 = a0 * fx + b0 * yy: w1 = a1 * fx + b1 * yy
-        i = y * rW + x0
-        FOR x = x0 TO x1
+        sLo = 0: sHi = x1 - x0 ' (only the row's span inside all three edges, a pixel spare each side)
+        SpanCut w0, a0, sLo, sHi: SpanCut w1, a1, sLo, sHi: SpanCut 1 - w0 - w1, -a0 - a1, sLo, sHi
+        xs = -INT(-sLo) - 1: xe = INT(sHi) + 1
+        IF xs < 0 THEN xs = 0
+        IF xe > x1 - x0 THEN xe = x1 - x0
+        w0 = w0 + a0 * xs: w1 = w1 + a1 * xs
+        i = y * rW + x0 + xs
+        FOR x = x0 + xs TO x0 + xe
             w2 = 1 - w0 - w1
             IF w0 >= -.00001 AND w1 >= -.00001 AND w2 >= -.00001 THEN
                 q = w0 * aq + w1 * bq + w2 * cq
@@ -545,6 +566,7 @@ END FUNCTION
 ' A triangle on the picture filled: each pixel inside it, if nearer than
 ' what's there (q: bigger is nearer), takes its colour and its number
 SUB FillTri (ax, ay, aq, bx, by, bq, cx, cy, cq, col AS _UNSIGNED LONG, id AS LONG)
+    DIM sLo, sHi, xs AS LONG, xe AS LONG
     DIM den, x0, x1, y0, y1, x, y, w0, w1, w2, a0, b0, a1, b1, q, i AS LONG, old AS _UNSIGNED LONG, yy, fx
     den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
     IF ABS(den) < 1E-9 THEN EXIT SUB
@@ -567,8 +589,14 @@ SUB FillTri (ax, ay, aq, bx, by, bq, cx, cy, cq, col AS _UNSIGNED LONG, id AS LO
     FOR y = y0 TO y1
         yy = y + .5 - cy
         w0 = a0 * fx + b0 * yy: w1 = a1 * fx + b1 * yy
-        i = y * rW + x0
-        FOR x = x0 TO x1
+        sLo = 0: sHi = x1 - x0 ' (only the row's span inside all three edges, a pixel spare each side)
+        SpanCut w0, a0, sLo, sHi: SpanCut w1, a1, sLo, sHi: SpanCut 1 - w0 - w1, -a0 - a1, sLo, sHi
+        xs = -INT(-sLo) - 1: xe = INT(sHi) + 1
+        IF xs < 0 THEN xs = 0
+        IF xe > x1 - x0 THEN xe = x1 - x0
+        w0 = w0 + a0 * xs: w1 = w1 + a1 * xs
+        i = y * rW + x0 + xs
+        FOR x = x0 + xs TO x0 + xe
             w2 = 1 - w0 - w1
             IF w0 >= -.00001 AND w1 >= -.00001 AND w2 >= -.00001 THEN
                 q = w0 * aq + w1 * bq + w2 * cq
@@ -593,35 +621,121 @@ SUB FillTri (ax, ay, aq, bx, by, bq, cx, cy, cq, col AS _UNSIGNED LONG, id AS LO
     NEXT
 END SUB
 
+' A row's span (lo..hi pixels from its start) cut to where the edge weight
+' w + a x pixels stays at least 0
+SUB SpanCut (w, a, lo, hi)
+    DIM t
+    IF a > 0 THEN
+        t = (-.00001 - w) / a: IF t > lo THEN lo = t
+    ELSEIF a < 0 THEN
+        t = (-.00001 - w) / a: IF t < hi THEN hi = t
+    ELSEIF w < -.00001 THEN
+        hi = lo - 2
+    END IF
+END SUB
+$CHECKING:ON
+
 ' The outlines: round each selected part, and the part under the pointer
 SUB ViewOverlay
-    DIM m AS _MEM, x, y, i AS LONG, p, c AS _UNSIGNED LONG, edge
+    DIM m AS _MEM, p, any2, bx0, by0, bx1, by1
     m = _MEMIMAGE(ovImg&)
     _MEMFILL m, m.OFFSET, vW * vH * 4, 0 AS _UNSIGNED LONG
-    FOR i = 0 TO vW * vH - 1
-        IF rId(i) > 0 THEN rPart(i) = tPart(rId(i)) ELSE rPart(i) = 0
+    ' (the parts to outline: selected or under the pointer; none, nothing to scan)
+    REDIM ovWant(pN) AS _BYTE
+    FOR p = 1 TO pN
+        IF (pSel(p) OR p = hoverPart) AND p <> edPart THEN ovWant(p) = -1: any2 = -1
     NEXT
-    FOR y = 1 TO vH - 2
-        i = y * vW + 1
-        FOR x = 1 TO vW - 2
-            p = rPart(i)
-            IF p > 0 THEN
-                IF (pSel(p) OR p = hoverPart) AND p <> edPart THEN
-                    edge = (rPart(i - 1) <> p) OR (rPart(i + 1) <> p) OR (rPart(i - vW) <> p) OR (rPart(i + vW) <> p)
+    IF any2 THEN
+        OvBox bx0, by0, bx1, by1
+        IF bx1 >= bx0 AND by1 >= by0 THEN ViewOutlines m, bx0, by0, bx1, by1
+    END IF
+    _MEMFREE m
+    IF gridWalls THEN GridShadows
+    IF edPart THEN EdOverlay
+    ovDirty = 0
+END SUB
+
+$CHECKING:OFF
+' Each wanted part's edge pixels: one whose neighbour is another part's (a
+' neighbour on the same triangle can't be, so parts are looked up only where
+' the triangle changes)
+SUB ViewOutlines (m AS _MEM, x0, y0, x1, y1)
+    DIM x, y, i AS LONG, p, t AS LONG, lt AS LONG, u AS LONG, k, edge, cH AS _UNSIGNED LONG, cS AS _UNSIGNED LONG
+    cH = _RGBA32(0, 240, 255, 200): cS = cSel
+    lt = -1
+    FOR y = y0 TO y1
+        i = y * vW + x0
+        FOR x = x0 TO x1
+            t = rId(i)
+            IF t > 0 THEN
+                IF t <> lt THEN
+                    lt = t: p = tPart(t)
+                    IF p > pN THEN p = 0
+                    IF ovWant(p) = 0 THEN p = 0
+                END IF
+                IF p > 0 THEN
+                    edge = 0
+                    FOR k = 0 TO 3
+                        SELECT CASE k
+                            CASE 0: u = rId(i - 1)
+                            CASE 1: u = rId(i + 1)
+                            CASE 2: u = rId(i - vW)
+                            CASE ELSE: u = rId(i + vW)
+                        END SELECT
+                        IF u <> t THEN
+                            IF u <= 0 THEN
+                                edge = -1: EXIT FOR
+                            ELSEIF tPart(u) <> p THEN
+                                edge = -1: EXIT FOR
+                            END IF
+                        END IF
+                    NEXT
                     IF edge THEN
-                        IF pSel(p) THEN c = cSel ELSE c = _RGBA32(0, 240, 255, 200)
-                        _MEMPUT m, m.OFFSET + i * 4, c
+                        IF pSel(p) THEN _MEMPUT m, m.OFFSET + i * 4, cS ELSE _MEMPUT m, m.OFFSET + i * 4, cH
                     END IF
                 END IF
             END IF
             i = i + 1
         NEXT
     NEXT
-    _MEMFREE m
-    IF gridWalls THEN GridShadows
-    IF edPart THEN EdOverlay
-    ovDirty = 0
 END SUB
+
+' Where on the view the outlined parts can be: their triangles' corners
+' projected (one behind the eye, or a flat view: all of it), 1 pixel in from
+' each side (the scan looks at neighbours)
+SUB OvBox (x0, y0, x1, y1)
+    DIM t AS LONG, p, k, vx, vy, vz, sx, sy, whole
+    x0 = vW: y0 = vH: x1 = -1: y1 = -1
+    IF rOrtho THEN whole = -1
+    FOR t = 1 TO holeTN
+        IF whole THEN EXIT FOR
+        p = tPart(t)
+        IF p >= 1 AND p <= pN THEN
+            IF ovWant(p) THEN
+                FOR k = 0 TO 2
+                    SELECT CASE k
+                        CASE 0: CamSpace tA(t).x, tA(t).y, tA(t).z, vx, vy, vz
+                        CASE 1: CamSpace tB(t).x, tB(t).y, tB(t).z, vx, vy, vz
+                        CASE ELSE: CamSpace tC(t).x, tC(t).y, tC(t).z, vx, vy, vz
+                    END SELECT
+                    IF vz < rNear THEN whole = -1: EXIT FOR
+                    sx = cMidX + vx / vz * cFoc: sy = cMidY - vy / vz * cFoc
+                    IF sx < x0 THEN x0 = sx
+                    IF sx > x1 THEN x1 = sx
+                    IF sy < y0 THEN y0 = sy
+                    IF sy > y1 THEN y1 = sy
+                NEXT
+            END IF
+        END IF
+    NEXT
+    IF whole THEN x0 = 0: y0 = 0: x1 = vW: y1 = vH
+    x0 = INT(x0) - 2: y0 = INT(y0) - 2: x1 = INT(x1) + 2: y1 = INT(y1) + 2
+    IF x0 < 1 THEN x0 = 1
+    IF y0 < 1 THEN y0 = 1
+    IF x1 > vW - 2 THEN x1 = vW - 2
+    IF y1 > vH - 2 THEN y1 = vH - 2
+END SUB
+$CHECKING:ON
 
 ' What's selected (the picked points in E, the shape being put down) shadowed
 ' on the floor and the two walls: its box seen straight from below and from

@@ -439,9 +439,26 @@ at 64 px drawn 4x and shrunk (textured faces drawn textured), lit `eye*.55 + up*
 
 ## Build
 
-`~/git/qb64pe/qb64pe -w -x bu1ld0r.bas -o bu1ld0r.run` - check it by its
-`Output:` line (grep `Output:|in use|LINE|Caused`): QB64PE reports most
-mistakes as `Name already in use` plus a `LINE nnnn:`, not "error".
+`~/git/qb64pe/qb64pe -w -x bu1ld0r.bas -o bu1ld0r.run -f:OptimizeCppProgram=true`
+- check it by its `Output:` line (grep `Output:|in use|LINE|Caused`): QB64PE
+reports most mistakes as `Name already in use` plus a `LINE nnnn:`, not
+"error". The flag (-O2, ~70 s a build; CI and the release skill use it) makes
+frames ~1.75x faster; leave it off for quick compile checks.
+
+## Speed
+
+Everything is drawn by the CPU (the GPU only shows the finished picture).
+`--prof` writes prof.txt every 60 frames: ms per stage (`PrAdd k` marks, names
+in `PrFrame`); `--spin` turns the camera a degree a frame, `--walk 1|2` starts
+in WALK / FLY, `--yaw N` looks that way. Time on headless weston (the real GPU),
+not Xvfb. Learned: `_PUTIMAGE` of a whole image is per pixel (10 ms) -
+`ImgBlit` copies rows with _MEMCOPY; the backdrop is made once a size (`bdImg&`);
+`FillTri`/`FillTriT` work out each row's covered span first (`SpanCut`) instead
+of testing every pixel of the box; `$CHECKING:OFF` round the fills and
+`ViewOutlines`; the outlines scan only the outlined parts' screen box (`OvBox`)
+and look a part up only where the triangle changes. A GL path (neon-caster's
+lessons: SUB _GL, arrays not per-call, no glGet / glFinish / readbacks) is
+the next big step if it's ever needed.
 
 ## Testing
 
@@ -458,6 +475,12 @@ Never `--neon` the real game folder in a test (use a scratch copy of
 `neon-caster/models` and `hd/models`). No GUI launches from subagents. Run
 long tests in the background, one at a time (`nice`, `LP_NUM_THREADS=2`).
 Clean up after: `ps -eo pid,etime,args | grep -E 'bu1ld0r|Xvfb'` - and stop only the test ones.
+README screenshots (`docs/screenshots/`, 1728x1080): Xvfb `:99` at 1920x1200,
+the test copy run from its own folder (`models/X.bld` so the status line says
+a short path), `xdotool windowmove $W 0 0`, the pointer parked off the window
+(`xdotool mousemove 1850 1150`), `ffmpeg -f x11grab -video_size 1920x1200 -i
+:99.0 -frames:v 1 -vf crop=1728:1080:0:0`. `xdotool key r` after `type` once
+gave "e" (its remapped keycodes): type letters with `typ`.
 
 ## Git
 

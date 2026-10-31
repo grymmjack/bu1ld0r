@@ -53,7 +53,7 @@ jobs:
           test -x ./qb64pe || { echo "::error::qb64pe compiler was not built"; exit 1; }
 
       - name: Compile bu1ld0r
-        run: xvfb-run -a ./qb64pe/qb64pe -w -x -o bu1ld0r.run bu1ld0r.bas
+        run: xvfb-run -a ./qb64pe/qb64pe -w -x -f:OptimizeCppProgram=true -o bu1ld0r.run bu1ld0r.bas
 
       - name: Dump C++ compile log on failure
         if: failure()
@@ -106,7 +106,7 @@ jobs:
           test -x ./qb64pe || { echo "::error::qb64pe compiler was not built"; exit 1; }
 
       - name: Compile bu1ld0r
-        run: ./qb64pe/qb64pe -w -x -o bu1ld0r-mac bu1ld0r.bas
+        run: ./qb64pe/qb64pe -w -x -f:OptimizeCppProgram=true -o bu1ld0r-mac bu1ld0r.bas
 
       - name: Dump C++ compile log on failure
         if: failure()
@@ -166,7 +166,7 @@ jobs:
 
       - name: Compile bu1ld0r
         shell: cmd
-        run: qb64pe\qb64pe.exe -w -x -o bu1ld0r.exe bu1ld0r.bas
+        run: qb64pe\qb64pe.exe -w -x -f:OptimizeCppProgram=true -o bu1ld0r.exe bu1ld0r.bas
 
       - name: Dump C++ compile log on failure
         if: failure()

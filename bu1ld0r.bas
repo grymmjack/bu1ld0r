@@ -23,12 +23,20 @@ $RESIZE:ON
 
 AppStart
 DO
+    PrAdd 0
     InputFrame
     UiFrame
+    PrAdd 7
     IF meshDirty THEN MeshBuild
-    IF viewDirty THEN ViewRender
+    PrAdd 8
+    IF argSpin THEN camYaw = camYaw + 1: viewDirty = -1
+    IF viewDirty THEN ViewRender: prV = prV + 1
+    PrAdd 0
     UiDraw
+    PrAdd 9
     Present
+    PrAdd 10
+    PrFrame
     WindowFrame
     UiAfterFrame
     _LIMIT 60

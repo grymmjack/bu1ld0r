@@ -316,7 +316,7 @@ SUB FpDraw
     LINE (cx - 6, cy - 1)-(cx + 6, cy - 1), cHi: LINE (cx - 1, cy - 6)-(cx - 1, cy + 6), cHi
     IF fpOn = 1 THEN
         u$ = SnapName$(SnapIdx(snapStep)): IF snapStep <= 0 THEN u$ = "1/64"
-        t$ = "WALK   eye " + Fmt$(fpH#) + "   jump" + STR$(fpJN) + " x " + u$ + " = " + Fmt$(fpJN * FpUnit#) + "   at " + FpN$(fpX#) + ", " + FpN$(fpY#) + ", " + FpN$(fpZ#) + IIFS$(fpGround, "", "   (in the air)")
+        t$ = "WALK   eye " + FpN$(fpH#) + "   jump" + STR$(fpJN) + " x " + u$ + " = " + Fmt$(fpJN * FpUnit#) + "   at " + FpN$(fpX#) + ", " + FpN$(fpY#) + ", " + FpN$(fpZ#) + IIFS$(fpGround, "", "   (in the air)")
         Txt vX0 + 8, vY0 + vH - 46, t$, cHi
         Txt vX0 + 8, vY0 + vH - 26, "WASD move  Shift run  Space jump  wheel: taller/shorter  [ ]: jump  1-5: grid  Tab: fly  Esc: back", cDim
     ELSE

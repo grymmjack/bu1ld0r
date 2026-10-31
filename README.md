@@ -31,14 +31,16 @@ shape made thick, ready to extrude, inset and bevel. Draw your own flat
 shapes with the pen, or type text in any TrueType font: each letter a part
 of its own. MERGE joins overlapping parts into one solid. Reference
 pictures on the ground and the walls behind let you model over a drawing
-or a photo.
+or a photo. Smart guides line a dragged part up with the others as you
+move it, and WALK / FLY take you through the model on foot or flying, to
+see it from inside, at its own scale.
 
 Coming next (see [PLAN.md](PLAN.md)): painting straight onto the model, in 3D.
 
 ## Build
 
 ```
-~/git/qb64pe/qb64pe -w -x bu1ld0r.bas -o bu1ld0r.run
+~/git/qb64pe/qb64pe -w -x bu1ld0r.bas -o bu1ld0r.run -f:OptimizeCppProgram=true
 ```
 
 ## Workflows
@@ -103,6 +105,13 @@ E turns any of them into a mesh part, to edit like any other.
   In E it puts the picked points - or the picked edges' and faces'
   corners, or every point when none are picked - on the nearest grid
   lines; points that land together become one.
+- SMART GUIDES ([SG] in the top bar, on by default): while you drag, the
+  selection's sides and middle snap to other parts' - lined up, or sitting
+  on or beside them - and to the middle of the world, before the grid. A
+  dashed outline on each side that lined up, and a line between them,
+  show what met what. Alt: free.
+
+![SMART GUIDES: a toggle dragged across the desk, lined up with the other one - their sides dashed in magenta](docs/screenshots/guides.png)
 
 ### Prefabs
 
@@ -142,6 +151,9 @@ E turns any of them into a mesh part, to edit like any other.
    round thing's outside walls: all of them); Ctrl+Shift+click adds it.
    Click picks, Shift adds, drag a box round several. In edges,
    Ctrl+click picks an edge's whole loop (Shift+Ctrl adds another).
+
+   ![PLANES in E: one Ctrl+click on a cylinder's side picks all 24 planes round it](docs/screenshots/planes.png)
+
 3. Drag what's picked to move it, or use the panel: CENTRE, TURN BY,
    SIZE, PUSH OUT.
 4. The tools: EXTRUDE (E), INSET (I), BEVEL (B), DIVIDE across / down
@@ -169,6 +181,8 @@ E turns any of them into a mesh part, to edit like any other.
    spot made one, cracks and holes closed (a ring-shaped gap gets a ring
    of faces), faces turned out. A point with no face can't exist: it's
    dropped whenever the part is saved back.
+
+   ![INSIDE on a cylinder with a side face taken away: its inner walls, seen from behind, in red; then MEND closes the gap](docs/screenshots/inside.png)
    The palette colours the picked faces. Esc lets go, then leaves.
 
 The recess on the front here is an INSET face pushed in with PUSH OUT.
@@ -304,6 +318,8 @@ Ctrl+S saves it as a model.
 
 ### Your own shapes: the pen and text
 
+![TEXT: "bu1ld0r" standing, each letter a part; in front, the pen half way round an outline, one corner dragged into a curve](docs/screenshots/pen.png)
+
 - **The pen (P):** click corners on the ground (click and drag for a
   curve); click the first point again and the outline becomes a flat part,
   ready to thicken, extrude and bevel.
@@ -319,6 +335,8 @@ Ctrl+S saves it as a model.
 
 ### Reference pictures
 
+![Reference pictures: a blueprint of the console's front on the back wall and its top on the ground](docs/screenshots/refs.png)
+
 The view's top right has **[REF] (slider) [TR] [B] [L] [R]**: a picture
 on the ground (B), on the back wall (L) or on the side wall (R), drawn
 see-through behind the model so you can build over it from any angle.
@@ -332,12 +350,27 @@ see-through behind the model so you can build over it from any angle.
   right-click REF takes it off.
 - They're saved with the model.
 
+### Walking and flying through it
+
+![WALK: up to the console at eye level, the read-out at the bottom](docs/screenshots/walk.png)
+
+- V (or WALK at the view's bottom left) puts you on your feet, looking
+  level: the mouse looks round, WASD or the arrows walk, Shift runs. The
+  ground and the model's tops hold you up, walls stop you, low ledges are
+  stepped up, and Space jumps - [ ] set how many grid steps high (16 to
+  start), so you can find out what a player could climb.
+- The wheel makes you taller or shorter. Select a part first, or name one
+  `player`, and it becomes your body: feet on its bottom, eyes near its top.
+- Shift+V (FLY) goes straight through anything: E / Space up, Q / C down,
+  the wheel for speed. Tab switches between them.
+- Esc, V or a right click goes back to orbiting, exactly as you left it.
+
 ### Help in the program
 
-![HELP, on its EDIT page](docs/screenshots/help.png)
+![HELP, on its WALK, FLY page](docs/screenshots/help.png)
 
 H (or F1) shows every key by topic: click a topic, or Left / Right, or
-1-9. The same list is below.
+its number. A long page scrolls (the wheel, PgUp / PgDn). The same list is below.
 
 ## Keys
 
@@ -882,6 +915,9 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
   - Right-click one in the bin for EDIT IT or RENAME / MOVE: type a new name, with a folder in it to move it (`panels/big-toggle`). Every model and prefab that uses it is changed to match.
   - U (UNLINK): a prefab put down becomes the model's own parts, as a group (a scale that can't be put on one part makes it a mesh part).
   - A prefab put down has a TINT: the panel's colour, with AMOUNT how far its colours go towards it.
+- **Smart guides** ([SG] in the top bar, on at first; `smart_guides=` in bu1ld0r.cfg): when a drag starts, the selection's box and every other part's box are taken (from the model as drawn, holes and prefab uses included), plus the world's middle. Each way the drag can go, the selection's low side, middle and high side are held against the others' (low or high with low or high: lined up, sitting on, or beside; middle with middle). Within 7 pixels on screen it snaps there, before the grid; the grid snaps whatever didn't line up. Every side that lines up is drawn dashed on its plane, the other part's and the selection's, with a line between. Alt: free.
+- **WALK and FLY** (V, Shift+V, or the buttons at the view's bottom left): the mouse looks round (the pointer hidden), WASD or the arrows move, Shift faster. WALK has gravity: you stand on the ground and the model's tops, walls stop you (rays at your feet, waist and eyes), a ledge under a fifth of your eye height is stepped up, and Space jumps the number of grid steps [ ] sets (16 at first; 1-5 pick the grid, so 16 x 1/32 is half a cell). The wheel sets your eye height. With parts selected - or a part named `player` in the parts list - that's your body: you start where it stands, your eyes 92% up it, as wide as it, and it isn't drawn or bumped into. FLY goes through anything: E or Space up, Q or C down, the wheel how fast. Tab switches; Esc, V or a right click goes back to orbiting with the view exactly as it was. Kept in bu1ld0r.cfg: `walk_eye=`, `walk_jump=`, `fly_speed=`.
+- **Speed:** everything is drawn by the program itself, not the graphics card. Close up, a frame takes about 20 ms (50 a second) on a laptop: a triangle fills only the pixels across each row it covers, whole pictures are copied a row at a time, and outlines are looked for only round the parts outlined. Release builds are compiled optimized (`-f:OptimizeCppProgram=true`), which is about 1.75 times faster again.
 - **The window:** drag it to any size; once you let go, everything is laid out again to fill it (the 3D view takes the room). The UI is drawn at a whole-number scale, so it stays crisp: 2x on a 4K display, chosen for you at first. Ctrl+ and Ctrl- change it. F11 (or Alt+Enter) is full screen. The size and scale are kept in `bu1ld0r.cfg` (`window=`, `ui_scale=`), and whether the parts list is shown (`parts_list=`).
 - **Flip, grow, turn:** with parts selected the panel has FLIP X / Y / Z (each part mirrored in its own axes, about its own middle; a shape that isn't the same mirrored - a cone flipped in Y - becomes a mesh part to do it), GROW / SHRINK (a quarter bigger or smaller, standing where it stands; several grow as one piece) and TURN L / R (90 degrees round the up axis, Shift: 15).
 - **Typing in a box** (the name, the sizes, the pictures path...): click puts the cursor there (double click picks all of it, drag or Shift+click picks some); Left / Right / Home / End move it (Shift picks, Ctrl goes a word at a time); Ctrl+A / C / X / V; Backspace and Delete (Ctrl: a word).
@@ -957,7 +993,7 @@ loses detail - look at it with T before switching it on for the export.
 ## Command line
 
 ```
-bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N]
+bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N] [--prof] [--spin] [--walk 1|2] [--yaw N]
 ```
 
 `--drop FILE.png` acts as if the file were dropped on the window (where
@@ -969,3 +1005,8 @@ the pointer is a moment later: tests). `--open neon:crate` opens the game's crat
 `--export`, `--shot` and `--quit` act a few frames after start-up, for tests.
 `--bench N` makes the opened model's triangles N times (holes cut each
 time) and writes how long one took to `bench.txt`.
+
+`--prof` writes how long each stage of drawing takes (ms a frame) to
+`prof.txt` every 60 frames; `--spin` turns the camera a degree a frame,
+`--walk 1` / `--walk 2` start in WALK / FLY and `--yaw N` looks that way -
+for timing.
