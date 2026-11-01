@@ -144,6 +144,7 @@ SUB ModelWrite (f$)
         IF pKind(i) = K_MESH THEN MeshLines fh, pMesh(i)
     NEXT
     RefLines fh ' (its reference pictures)
+    FxLines fh ' (FIX THIS: the findings left as they are)
     CLOSE #fh
     PicSaveDirty ' (pictures painted on the model)
 END SUB
@@ -300,7 +301,7 @@ END SUB
 SUB ModelNew
     maOn = 0: maDrag = 0
     pN = 0: undoN = 0: redoN = 0: mdlName$ = "untitled": mdlPf$ = "": mdlBudget = TD_BUDGET
-    RefClearAll
+    RefClearAll: mdlLeave$ = ""
     ModelChanged: mdlDirty = 0: MeshGc
 END SUB
 
@@ -345,6 +346,7 @@ SUB ModelLoad (f$)
     fh = FREEFILE: OPEN p$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
     ModelFromText t$
     RefFromText t$
+    FxFromText t$
     mdlPf$ = "" ' (PfEdit says when it's a prefab)
     i = _INSTRREV(p$, "/"): mdlName$ = MID$(p$, i + 1): IF LCASE$(RIGHT$(mdlName$, 4)) = ".bld" THEN mdlName$ = LEFT$(mdlName$, LEN(mdlName$) - 4) ' (named for its file)
     undoN = 0: redoN = 0

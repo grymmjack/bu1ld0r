@@ -1,0 +1,1101 @@
+''
+' bu1ld0r - UI/FIX.BM
+' =============================================================================
+' FIX THIS: see FIX.BI.
+
+' ---------------------------------------------------------------- the findings' names
+
+FUNCTION FxWord$ (k)
+    SELECT CASE k
+        CASE 1: FxWord$ = "smear"
+        CASE 2: FxWord$ = "size"
+        CASE 3: FxWord$ = "angle"
+        CASE 4: FxWord$ = "asym"
+        CASE 5: FxWord$ = "tris"
+        CASE 6: FxWord$ = "pics"
+        CASE 7: FxWord$ = "repeats"
+    END SELECT
+END FUNCTION
+
+FUNCTION FxName$ (k)
+    SELECT CASE k
+        CASE 1: FxName$ = "SMEAR"
+        CASE 2: FxName$ = "PIXEL SIZE"
+        CASE 3: FxName$ = "ANGLES"
+        CASE 4: FxName$ = "SYMMETRY"
+        CASE 5: FxName$ = "TRIANGLES"
+        CASE 6: FxName$ = "PICTURES"
+        CASE 7: FxName$ = "REPEATS"
+    END SELECT
+END FUNCTION
+
+' A finding's number from its word (or its number): 0 if none
+FUNCTION FxOf (w$)
+    DIM k
+    FOR k = 1 TO FX_N
+        IF LCASE$(w$) = FxWord$(k) OR w$ = LTRIM$(STR$(k)) THEN FxOf = k: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+' Left as it is (LEAVE)?
+FUNCTION FxLeft (k)
+    FxLeft = (INSTR(mdlLeave$, " " + FxWord$(k) + " ") > 0)
+END FUNCTION
+
+SUB FxLeaveToggle (k)
+    DIM w$, i
+    w$ = " " + FxWord$(k) + " "
+    IF FxLeft(k) THEN
+        i = INSTR(mdlLeave$, w$): mdlLeave$ = LEFT$(mdlLeave$, i) + MID$(mdlLeave$, i + LEN(w$))
+        Msg FxName$(k) + ": counted again"
+    ELSE
+        IF LEN(mdlLeave$) = 0 THEN mdlLeave$ = " "
+        mdlLeave$ = mdlLeave$ + FxWord$(k) + " "
+        Msg FxName$(k) + ": left as it is - out of the score (saved with the model)"
+    END IF
+    IF LEN(LTRIM$(mdlLeave$)) = 0 THEN mdlLeave$ = ""
+    mdlDirty = -1: FxScoreSum
+END SUB
+
+' The score, as the report card's: SMEAR + SYMMETRY + (PIXEL SIZE + ANGLES) / 2 + how far over budget
+SUB FxScoreSum
+    DIM s!
+    IF NOT FxLeft(1) THEN s! = s! + fxV(1)
+    IF NOT FxLeft(4) THEN s! = s! + fxV(4)
+    IF NOT FxLeft(2) THEN s! = s! + fxV(2) / 2
+    IF NOT FxLeft(3) THEN s! = s! + fxV(3) / 2
+    IF NOT FxLeft(5) THEN
+        IF fxOver > 200 THEN s! = s! + 200 ELSE s! = s! + fxOver
+    END IF
+    fxScore = s!
+END SUB
+
+' Worth fixing?
+FUNCTION FxBad (k)
+    SELECT CASE k
+        CASE 1: FxBad = (fxV(1) >= 1)
+        CASE 2: FxBad = (fxV(2) >= 5)
+        CASE 3: FxBad = (fxV(3) >= 1)
+        CASE 4: FxBad = (fxV(4) >= 2)
+        CASE 5: FxBad = (fxOver > 0)
+        CASE 6: FxBad = (fxV(6) > 1)
+        CASE 7: FxBad = (fxV(7) >= 1)
+    END SELECT
+END FUNCTION
+
+FUNCTION FxPct$ (v!)
+    IF v! > 0 AND v! < 10 THEN FxPct$ = LTRIM$(STR$(INT(v! * 10 + .5) / 10)) + "%" ELSE FxPct$ = LTRIM$(STR$(INT(v! + .5))) + "%"
+END FUNCTION
+
+FUNCTION FxVal$ (k)
+    SELECT CASE k
+        CASE 5: FxVal$ = LTRIM$(STR$(fxTris)) + " /" + STR$(fxBudget)
+        CASE 6: FxVal$ = LTRIM$(STR$(fxV(6)))
+        CASE ELSE: FxVal$ = FxPct$(fxV(k))
+    END SELECT
+END FUNCTION
+
+' All of it in a line (the port's answer)
+FUNCTION FxStatus$
+    DIM t$, k
+    t$ = "score " + LTRIM$(STR$(INT(fxScore + .5)))
+    FOR k = 1 TO FX_N
+        IF k = 5 THEN
+            t$ = t$ + " tris " + LTRIM$(STR$(fxTris)) + "/" + LTRIM$(STR$(fxBudget))
+        ELSEIF k = 6 THEN
+            t$ = t$ + " pics " + LTRIM$(STR$(fxV(6)))
+        ELSE
+            t$ = t$ + " " + FxWord$(k) + " " + LTRIM$(STR$(INT(fxV(k) * 10 + .5) / 10))
+        END IF
+    NEXT
+    t$ = t$ + " plain " + LTRIM$(STR$(INT(fxPlain + .5))) + " colour " + LTRIM$(STR$(INT(fxColour + .5)))
+    t$ = t$ + " pxcell " + LTRIM$(STR$(INT(fxPxc + .5))) + " twinless " + LTRIM$(STR$(fxTwinless))
+    IF LEN(LTRIM$(mdlLeave$)) THEN t$ = t$ + " left" + RTRIM$(mdlLeave$)
+    FxStatus$ = t$
+END FUNCTION
+
+' ---------------------------------------------------------------- in the .bld
+
+SUB FxLines (fh)
+    IF LEN(LTRIM$(mdlLeave$)) THEN PRINT #fh, "fixleave" + RTRIM$(mdlLeave$)
+END SUB
+
+SUB FxFromText (t$)
+    DIM i AS LONG, j AS LONG, l$, k
+    mdlLeave$ = ""
+    i = INSTR(CHR$(10) + t$, CHR$(10) + "fixleave ")
+    IF i = 0 THEN EXIT SUB
+    j = INSTR(i, t$, CHR$(10)): IF j = 0 THEN j = LEN(t$) + 1
+    l$ = MID$(t$, i + 9, j - i - 9)
+    IF RIGHT$(l$, 1) = CHR$(13) THEN l$ = LEFT$(l$, LEN(l$) - 1)
+    l$ = " " + LCASE$(l$) + " "
+    FOR k = 1 TO FX_N
+        IF INSTR(l$, " " + FxWord$(k) + " ") THEN mdlLeave$ = IIFS$(LEN(mdlLeave$), mdlLeave$, " ") + FxWord$(k) + " "
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- measuring
+
+SUB FxNiceSetup
+    DIM a, b, c, l#
+    IF fxQN THEN EXIT SUB
+    FOR a = -1 TO 1
+        FOR b = -1 TO 1
+            FOR c = -1 TO 1
+                IF a <> 0 OR b <> 0 OR c <> 0 THEN
+                    l# = SQR(a * a + b * b + c * c)
+                    fxQX(fxQN) = a / l#: fxQY(fxQN) = b / l#: fxQZ(fxQN) = c / l#: fxQN = fxQN + 1
+                END IF
+            NEXT
+        NEXT
+    NEXT
+END SUB
+
+' Degrees from the nearest square / 45-degree way (q: which one) - n of length 1
+FUNCTION FxOff# (nx#, ny#, nz#, q AS LONG)
+    DIM k, d#, best#
+    FxNiceSetup
+    best# = -1: q = 0
+    FOR k = 0 TO fxQN - 1
+        d# = ABS(nx# * fxQX(k) + ny# * fxQY(k) + nz# * fxQZ(k))
+        IF d# > best# THEN best# = d#: q = k
+    NEXT
+    IF best# > 1 THEN best# = 1
+    FxOff# = _ACOS(best#) * 180 / 3.14159265358979#
+END FUNCTION
+
+' Pixels a cell along triangle t's two main ways on its picture (s1 >= s2): 0 if it's flat
+FUNCTION FxAxes (t AS LONG, tw AS LONG, th AS LONG, s1#, s2#)
+    DIM e1x#, e1y#, e1z#, e2x#, e2y#, e2z#, nx#, ny#, nz#, nl#, l1#, ax#, ay#, az#, bx#, by#, bz#
+    DIM x1#, x2#, y2#, u1#, v1#, u2#, v2#, dt#, i11#, i12#, i22#, m11#, m12#, m21#, m22#, s#, d#, r#
+    e1x# = tB(t).x - tA(t).x: e1y# = tB(t).y - tA(t).y: e1z# = tB(t).z - tA(t).z
+    e2x# = tC(t).x - tA(t).x: e2y# = tC(t).y - tA(t).y: e2z# = tC(t).z - tA(t).z
+    nx# = e1y# * e2z# - e1z# * e2y#: ny# = e1z# * e2x# - e1x# * e2z#: nz# = e1x# * e2y# - e1y# * e2x#
+    nl# = SQR(nx# * nx# + ny# * ny# + nz# * nz#): l1# = SQR(e1x# * e1x# + e1y# * e1y# + e1z# * e1z#)
+    IF nl# < 1E-12 OR l1# < 1E-12 THEN EXIT FUNCTION
+    ax# = e1x# / l1#: ay# = e1y# / l1#: az# = e1z# / l1#
+    nx# = nx# / nl#: ny# = ny# / nl#: nz# = nz# / nl#
+    bx# = ny# * az# - nz# * ay#: by# = nz# * ax# - nx# * az#: bz# = nx# * ay# - ny# * ax#
+    x1# = l1#: x2# = e2x# * ax# + e2y# * ay# + e2z# * az#: y2# = e2x# * bx# + e2y# * by# + e2z# * bz#
+    u1# = (tU(3 * t + 1) - tU(3 * t)) * tw: v1# = (tW(3 * t + 1) - tW(3 * t)) * th
+    u2# = (tU(3 * t + 2) - tU(3 * t)) * tw: v2# = (tW(3 * t + 2) - tW(3 * t)) * th
+    dt# = x1# * y2#
+    IF ABS(dt#) < 1E-15 THEN EXIT FUNCTION
+    i11# = y2# / dt#: i12# = -x2# / dt#: i22# = x1# / dt# ' (the plane's inverse: y1 is 0)
+    m11# = u1# * i11#: m12# = u1# * i12# + u2# * i22#
+    m21# = v1# * i11#: m22# = v1# * i12# + v2# * i22#
+    s# = m11# * m11# + m12# * m12# + m21# * m21# + m22# * m22#
+    d# = m11# * m22# - m12# * m21#
+    r# = s# * s# - 4 * d# * d#: IF r# < 0 THEN r# = 0
+    r# = SQR(r#)
+    s1# = (s# + r#) / 2: IF s1# < 0 THEN s1# = 0
+    s2# = (s# - r#) / 2: IF s2# < 0 THEN s2# = 0
+    s1# = SQR(s1#): s2# = SQR(s2#)
+    FxAxes = -1
+END FUNCTION
+
+' Are the pixels triangle t's spots cover (its box on picture k) all one colour, within 24 levels?
+FUNCTION FxPlainT (t AS LONG, k)
+    DIM w AS LONG, h AS LONG, x0 AS LONG, x1 AS LONG, y0 AS LONG, y1 AS LONG, x AS LONG, y AS LONG, xx AS LONG, yy AS LONG
+    DIM c AS _UNSIGNED LONG, n AS LONG, r, g, b, rl, rh, gl, gh, bl, bh, u0#, u1#, v0#, v1#, i
+    w = picW(k): h = picH(k)
+    u0# = tU(3 * t): u1# = u0#: v0# = tW(3 * t): v1# = v0#
+    FOR i = 1 TO 2
+        IF tU(3 * t + i) < u0# THEN u0# = tU(3 * t + i)
+        IF tU(3 * t + i) > u1# THEN u1# = tU(3 * t + i)
+        IF tW(3 * t + i) < v0# THEN v0# = tW(3 * t + i)
+        IF tW(3 * t + i) > v1# THEN v1# = tW(3 * t + i)
+    NEXT
+    x0 = INT(u0# * w): x1 = -INT(-u1# * w) - 1: IF x1 < x0 THEN x1 = x0
+    y0 = INT(v0# * h): y1 = -INT(-v1# * h) - 1: IF y1 < y0 THEN y1 = y0
+    rl = 255: gl = 255: bl = 255
+    FOR y = y0 TO y1
+        yy = y MOD h: IF yy < 0 THEN yy = yy + h
+        FOR x = x0 TO x1
+            xx = x MOD w: IF xx < 0 THEN xx = xx + w
+            c = picPix(picOff(k) + yy * w + xx)
+            IF _ALPHA32(c) > 0 THEN
+                n = n + 1
+                r = _RED32(c): g = _GREEN32(c): b = _BLUE32(c)
+                IF r < rl THEN rl = r
+                IF r > rh THEN rh = r
+                IF g < gl THEN gl = g
+                IF g > gh THEN gh = g
+                IF b < bl THEN bl = b
+                IF b > bh THEN bh = b
+                IF n > 1 THEN
+                    IF rh - rl > 24 OR gh - gl > 24 OR bh - bl > 24 THEN EXIT FUNCTION
+                END IF
+            END IF
+        NEXT
+    NEXT
+    FxPlainT = -1
+END FUNCTION
+
+' The pixels' colour in a box of picture k (spots 0 to 1): the solid ones' average (dflt: none there)
+FUNCTION FxAvgCol~& (k, u0#, v0#, u1#, v1#, dflt AS _UNSIGNED LONG)
+    DIM w AS LONG, h AS LONG, x0 AS LONG, x1 AS LONG, y0 AS LONG, y1 AS LONG, x AS LONG, y AS LONG, xx AS LONG, yy AS LONG
+    DIM c AS _UNSIGNED LONG, n AS LONG, sx AS LONG, sy AS LONG, r#, g#, b#
+    FxAvgCol~& = dflt
+    IF k <= 0 THEN EXIT FUNCTION
+    w = picW(k): h = picH(k): IF w = 0 OR h = 0 THEN EXIT FUNCTION
+    x0 = INT(u0# * w): x1 = -INT(-u1# * w) - 1: IF x1 < x0 THEN x1 = x0
+    y0 = INT(v0# * h): y1 = -INT(-v1# * h) - 1: IF y1 < y0 THEN y1 = y0
+    sx = (x1 - x0) \ 256 + 1: sy = (y1 - y0) \ 256 + 1
+    FOR y = y0 TO y1 STEP sy
+        yy = y MOD h: IF yy < 0 THEN yy = yy + h
+        FOR x = x0 TO x1 STEP sx
+            xx = x MOD w: IF xx < 0 THEN xx = xx + w
+            c = picPix(picOff(k) + yy * w + xx)
+            IF _ALPHA32(c) >= 128 THEN n = n + 1: r# = r# + _RED32(c): g# = g# + _GREEN32(c): b# = b# + _BLUE32(c)
+        NEXT
+    NEXT
+    IF n > 0 THEN FxAvgCol~& = _RGB32(INT(r# / n + .5), INT(g# / n + .5), INT(b# / n + .5))
+END FUNCTION
+
+SUB FxGrow (lo AS V3, hi AS V3, p AS V3)
+    IF p.x < lo.x THEN lo.x = p.x
+    IF p.y < lo.y THEN lo.y = p.y
+    IF p.z < lo.z THEN lo.z = p.z
+    IF p.x > hi.x THEN hi.x = p.x
+    IF p.y > hi.y THEN hi.y = p.y
+    IF p.z > hi.z THEN hi.z = p.z
+END SUB
+
+' The outline seen from the front (v 0: x, y) or above (v 1: x, z) on a 64 x 64 grid over the
+' box lo - hi: fxG; the % of it that isn't its own mirror image (x flipped about the box's middle).
+' onlyP: that part's triangles alone (0: the model's)
+FUNCTION FxOutline! (v, lo AS V3, hi AS V3, onlyP)
+    DIM sx#, sy#, y0#, span#, cell#, nx, ny, t AS LONG, i, j, i0, i1, j0, j1, x#, y#
+    DIM pax#, pay#, pbx#, pby#, pcx#, pcy#, ar#, w0#, w1#, w2#, f AS LONG, miss AS LONG
+    sx# = hi.x - lo.x
+    IF v = 0 THEN sy# = hi.y - lo.y: y0# = lo.y ELSE sy# = hi.z - lo.z: y0# = lo.z
+    span# = sx#: IF sy# > span# THEN span# = sy#
+    IF span# < 1E-9 THEN span# = 1E-9
+    cell# = span# / 64
+    nx = -INT(-(sx# / cell# - 1E-9)): IF nx < 1 THEN nx = 1
+    IF nx > 64 THEN nx = 64
+    ny = -INT(-(sy# / cell# - 1E-9)): IF ny < 1 THEN ny = 1
+    IF ny > 64 THEN ny = 64
+    fxGW(v) = nx: fxGH(v) = ny
+    FOR i = 0 TO 63
+        FOR j = 0 TO 63: fxG(v, i, j) = 0: NEXT
+    NEXT
+    FOR t = 1 TO sceneTN
+        IF onlyP > 0 THEN
+            IF tPart(t) <> onlyP THEN _CONTINUE
+        END IF
+        pax# = (tA(t).x - lo.x) / cell#: pbx# = (tB(t).x - lo.x) / cell#: pcx# = (tC(t).x - lo.x) / cell#
+        IF v = 0 THEN
+            pay# = (tA(t).y - y0#) / cell#: pby# = (tB(t).y - y0#) / cell#: pcy# = (tC(t).y - y0#) / cell#
+        ELSE
+            pay# = (tA(t).z - y0#) / cell#: pby# = (tB(t).z - y0#) / cell#: pcy# = (tC(t).z - y0#) / cell#
+        END IF
+        ar# = (pbx# - pax#) * (pcy# - pay#) - (pcx# - pax#) * (pby# - pay#)
+        IF ABS(ar#) >= 1E-12 THEN
+            x# = pax#: IF pbx# < x# THEN x# = pbx#
+            IF pcx# < x# THEN x# = pcx#
+            i0 = INT(x#): IF i0 < 0 THEN i0 = 0
+            x# = pax#: IF pbx# > x# THEN x# = pbx#
+            IF pcx# > x# THEN x# = pcx#
+            i1 = INT(x#): IF i1 > nx - 1 THEN i1 = nx - 1
+            y# = pay#: IF pby# < y# THEN y# = pby#
+            IF pcy# < y# THEN y# = pcy#
+            j0 = INT(y#): IF j0 < 0 THEN j0 = 0
+            y# = pay#: IF pby# > y# THEN y# = pby#
+            IF pcy# > y# THEN y# = pcy#
+            j1 = INT(y#): IF j1 > ny - 1 THEN j1 = ny - 1
+            FOR j = j0 TO j1
+                y# = j + .5
+                FOR i = i0 TO i1
+                    IF fxG(v, i, j) = 0 THEN
+                        x# = i + .5
+                        w0# = (pbx# - x#) * (pcy# - y#) - (pcx# - x#) * (pby# - y#)
+                        w1# = (pcx# - x#) * (pay# - y#) - (pax# - x#) * (pcy# - y#)
+                        w2# = (pax# - x#) * (pby# - y#) - (pbx# - x#) * (pay# - y#)
+                        IF (w0# >= 0 AND w1# >= 0 AND w2# >= 0) OR (w0# <= 0 AND w1# <= 0 AND w2# <= 0) THEN fxG(v, i, j) = 1
+                    END IF
+                NEXT
+            NEXT
+        END IF
+    NEXT
+    FOR j = 0 TO ny - 1
+        FOR i = 0 TO nx - 1
+            IF fxG(v, i, j) THEN
+                f = f + 1
+                IF fxG(v, nx - 1 - i, j) = 0 THEN miss = miss + 1: fxG(v, i, j) = 2
+            END IF
+        NEXT
+    NEXT
+    IF f > 0 THEN FxOutline! = 100 * miss / f
+END FUNCTION
+
+' Every finding, on the model as EXPORT makes it (the triangles are made again for the view after)
+SUB FxCheck
+    DIM t AS LONG, k, p, g, q AS LONG, n AS LONG, i AS LONG, main AS LONG
+    DIM nx#, ny#, nz#, nl#, a#, dg#, s1#, s2#, aAll#, aTex#, aCol#, sm#, an#, fl#, rp#, h#, pxc#, offsz#, texd#, acc#, tot#, tol#, best#
+    DIM lo AS V3, hi AS V3, ml AS V3, mh AS V3, outU, nk AS LONG
+    FxNiceSetup
+    fxSig$ = FxSigNow$: fxSigAt$ = fxSig$: fxHave = -1
+    g = ghostOn: ghostOn = 0: meshAll = -1: tidyNow = mdlTidy: MeshBuild
+    REDIM fxPF(pN * 8 + 8) AS _BYTE
+    REDIM fxTF(sceneTN + 1) AS _BYTE
+    REDIM fzD#(sceneTN + 1), fzA#(sceneTN + 1), fzP(sceneTN + 1) AS LONG
+    REDIM fzU#(MAX_PIC), fzC(pN + 1) AS LONG, fzK(sceneTN + 1) AS LONG, fzKA#(sceneTN + 1)
+    IF sceneTN > 0 THEN lo = tA(1): hi = tA(1)
+    FOR t = 1 TO sceneTN
+        FxGrow lo, hi, tA(t): FxGrow lo, hi, tB(t): FxGrow lo, hi, tC(t)
+        p = tPart(t): IF p < 0 OR p > pN THEN p = 0
+        fzC(p) = fzC(p) + 1
+        nx# = (tB(t).y - tA(t).y) * (tC(t).z - tA(t).z) - (tB(t).z - tA(t).z) * (tC(t).y - tA(t).y)
+        ny# = (tB(t).z - tA(t).z) * (tC(t).x - tA(t).x) - (tB(t).x - tA(t).x) * (tC(t).z - tA(t).z)
+        nz# = (tB(t).x - tA(t).x) * (tC(t).y - tA(t).y) - (tB(t).y - tA(t).y) * (tC(t).x - tA(t).x)
+        nl# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+        IF nl# >= 1E-12 THEN
+            a# = nl# / 2: aAll# = aAll# + a#
+            dg# = FxOff#(nx# / nl#, ny# / nl#, nz# / nl#, q)
+            IF dg# >= .75 AND dg# <= 8 THEN nk = nk + 1: fzK(nk) = t: fzKA#(nk) = a# ' (crooked - unless it's a round thing's facet: after)
+            k = tTex(t)
+            IF k > 0 THEN
+                IF picW(k) = 0 THEN k = 0
+            END IF
+            IF k = 0 THEN
+                aCol# = aCol# + a#
+            ELSE
+                fzU#(k) = fzU#(k) + a#
+                outU = 0
+                FOR i = 3 * t TO 3 * t + 2
+                    IF tU(i) < -.001 OR tU(i) > 1.001 OR tW(i) < -.001 OR tW(i) > 1.001 THEN outU = -1
+                NEXT
+                IF outU THEN rp# = rp# + a#: fxPF(p * 8 + 7) = -1
+                IF FxAxes(t, picW(k), picH(k), s1#, s2#) THEN
+                    IF s1# < 1E-6 THEN ' (all three corners on one spot: a colour square)
+                        aCol# = aCol# + a#
+                    ELSE
+                        aTex# = aTex# + a#
+                        IF s2# * 3 < s1# THEN
+                            IF FxPlainT(t, k) THEN fl# = fl# + a# ELSE sm# = sm# + a#: fxPF(p * 8 + 1) = -1: fxTF(t) = 1
+                        ELSE
+                            n = n + 1: fzD#(n) = SQR(s1# * s2#): fzA#(n) = a#: fzP(n) = p
+                        END IF
+                    END IF
+                END IF
+            END IF
+        END IF
+    NEXT
+    ' ANGLES: the crooked ones that aren't a round thing's facets
+    FOR i = 1 TO nk
+        IF FxRoundT(fzK(i)) = 0 THEN
+            an# = an# + fzKA#(i): p = tPart(fzK(i))
+            IF p >= 0 AND p <= pN THEN fxPF(p * 8 + 3) = -1
+        END IF
+    NEXT
+    ' PIXEL SIZE: against the area-weighted middle
+    pxc# = 0: offsz# = 0
+    IF n > 0 THEN
+        FxSortD fzD#(), fzA#(), fzP(), n
+        FOR i = 1 TO n: tot# = tot# + fzA#(i): NEXT
+        FOR i = 1 TO n
+            acc# = acc# + fzA#(i)
+            IF acc# >= tot# / 2 THEN pxc# = fzD#(i): EXIT FOR
+        NEXT
+        FOR i = 1 TO n
+            IF fzD#(i) > pxc# * 1.5 OR fzD#(i) * 1.5 < pxc# THEN offsz# = offsz# + fzA#(i): fxPF(fzP(i) * 8 + 2) = -1
+        NEXT
+    END IF
+    texd# = aTex# - sm# - fl#
+    fxV(1) = 0: fxV(2) = 0: fxV(3) = 0: fxV(7) = 0
+    IF aTex# > 0 THEN fxV(1) = 100 * sm# / aTex#: fxPlain = 100 * fl# / aTex# ELSE fxPlain = 0
+    IF texd# > 0 THEN fxV(2) = 100 * offsz# / texd#
+    IF aAll# > 0 THEN fxV(3) = 100 * an# / aAll#: fxColour = 100 * aCol# / aAll# ELSE fxColour = 0
+    IF aAll# > 0 THEN fxV(7) = 100 * rp# / aAll#
+    fxPxc = pxc#
+    ' PICTURES: how many; SHOW the parts on any but the most used one
+    best# = 0: main = 0: fxV(6) = 0
+    FOR k = 1 TO MAX_PIC
+        IF fzU#(k) > 0 THEN
+            fxV(6) = fxV(6) + 1
+            IF fzU#(k) > best# THEN best# = fzU#(k): main = k
+        END IF
+    NEXT
+    FOR t = 1 TO sceneTN
+        IF tTex(t) > 0 AND tTex(t) <> main THEN
+            p = tPart(t): IF p >= 0 AND p <= pN THEN fxPF(p * 8 + 6) = -1
+        END IF
+    NEXT
+    ' TRIANGLES: the report card's budget (1000, or 200 for a small thing); SHOW the heavy parts
+    fxTris = sceneTN
+    h# = hi.x - lo.x: IF hi.y - lo.y > h# THEN h# = hi.y - lo.y
+    IF hi.z - lo.z > h# THEN h# = hi.z - lo.z
+    IF (sceneTN > 0 AND h# <= .3) OR INSTR(LCASE$(mdlName$), "pickup-") > 0 THEN fxBudget = 200 ELSE fxBudget = 1000
+    fxOver = 0: IF fxTris > fxBudget THEN fxOver = 100 * (fxTris / fxBudget - 1)
+    fxV(5) = fxTris
+    FOR p = 1 TO pN
+        IF fzC(p) * 10 > sceneTN THEN fxPF(p * 8 + 5) = -1
+    NEXT
+    ' SYMMETRY: each part's box and its mirror twin (one across the middle: its own outline);
+    ' then the model's outlines
+    IF lo.x < -1E-6 AND hi.x > 1E-6 THEN fxMidX = 0 ELSE fxMidX = (lo.x + hi.x) / 2
+    fxSpan = hi.x - lo.x: IF hi.y - lo.y > fxSpan THEN fxSpan = hi.y - lo.y
+    IF hi.z - lo.z > fxSpan THEN fxSpan = hi.z - lo.z
+    REDIM fxBL(pN) AS V3, fxBH(pN) AS V3, fxBK(pN) AS _BYTE
+    FOR t = 1 TO holeTN
+        p = tPart(t)
+        IF p >= 1 AND p <= pN THEN
+            IF fxBK(p) = 0 THEN fxBK(p) = -1: fxBL(p) = tA(t): fxBH(p) = tA(t)
+            FxGrow fxBL(p), fxBH(p), tA(t): FxGrow fxBL(p), fxBH(p), tB(t): FxGrow fxBL(p), fxBH(p), tC(t)
+        END IF
+    NEXT
+    tol# = fxSpan * .02: fxTwinless = 0
+    FOR p = 1 TO pN
+        IF fxBK(p) THEN
+            ml = fxBL(p): mh = fxBH(p): ml.x = 2 * fxMidX - fxBH(p).x: mh.x = 2 * fxMidX - fxBL(p).x
+            k = 0
+            FOR i = 1 TO pN
+                IF fxBK(i) THEN
+                    IF ABS(fxBL(i).x - ml.x) <= tol# AND ABS(fxBH(i).x - mh.x) <= tol# AND ABS(fxBL(i).y - ml.y) <= tol# AND ABS(fxBH(i).y - mh.y) <= tol# THEN
+                        IF ABS(fxBL(i).z - ml.z) <= tol# AND ABS(fxBH(i).z - mh.z) <= tol# THEN
+                            IF i <> p THEN k = -1: EXIT FOR
+                            k = 1 ' (itself: across the middle)
+                        END IF
+                    END IF
+                END IF
+            NEXT
+            IF k = 1 THEN ' (its own outline mirrored?)
+                k = -1
+                IF pKind(p) <> K_USE AND pHole(p) = 0 THEN
+                    a# = FxOutline!(0, fxBL(p), fxBH(p), p): dg# = FxOutline!(1, fxBL(p), fxBH(p), p)
+                    IF a# > 2 OR dg# > 2 THEN k = 0
+                END IF
+            END IF
+            IF k = 0 THEN fxPF(p * 8 + 4) = -1: fxTwinless = fxTwinless + 1
+        END IF
+    NEXT
+    fxV(4) = 0
+    IF sceneTN > 0 THEN
+        fxGA(0) = FxOutline!(0, lo, hi, 0): fxGA(1) = FxOutline!(1, lo, hi, 0)
+        fxV(4) = fxGA(0): IF fxGA(1) > fxV(4) THEN fxV(4) = fxGA(1)
+    END IF
+    FxScoreSum
+    ghostOn = g: meshAll = 0: tidyNow = 0: meshDirty = -1: viewDirty = -1: ovDirty = -1
+END SUB
+
+' Is triangle t a round thing's facet? It meets a triangle sharing a corner with it at 0.5 to 20 degrees
+FUNCTION FxRoundT (t AS LONG)
+    DIM s AS LONG, k, j, meets, nx#, ny#, nz#, mx#, my#, mz#, l#, d#
+    DIM c(2) AS V3, e(2) AS V3
+    c(0) = tA(t): c(1) = tB(t): c(2) = tC(t)
+    FxTriN t, nx#, ny#, nz#
+    FOR s = 1 TO sceneTN
+        IF s <> t THEN
+            e(0) = tA(s): e(1) = tB(s): e(2) = tC(s): meets = 0
+            FOR k = 0 TO 2
+                FOR j = 0 TO 2
+                    IF ABS(c(k).x - e(j).x) < .00005 AND ABS(c(k).y - e(j).y) < .00005 AND ABS(c(k).z - e(j).z) < .00005 THEN meets = -1
+                NEXT
+            NEXT
+            IF meets THEN
+                FxTriN s, mx#, my#, mz#
+                d# = nx# * mx# + ny# * my# + nz# * mz#
+                IF d# > 1 THEN d# = 1
+                IF d# < -1 THEN d# = -1
+                d# = _ACOS(d#) * 180 / 3.14159265358979#
+                IF d# > .5 AND d# < 20 THEN FxRoundT = -1: EXIT FUNCTION
+            END IF
+        END IF
+    NEXT
+END FUNCTION
+
+' Triangle t's way out, of length 1 (0 0 0: no area)
+SUB FxTriN (t AS LONG, nx#, ny#, nz#)
+    DIM l#
+    nx# = (tB(t).y - tA(t).y) * (tC(t).z - tA(t).z) - (tB(t).z - tA(t).z) * (tC(t).y - tA(t).y)
+    ny# = (tB(t).z - tA(t).z) * (tC(t).x - tA(t).x) - (tB(t).x - tA(t).x) * (tC(t).z - tA(t).z)
+    nz# = (tB(t).x - tA(t).x) * (tC(t).y - tA(t).y) - (tB(t).y - tA(t).y) * (tC(t).x - tA(t).x)
+    l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+    IF l# > 1E-30 THEN nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l# ELSE nx# = 0: ny# = 0: nz# = 0
+END SUB
+
+' (pairs sorted by the first: Shell's sort)
+SUB FxSortD (d#(), a#(), p() AS LONG, n AS LONG)
+    DIM gp AS LONG, i AS LONG, j AS LONG, td#, ta#, tp AS LONG
+    gp = n \ 2
+    DO WHILE gp > 0
+        FOR i = gp + 1 TO n
+            td# = d#(i): ta# = a#(i): tp = p(i): j = i
+            DO WHILE j > gp
+                IF d#(j - gp) <= td# THEN EXIT DO
+                d#(j) = d#(j - gp): a#(j) = a#(j - gp): p(j) = p(j - gp): j = j - gp
+            LOOP
+            d#(j) = td#: a#(j) = ta#: p(j) = tp
+        NEXT
+        gp = gp \ 2
+    LOOP
+END SUB
+
+' What the check depends on: the model (its meshes by number) and the prefabs
+FUNCTION FxSigNow$
+    FxSigNow$ = ModelText$ + STR$(pfGen)
+END FUNCTION
+
+' ---------------------------------------------------------------- the mode
+
+SUB FxToggle
+    IF fxOn THEN FxStop ELSE FxStart
+END SUB
+
+SUB FxStart
+    IF bvOn OR maOn OR brOn OR pntOn OR penOn OR txOn OR fpOn THEN Msg "FIX THIS: close what's open first": EXIT SUB
+    IF edPart THEN EdOff
+    PlaceStop
+    IF typeField THEN FieldCommit
+    fxOn = -1: fxHot = 1
+    FxCheck
+    Msg "FIX THIS: the report card's checks on what EXPORT makes. SHOW selects the parts, a fix button makes one (Ctrl+Z: back), LEAVE keeps one out. Esc: done"
+END SUB
+
+SUB FxStop
+    fxOn = 0: Msg ""
+END SUB
+
+' Each frame (before the view's drawn): a change checked again once it's settled
+SUB FxFrame
+    DIM s$, t#
+    IF NOT fxOn THEN EXIT SUB
+    IF edPart OR maOn OR brOn OR pntOn OR bvOn OR penOn OR txOn OR fpOn THEN fxOn = 0: EXIT SUB
+    IF mB1 THEN EXIT SUB ' (a drag going on)
+    s$ = FxSigNow$
+    IF s$ = fxSig$ THEN EXIT SUB
+    t# = TIMER(.001)
+    IF s$ <> fxSigAt$ THEN fxSigAt$ = s$: fxDue# = t# + .25: EXIT SUB
+    IF t# < fxDue# AND fxDue# - t# < 5 THEN EXIT SUB
+    FxCheck
+END SUB
+
+' A key while it's on: Esc / F2 close it; the rest go on as usual
+FUNCTION FxKey (k&)
+    IF k& = 27 OR k& = 15360 THEN FxStop: FxKey = -1
+END FUNCTION
+
+' ---------------------------------------------------------------- the panel
+
+FUNCTION FxRowY (k)
+    FxRowY = 106 + (k - 1) * 48
+END FUNCTION
+
+' Row k's buttons: 1 SHOW, 2 its fix (SYMMETRY: KEEP L), 3 KEEP R, 4 LEAVE; 5 CHECK AGAIN, 6 DONE
+SUB FxBtnR (k, b, x, y, w, h)
+    y = FxRowY(k) + 18: h = 22
+    SELECT CASE b
+        CASE 1: x = PX0: w = 52
+        CASE 2: x = PX0 + 56: w = 106: IF k = 4 THEN w = 52
+        CASE 3: x = PX0 + 112: w = 50
+        CASE 4: x = PX0 + 166: w = 64
+        CASE 5: x = PX0: y = FxRowY(FX_N + 1) + 6: w = 112
+        CASE 6: x = PX0 + 118: y = FxRowY(FX_N + 1) + 6: w = 112
+    END SELECT
+END SUB
+
+' Is button b of row k there?
+FUNCTION FxBtnOn (k, b)
+    SELECT CASE b
+        CASE 1, 4: FxBtnOn = -1
+        CASE 2: FxBtnOn = (k = 1 OR k = 3 OR k = 4 OR k = 5)
+        CASE 3: FxBtnOn = (k = 4)
+    END SELECT
+END FUNCTION
+
+FUNCTION FxBtnName$ (k, b)
+    SELECT CASE b
+        CASE 1: FxBtnName$ = "SHOW"
+        CASE 3: FxBtnName$ = "KEEP R"
+        CASE 4: FxBtnName$ = "LEAVE"
+        CASE 2
+            SELECT CASE k
+                CASE 1: FxBtnName$ = "MAKE PLAIN"
+                CASE 3: FxBtnName$ = "SQUARE UP"
+                CASE 4: FxBtnName$ = "KEEP L"
+                CASE 5: FxBtnName$ = IIFS$(mdlTidy, "TIDIED", "TIDY")
+            END SELECT
+    END SELECT
+END FUNCTION
+
+FUNCTION FxHelp$ (k, ln)
+    DIM t$
+    SELECT CASE k
+        CASE 1: t$ = "A picture pulled across a|face: a row of pixels|smeared into streaks.|MAKE PLAIN: each one its|pixels' colour. Better:|map it again from a patch"
+        CASE 2: t$ = "Faces whose pixels are|1.5x bigger or smaller|than the rest's (" + LTRIM$(STR$(INT(fxPxc + .5))) + " a cell).|Map them again from a|patch of the right size"
+        CASE 3: t$ = "Faces 0.75 to 8 degrees|off square or 45: crooked|by a little. SQUARE UP|makes them true (round|things' facets are left)"
+        CASE 4: t$ = "The outline against its|mirror image (lit: no|match), front and above;|" + LTRIM$(STR$(fxTwinless)) + " parts off their mirror.|KEEP L / R: that half (as|the front's seen) mirrored"
+        CASE 5: t$ = "Against the budget: 1000|for a big thing, 200 for|a small one. TIDY: the|export cut down to it|(it can lose detail)"
+        CASE 6: t$ = "More than one picture:|EXPORT packs them in a|2x2 grid, each shrunk.|Map them all from one"
+        CASE 7: t$ = "Pictures repeated across|a face (TILE): the game|clamps them, so EXPORT|cuts those faces into|many more triangles"
+    END SELECT
+    FxHelp$ = PipePart$(t$, ln)
+END FUNCTION
+
+SUB FxDraw
+    DIM k, b, x, y, w, h, c AS _UNSIGNED LONG, v$, i, j, gx, gy, gv, n
+    Txt PX0, 36, "FIX THIS", cHi
+    IF fxHave THEN
+        v$ = "SCORE" + STR$(INT(fxScore + .5))
+        Txt PX0 + 230 - 8 * LEN(v$), 36, v$, IIFC~&(fxScore >= 30, cWarn, cText)
+        Txt PX0, 56, "0: nothing found (the", cDim
+        Txt PX0, 72, "game's own props: 40-90)", cDim
+    END IF
+    n = SelCount
+    Txt PX0, 88, IIFS$(n > 0, "fixes: the" + STR$(n) + IIFS$(n = 1, " part picked", " parts picked"), "fixes: the whole model"), cDim
+    FOR k = 1 TO FX_N
+        y = FxRowY(k)
+        IF InRect(mX, mY, PX0, y, 230, 42) THEN fxHot = k
+        c = cText
+        IF FxBad(k) THEN c = cWarn
+        IF FxLeft(k) THEN c = cDim
+        IF k = 6 OR k = 7 THEN IF FxBad(k) = 0 THEN c = cDim
+        Txt PX0, y, FxName$(k), IIFC~&(fxHot = k AND c <> cWarn, cHi, c)
+        v$ = FxVal$(k): IF FxLeft(k) THEN v$ = "(left) " + v$
+        Txt PX0 + 230 - 8 * LEN(v$), y, v$, c
+        FOR b = 1 TO 4
+            IF FxBtnOn(k, b) THEN
+                FxBtnR k, b, x, y, w, h
+                Btn x, y, w, h, FxBtnName$(k, b), (b = 4 AND FxLeft(k)) OR (k = 5 AND b = 2 AND mdlTidy <> 0)
+            END IF
+        NEXT
+    NEXT
+    FxBtnR 0, 5, x, y, w, h: Btn x, y, w, h, "CHECK AGAIN", 0
+    FxBtnR 0, 6, x, y, w, h: Btn x, y, w, h, "DONE  Esc", 0
+    y = FxRowY(FX_N + 1) + 42
+    IF fxHot < 1 OR fxHot > FX_N THEN EXIT SUB
+    Txt PX0, y, FxName$(fxHot), cHi
+    FOR i = 1 TO 6: Txt PX0, y + i * 16, FxHelp$(fxHot, i), cDim: NEXT
+    y = y + 7 * 16 + 6
+    IF fxHot = 4 AND fxHave THEN ' (the worse outline, 2 pixels a cell: red where it's not mirrored)
+        gv = 0: IF fxGA(1) > fxGA(0) THEN gv = 1
+        IF y + 2 * fxGH(gv) + 20 < scrH - BAR_H THEN
+            Txt PX0, y, IIFS$(gv = 0, "from the front", "from above"), cDim
+            gx = PX0 + (230 - 2 * fxGW(gv)) \ 2: gy = y + 18
+            LINE (gx - 1, gy - 1)-(gx + 2 * fxGW(gv), gy + 2 * fxGH(gv)), cLine, B
+            FOR j = 0 TO fxGH(gv) - 1
+                FOR i = 0 TO fxGW(gv) - 1
+                    IF fxG(gv, i, j) THEN LINE (gx + 2 * i, gy + 2 * (fxGH(gv) - 1 - j))-STEP(1, 1), IIFC~&(fxG(gv, i, j) = 2, cWarn, cDim), BF
+                NEXT
+            NEXT
+        END IF
+    END IF
+END SUB
+
+' A press in the panel (all of it's FIX THIS's)
+SUB FxClick
+    DIM k, b, x, y, w, h
+    FxBtnR 0, 5, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN FxCheck: Msg "Checked: score" + STR$(INT(fxScore + .5)): EXIT SUB
+    FxBtnR 0, 6, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN FxStop: EXIT SUB
+    FOR k = 1 TO FX_N
+        FOR b = 1 TO 4
+            IF FxBtnOn(k, b) THEN
+                FxBtnR k, b, x, y, w, h
+                IF InRect(mX, mY, x, y, w, h) THEN FxDo k, b: EXIT SUB
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+' Row k's button b
+SUB FxDo (k, b)
+    SELECT CASE b
+        CASE 1: FxShow k
+        CASE 4: FxLeaveToggle k
+        CASE 3: FxKeep -1
+        CASE 2
+            SELECT CASE k
+                CASE 1: FxMakePlain
+                CASE 3: FxSquareUp
+                CASE 4: FxKeep 1
+                CASE 5: FxTidy
+            END SELECT
+    END SELECT
+END SUB
+
+' ---------------------------------------------------------------- SHOW, and the fixes
+
+' The parts carrying finding k selected
+SUB FxShow (k)
+    DIM p, n
+    IF NOT fxHave THEN FxCheck
+    fxHot = k ' (its help shown)
+    EdOff: SelNone
+    FOR p = 1 TO pN
+        IF p * 8 + k <= UBOUND(fxPF) THEN
+            IF fxPF(p * 8 + k) THEN pSel(p) = -1: n = n + 1
+        END IF
+    NEXT
+    ovDirty = -1: viewDirty = -1
+    IF n = 0 THEN Msg FxName$(k) + ": no part carries it" ELSE Msg FxName$(k) + ":" + STR$(n) + IIFS$(n = 1, " part carries it - selected", " parts carry it - selected") + IIFS$(k = 4, " (off their mirror)", "")
+END SUB
+
+' Is part p one a fix is to work on? (the selected ones, or all with none selected)
+FUNCTION FxIn (p, nSel)
+    IF nSel = 0 THEN FxIn = -1 ELSE FxIn = pSel(p)
+END FUNCTION
+
+' MAKE PLAIN: each smeared face its pixels' colour, the picture off it
+SUB FxMakePlain
+    DIM t AS LONG, p, f AS LONG, k AS LONG, nSel, cnt AS LONG, skip AS LONG, got, pushed, c0 AS LONG, u0#, v0#, u1#, v1#
+    FxCheck
+    nSel = SelCount
+    FOR p = 1 TO pN
+        IF FxIn(p, nSel) AND fxPF(p * 8 + 1) <> 0 THEN
+            IF pKind(p) <> K_MESH THEN
+                skip = skip + 1
+            ELSE
+                EmLoad pMesh(p)
+                REDIM fzS(sfN + 1) AS _BYTE
+                got = 0
+                FOR t = 1 TO sceneTN
+                    IF tPart(t) = p AND fxTF(t) <> 0 THEN
+                        f = tFace(t) + 1
+                        IF f >= 1 AND f <= sfN THEN fzS(f) = -1: got = -1
+                    END IF
+                NEXT
+                IF got THEN
+                    FOR f = 1 TO sfN
+                        IF fzS(f) AND sfLive(f) <> 0 AND sfTex(f) > 0 THEN
+                            c0 = sfC0(f): u0# = scTU(c0): u1# = u0#: v0# = scTV(c0): v1# = v0#
+                            FOR k = 1 TO sfCN(f) - 1
+                                IF scTU(c0 + k) < u0# THEN u0# = scTU(c0 + k)
+                                IF scTU(c0 + k) > u1# THEN u1# = scTU(c0 + k)
+                                IF scTV(c0 + k) < v0# THEN v0# = scTV(c0 + k)
+                                IF scTV(c0 + k) > v1# THEN v1# = scTV(c0 + k)
+                            NEXT
+                            sfCol(f) = FxAvgCol~&(sfTex(f), u0#, v0#, u1#, v1#, sfCol(f))
+                            sfTex(f) = 0: cnt = cnt + 1
+                        END IF
+                    NEXT
+                    IF pushed = 0 THEN EdOff: UndoPush: pushed = -1
+                    pMesh(p) = EmWrite&
+                END IF
+            END IF
+        END IF
+    NEXT
+    IF cnt = 0 THEN Msg "MAKE PLAIN: no smeared face" + IIFS$(nSel, " on the parts picked", "") + IIFS$(skip, " (a prefab's: unlink it first)", ""): EXIT SUB
+    ModelChanged: MeshGcDue
+    Msg "MAKE PLAIN:" + STR$(cnt) + IIFS$(cnt = 1, " face", " faces") + " their pixels' colour now, not smeared" + IIFS$(skip, " (" + LTRIM$(STR$(skip)) + " prefab uses left: unlink first)", "") + ". Ctrl+Z: back"
+END SUB
+
+' A turn's nearest multiple of 45 when it's 0.75 to 8 degrees off one
+FUNCTION FxSnapA (a)
+    DIM d
+    d = a - 45 * INT(a / 45 + .5)
+    IF ABS(d) >= .75 AND ABS(d) <= 8 THEN FxSnapA = a - d ELSE FxSnapA = a
+END FUNCTION
+
+' SQUARE UP: turns a little off square snapped; then faces still a little off (meshes - a
+' shape made one first) put on their nice way's plane, round things' facets left
+SUB FxSquareUp
+    DIM p, nSel, a, b, c, pushed, nt AS LONG, nf AS LONG, rl AS LONG, id AS LONG, n AS LONG
+    FxCheck
+    nSel = SelCount
+    FOR p = 1 TO pN
+        IF FxIn(p, nSel) AND fxPF(p * 8 + 3) <> 0 THEN
+            a = FxSnapA(pRX(p)): b = FxSnapA(pRY(p)): c = FxSnapA(pRZ(p))
+            IF a <> pRX(p) OR b <> pRY(p) OR c <> pRZ(p) THEN
+                IF pushed = 0 THEN EdOff: UndoPush: pushed = -1
+                pRX(p) = a: pRY(p) = b: pRZ(p) = c: nt = nt + 1
+            END IF
+        END IF
+    NEXT
+    FOR p = 1 TO pN
+        IF FxIn(p, nSel) AND fxPF(p * 8 + 3) <> 0 AND pKind(p) <> K_USE THEN
+            IF pKind(p) = K_MESH THEN id = pMesh(p) ELSE id = PartMeshOf&(p)
+            IF MbOk(id) THEN
+                n = FxSquareMesh&(p, id): rl = rl + fxRoundN
+                IF n > 0 THEN
+                    IF pushed = 0 THEN EdOff: UndoPush: pushed = -1
+                    IF pKind(p) = K_MESH THEN pMesh(p) = fxNewId ELSE MakeMeshPart p, fxNewId
+                    nf = nf + n
+                END IF
+            END IF
+        END IF
+    NEXT
+    IF pushed = 0 THEN
+        Msg "SQUARE UP: nothing a little off" + IIFS$(rl, " but round things' facets (" + LTRIM$(STR$(rl)) + ", left)", "") + IIFS$(nSel, " on the parts picked", "")
+        MeshGcDue: EXIT SUB
+    END IF
+    ModelChanged: MeshGcDue
+    Msg "SQUARE UP:" + STR$(nt) + IIFS$(nt = 1, " part's turn", " parts' turns") + " and" + STR$(nf) + IIFS$(nf = 1, " face", " faces") + " made true" + IIFS$(rl, " (" + LTRIM$(STR$(rl)) + " round facets left)", "") + ". Ctrl+Z: back"
+END SUB
+
+' Mesh id as part p's: each face 0.75 to 8 degrees off a nice way in the world put on that
+' way's plane through its middle (24 passes: faces sharing points agree) - unless it meets a
+' neighbour at 0.5 to 20 degrees (a round thing's facet: fxRoundN). The faces moved, fxNewId
+' the mesh made (when some were)
+FUNCTION FxSquareMesh& (p, id AS LONG)
+    DIM v AS LONG, f AS LONG, g AS LONG, k AS LONG, n AS LONG, c0 AS LONG, a AS LONG, b AS LONG, q AS LONG, cnt AS LONG, pass
+    DIM x#, y#, z#, nx#, ny#, nz#, l#, d#, cx#, cy#, cz#, meets, isR
+    fxRoundN = 0: fxNewId = 0
+    EmLoad id
+    IF swN = 0 OR sfN = 0 THEN EXIT FUNCTION
+    REDIM wx#(swN), wy#(swN), wz#(swN), sx#(swN), sy#(swN), sz#(swN), sn(swN) AS LONG, mv(swN) AS _BYTE, mk(swN) AS LONG
+    REDIM fnx#(sfN), fny#(sfN), fnz#(sfN), fq(sfN) AS LONG
+    FOR v = 1 TO swN
+        x# = swX(v): y# = swY(v): z# = swZ(v): PartFwd p, x#, y#, z#: wx#(v) = x#: wy#(v) = y#: wz#(v) = z#
+    NEXT
+    FOR f = 1 TO sfN ' (each face's way out in the world, and its nice way if it's a little off one)
+        IF sfLive(f) THEN
+            n = sfCN(f): c0 = sfC0(f): nx# = 0: ny# = 0: nz# = 0
+            FOR k = 0 TO n - 1
+                a = scV(c0 + k): b = scV(c0 + (k + 1) MOD n)
+                nx# = nx# + (wy#(a) - wy#(b)) * (wz#(a) + wz#(b))
+                ny# = ny# + (wz#(a) - wz#(b)) * (wx#(a) + wx#(b))
+                nz# = nz# + (wx#(a) - wx#(b)) * (wy#(a) + wy#(b))
+            NEXT
+            l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+            IF l# > 1E-12 THEN
+                fnx#(f) = nx# / l#: fny#(f) = ny# / l#: fnz#(f) = nz# / l#
+                d# = FxOff#(fnx#(f), fny#(f), fnz#(f), q)
+                IF d# >= .75 AND d# <= 8 THEN fq(f) = q + 1
+            END IF
+        END IF
+    NEXT
+    FOR f = 1 TO sfN ' (a round thing's facets: left)
+        IF fq(f) > 0 THEN
+            FOR k = 0 TO sfCN(f) - 1: mk(scV(sfC0(f) + k)) = f: NEXT
+            isR = 0
+            FOR g = 1 TO sfN
+                IF g <> f AND sfLive(g) <> 0 THEN
+                    meets = 0
+                    FOR k = 0 TO sfCN(g) - 1
+                        IF mk(scV(sfC0(g) + k)) = f THEN meets = -1: EXIT FOR
+                    NEXT
+                    IF meets THEN
+                        d# = fnx#(f) * fnx#(g) + fny#(f) * fny#(g) + fnz#(f) * fnz#(g)
+                        IF d# > 1 THEN d# = 1
+                        IF d# < -1 THEN d# = -1
+                        d# = _ACOS(d#) * 180 / 3.14159265358979#
+                        IF d# > .5 AND d# < 20 THEN isR = -1: EXIT FOR
+                    END IF
+                END IF
+            NEXT
+            IF isR THEN fq(f) = 0: fxRoundN = fxRoundN + 1 ELSE cnt = cnt + 1
+        END IF
+    NEXT
+    IF cnt = 0 THEN EXIT FUNCTION
+    FOR pass = 1 TO 24
+        FOR v = 1 TO swN: sx#(v) = 0: sy#(v) = 0: sz#(v) = 0: sn(v) = 0: NEXT
+        FOR f = 1 TO sfN
+            IF fq(f) > 0 THEN
+                q = fq(f) - 1: n = sfCN(f): c0 = sfC0(f): cx# = 0: cy# = 0: cz# = 0
+                FOR k = 0 TO n - 1
+                    v = scV(c0 + k): cx# = cx# + wx#(v): cy# = cy# + wy#(v): cz# = cz# + wz#(v)
+                NEXT
+                cx# = cx# / n: cy# = cy# / n: cz# = cz# / n
+                FOR k = 0 TO n - 1
+                    v = scV(c0 + k)
+                    d# = (wx#(v) - cx#) * fxQX(q) + (wy#(v) - cy#) * fxQY(q) + (wz#(v) - cz#) * fxQZ(q)
+                    sx#(v) = sx#(v) + wx#(v) - d# * fxQX(q): sy#(v) = sy#(v) + wy#(v) - d# * fxQY(q): sz#(v) = sz#(v) + wz#(v) - d# * fxQZ(q)
+                    sn(v) = sn(v) + 1
+                NEXT
+            END IF
+        NEXT
+        FOR v = 1 TO swN
+            IF sn(v) THEN wx#(v) = sx#(v) / sn(v): wy#(v) = sy#(v) / sn(v): wz#(v) = sz#(v) / sn(v): mv(v) = -1
+        NEXT
+    NEXT
+    FOR v = 1 TO swN
+        IF mv(v) THEN x# = wx#(v): y# = wy#(v): z# = wz#(v): PartInv p, x#, y#, z#: swX(v) = x#: swY(v) = y#: swZ(v) = z#
+    NEXT
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN EmNormal f
+    NEXT
+    fxNewId = EmWrite&
+    FxSquareMesh& = cnt
+END FUNCTION
+
+' KEEP L (side 1: +x, the left as the front's seen) / KEEP R (-1): the other side's parts
+' taken away, this side's mirrored over x = fxMidX. A part across the middle that's off its
+' own mirror is cut there, that side's half kept and mirrored onto the other (FxHalfMesh&); the
+' rest across it stay as they are. A prefab's use isn't mirrored (nor taken away)
+SUB FxKeep (side)
+    DIM p, i, j, q, nSel, gone AS LONG, made AS LONG, across AS LONG, uses AS LONG, n0, tol#, m#, halves AS LONG, id AS LONG
+    FxCheck
+    nSel = SelCount: m# = fxMidX: tol# = fxSpan * .001
+    REDIM cl(pN) AS INTEGER, ks(pN) AS _BYTE
+    FOR p = 1 TO pN
+        IF FxIn(p, nSel) AND fxBK(p) <> 0 THEN
+            IF pKind(p) = K_USE THEN
+                uses = uses + 1
+            ELSEIF fxBL(p).x >= m# - tol# AND fxBH(p).x <= m# + tol# THEN
+                across = across + 1
+            ELSEIF fxBL(p).x >= m# - tol# THEN
+                cl(p) = 1
+            ELSEIF fxBH(p).x <= m# + tol# THEN
+                cl(p) = -1
+            ELSEIF fxPF(p * 8 + 4) THEN
+                cl(p) = 2 ' (across, off its own mirror: halved)
+            ELSE
+                across = across + 1
+            END IF
+        END IF
+    NEXT
+    n0 = 0
+    FOR p = 1 TO pN
+        IF cl(p) = side OR cl(p) = 2 THEN n0 = n0 + 1
+    NEXT
+    IF n0 = 0 THEN Msg IIFS$(side = 1, "KEEP L", "KEEP R") + ": no part on that side, nor one across the middle off its mirror" + IIFS$(nSel, " among the parts picked", "") + " - " + LTRIM$(STR$(across)) + " across the middle": EXIT SUB
+    IF pN + n0 > MAX_PARTS THEN Msg "The model would be too full (" + LTRIM$(STR$(MAX_PARTS)) + " parts)": EXIT SUB
+    EdOff: PlaceStop: UndoPush
+    j = 0
+    FOR i = 1 TO pN
+        IF cl(i) = -side THEN
+            gone = gone + 1
+        ELSE
+            j = j + 1: PartCopy i, j: pSel(j) = 0: ks(j) = (cl(i) = side)
+            IF cl(i) = 2 THEN ' (one half of it, and that half mirrored)
+                IF pKind(j) = K_MESH THEN id = pMesh(j) ELSE id = PartMeshOf&(j)
+                IF FxHalfMesh&(j, id, side, m#) THEN
+                    IF pKind(j) = K_MESH THEN pMesh(j) = fxNewId ELSE MakeMeshPart j, fxNewId
+                    halves = halves + 1
+                END IF
+            END IF
+        END IF
+    NEXT
+    pN = j
+    FOR i = 1 TO j
+        IF ks(i) THEN
+            q = PartMirror&(i, 0, m#)
+            IF q THEN made = made + 1
+        END IF
+    NEXT
+    SelNone: ModelChanged: MeshGcDue
+    Msg IIFS$(side = 1, "KEEP L:", "KEEP R:") + STR$(made) + IIFS$(made = 1, " part", " parts") + " mirrored over x =" + STR$(VAL(Fmt$(m#))) + "," + STR$(gone) + " taken away" + IIFS$(halves, "; " + LTRIM$(STR$(halves)) + IIFS$(halves = 1, " part", " parts") + " across the middle made of that half and its mirror", "") + IIFS$(across, "; " + LTRIM$(STR$(across)) + " across the middle left as they are", "") + IIFS$(uses, "; " + LTRIM$(STR$(uses)) + " prefab uses left", "") + ". Ctrl+Z: back"
+END SUB
+
+' TIDY: the export cut down to the report card's budget (again: as built)
+SUB FxTidy
+    IF NOT fxHave THEN FxCheck
+    UndoPush
+    IF mdlTidy THEN
+        mdlTidy = 0: Msg "EXPORT: as built again (Ctrl+Z: tidied)"
+    ELSE
+        mdlTidy = -1: mdlBudget = fxBudget
+        Msg "EXPORT: TIDIED - cut down to" + STR$(fxBudget) + " triangles as far as it goes without showing (it can lose detail: look at it with T)"
+    END IF
+    ModelChanged
+END SUB
+
+' ---------------------------------------------------------------- the port: fix [WHAT]
+
+SUB RcFix
+    DIM w$, k
+    w$ = LCASE$(rcA$(2)): IF rcAN < 2 THEN w$ = "check"
+    SELECT CASE w$
+        CASE "check": FxCheck
+        CASE "open": IF fxOn = 0 THEN FxStart
+            IF fxOn = 0 THEN RcSend "err " + msgText$: EXIT SUB
+        CASE "close": FxStop
+        CASE "plain": FxMakePlain
+        CASE "square": FxSquareUp
+        CASE "keep"
+            IF LCASE$(rcA$(3)) = "left" OR LCASE$(rcA$(3)) = "l" THEN
+                FxKeep 1
+            ELSEIF LCASE$(rcA$(3)) = "right" OR LCASE$(rcA$(3)) = "r" THEN
+                FxKeep -1
+            ELSE
+                RcSend "err fix keep left | right": EXIT SUB
+            END IF
+        CASE "tidy": FxTidy
+        CASE "show", "leave"
+            k = FxOf(rcA$(3))
+            IF k = 0 THEN RcSend "err fix " + w$ + " smear | size | angle | asym | tris | pics | repeats": EXIT SUB
+            IF w$ = "show" THEN FxShow k ELSE FxLeaveToggle k
+        CASE ELSE
+            RcSend "err fix [check | open | close | plain | square | keep left | keep right | tidy | show W | leave W]": EXIT SUB
+    END SELECT
+    IF w$ <> "check" AND w$ <> "show" AND w$ <> "leave" AND w$ <> "close" THEN FxCheck
+    RcSend "ok " + FxStatus$ + IIFS$(w$ <> "check" AND LEN(msgText$) > 0, " | " + msgText$, "")
+END SUB
+
+' Mesh id as part p's, cut at x = m# in the world: side's half (1: x over m#) kept, and that
+' half mirrored onto the other side; the faces across the cut joined again. fxNewId the mesh
+' made: 0 if nothing was left
+FUNCTION FxHalfMesh& (p, id AS LONG, side, m#)
+    DIM f AS LONG, k AS LONG, n AS LONG, c0 AS LONG, a AS LONG, b AS LONG, j AS LONG, cn AS LONG, np AS LONG, nc AS LONG, r AS LONG, w AS LONG
+    DIM x#, y#, z#, da#, db#, t#, eps#, inA, inB, onAll
+    fxNewId = 0
+    EmLoad id
+    IF swN = 0 OR sfN = 0 THEN EXIT FUNCTION
+    eps# = 1E-7
+    REDIM wx#(swN), wy#(swN), wz#(swN)
+    FOR w = 1 TO swN
+        x# = swX(w): y# = swY(w): z# = swZ(w): PartFwd p, x#, y#, z#: wx#(w) = x#: wy#(w) = y#: wz#(w) = z#
+        IF ABS(x# - m#) < eps# THEN wx#(w) = m#
+    NEXT
+    ' each face clipped to the kept side (Sutherland-Hodgman): its corners, the edge on from each
+    REDIM hx#(scTop * 2 + 8), hy#(scTop * 2 + 8), hz#(scTop * 2 + 8), hu!(scTop * 2 + 8), hv!(scTop * 2 + 8), he(scTop * 2 + 8) AS INTEGER
+    REDIM h0(sfN) AS LONG, hn(sfN) AS LONG, hc(sfN) AS _UNSIGNED LONG, ht(sfN) AS INTEGER, hm(sfN) AS _UNSIGNED LONG
+    nc = 0: np = 0
+    FOR f = 1 TO sfN
+        IF sfLive(f) THEN
+            n = sfCN(f): c0 = sfC0(f): onAll = -1
+            FOR k = 0 TO n - 1
+                IF ABS(wx#(scV(c0 + k)) - m#) >= eps# THEN onAll = 0
+            NEXT
+            IF onAll = 0 THEN
+                cn = 0: j = nc
+                FOR k = 0 TO n - 1
+                    a = scV(c0 + k): b = scV(c0 + (k + 1) MOD n)
+                    da# = side * (wx#(a) - m#): db# = side * (wx#(b) - m#)
+                    inA = (da# >= -eps#): inB = (db# >= -eps#)
+                    IF inA THEN
+                        hx#(j) = wx#(a): hy#(j) = wy#(a): hz#(j) = wz#(a): hu!(j) = scTU(c0 + k): hv!(j) = scTV(c0 + k): he(j) = scE(c0 + k): j = j + 1
+                    END IF
+                    IF inA <> inB THEN ' (where the edge crosses the middle)
+                        t# = da# / (da# - db#)
+                        hx#(j) = m#: hy#(j) = wy#(a) + (wy#(b) - wy#(a)) * t#: hz#(j) = wz#(a) + (wz#(b) - wz#(a)) * t#
+                        hu!(j) = scTU(c0 + k) + (scTU(c0 + (k + 1) MOD n) - scTU(c0 + k)) * t#
+                        hv!(j) = scTV(c0 + k) + (scTV(c0 + (k + 1) MOD n) - scTV(c0 + k)) * t#
+                        IF inA THEN he(j) = 0 ELSE he(j) = scE(c0 + k) ' (leaving: the cut runs on from it)
+                        j = j + 1
+                    END IF
+                NEXT
+                IF j - nc >= 3 THEN
+                    np = np + 1: h0(np) = nc: hn(np) = j - nc: hc(np) = sfCol(f): ht(np) = sfTex(f): hm(np) = sfMat(f)
+                    nc = j
+                END IF
+            END IF
+        END IF
+    NEXT
+    IF np = 0 THEN EXIT FUNCTION
+    ' the half and its mirror, welded
+    EmClear
+    EmWeldStart nc * 2 + 16
+    FOR r = 1 TO np
+        FOR w = 0 TO 1 ' (0 the half, 1 its mirror: wound the other way round)
+            n = hn(r): cn = 0
+            FOR k = 0 TO n - 1
+                IF w = 0 THEN j = h0(r) + k ELSE j = h0(r) + n - 1 - k
+                x# = hx#(j): IF w = 1 THEN x# = 2 * m# - x#
+                a = EmWeld&(x#, hy#(j), hz#(j))
+                IF w = 0 THEN b = he(j) ELSE b = he(h0(r) + (2 * n - 2 - k) MOD n)
+                IF cn > 0 THEN
+                    IF emL(cn - 1) = a THEN cn = cn - 1 ' (the same point twice: the later's edge on)
+                END IF
+                emL(cn) = a: emE(cn) = b: emU(cn) = hu!(j): emW(cn) = hv!(j): cn = cn + 1
+            NEXT
+            IF cn > 1 THEN
+                IF emL(cn - 1) = emL(0) THEN cn = cn - 1 ' (the first is the later: its edge on stays)
+            END IF
+            IF cn >= 3 THEN
+                emTex = ht(r): emMat = hm(r): a = EmAddF&(cn, hc(r))
+                IF sfNx(a) = 0 AND sfNy(a) = 0 AND sfNz(a) = 0 THEN sfLive(a) = 0
+            END IF
+        NEXT
+    NEXT
+    EmMerge 0
+    IF EmTJoin& THEN EmMerge 2
+    r = EmStraighten&
+    FOR w = 1 TO swN
+        x# = swX(w): y# = swY(w): z# = swZ(w): PartInv p, x#, y#, z#: swX(w) = x#: swY(w) = y#: swZ(w) = z#
+    NEXT
+    fxNewId = EmWrite&
+    FxHalfMesh& = -1
+END FUNCTION

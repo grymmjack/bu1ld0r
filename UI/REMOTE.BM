@@ -113,7 +113,7 @@ SUB RcExec (l$)
     SELECT CASE c$
         CASE "hello": RcSend "ok bu1ld0r " + APP_VERSION$
         CASE "help"
-            RcSend "ok hello take give say pace status parts faces shot | new open save export undo redo | add set del sel look view | mesh mirror edit done pick extrude inset push move scale colour flip"
+            RcSend "ok hello take give say pace status parts faces shot | new open save export undo redo | add set del sel look view | mesh mirror fix edit done pick extrude inset push move scale colour flip"
         CASE "status": RcSend "ok " + RcStatus$
         CASE "parts": RcSend "ok " + RcPartsJson$
         CASE "faces": RcFaces
@@ -438,6 +438,7 @@ SUB RcDo (c$)
             IF ok = 0 THEN undoN = undoN - 1: RcSend "err nothing there to make a mesh of": EXIT SUB
             ModelChanged: RcSend "ok " + RcI$(mbFN(pMesh(p))) + " faces"
         CASE "mirror": RcMirror
+        CASE "fix": RcFix
         CASE "edit"
             p = RcPart(2): IF p = 0 THEN EXIT SUB
             EdOff: PlaceStop: SelNone: pSel(p) = -1
@@ -685,7 +686,7 @@ END SUB
 ' mirror P [x | y | z] [at=V]: a mirror image of part p across the plane
 ' axis = V (x 0: left to right) - a mesh part, selected; its number back
 SUB RcMirror
-    DIM p, q, ax, i, at#, id AS LONG, v AS LONG, f AS LONG, n AS LONG, c0 AS LONG, k AS LONG, j AS LONG, e AS _BYTE
+    DIM p, q, ax, i, at#
     p = RcPart(2): IF p = 0 THEN EXIT SUB
     IF pKind(p) = K_USE THEN RcSend "err a prefab put down: unlink it first": EXIT SUB
     FOR i = 3 TO rcAN
@@ -699,38 +700,8 @@ SUB RcMirror
     NEXT
     IF pN >= MAX_PARTS THEN RcSend "err the model is full": EXIT SUB
     EdOff: PlaceStop: UndoPush
-    IF pKind(p) = K_MESH THEN id = pMesh(p) ELSE id = PartMeshOf&(p)
-    IF mbFN(id) = 0 THEN undoN = undoN - 1: RcSend "err nothing there to mirror": EXIT SUB
-    pN = pN + 1: q = pN: PartCopy p, q: pName$(q) = ""
-    EmLoad id ' (its own points flipped on the same axis - p' = S R D q + S t = (S R S) D (S q) + S t)
-    FOR v = 1 TO swN
-        SELECT CASE ax
-            CASE 0: swX(v) = -swX(v)
-            CASE 1: swY(v) = -swY(v)
-            CASE ELSE: swZ(v) = -swZ(v)
-        END SELECT
-    NEXT
-    FOR f = 1 TO sfN ' (each polygon wound the other way, so it still faces out - as SelFlip)
-        IF sfLive(f) THEN
-            c0 = sfC0(f): n = sfCN(f)
-            FOR k = 0 TO n \ 2 - 1
-                j = n - 1 - k
-                SWAP scV(c0 + k), scV(c0 + j): SWAP scTU(c0 + k), scTU(c0 + j): SWAP scTV(c0 + k), scTV(c0 + j)
-            NEXT
-            e = scE(c0 + n - 1)
-            FOR k = 0 TO (n - 1) \ 2 - 1
-                SWAP scE(c0 + k), scE(c0 + n - 2 - k)
-            NEXT
-            scE(c0 + n - 1) = e
-        END IF
-    NEXT
-    MakeMeshPart q, EmWrite&
-    pCol(q) = pCol(p)
-    SELECT CASE ax ' (S R S: the turns about the other two axes the other way)
-        CASE 0: pX(q) = 2 * at# - pX(p): pRY(q) = -pRY(p): pRZ(q) = -pRZ(p)
-        CASE 1: pY(q) = 2 * at# - pY(p): pRX(q) = -pRX(p): pRZ(q) = -pRZ(p)
-        CASE ELSE: pZ(q) = 2 * at# - pZ(p): pRX(q) = -pRX(p): pRY(q) = -pRY(p)
-    END SELECT
+    q = PartMirror&(p, ax, at#)
+    IF q = 0 THEN undoN = undoN - 1: RcSend "err nothing there to mirror": EXIT SUB
     SelNone: pSel(q) = -1
     ModelChanged: MeshGcDue
     RcSend "ok " + RcI$(q)

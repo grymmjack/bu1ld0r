@@ -588,6 +588,24 @@ a short path), `xdotool windowmove $W 0 0`, the pointer parked off the window
 :99.0 -frames:v 1 -vf crop=1728:1080:0:0`. `xdotool key r` after `type` once
 gave "e" (its remapped keycodes): type letters with `typ`.
 
+## FIX THIS (UI/FIX)
+
+F2 / top bar PanelBtn 20 (`fxOn`; PanelDraw / PanelClick hand over after E's, UiKey
+gives `FxKey` Esc / F2; `FxFrame` closes it when E / MATERIAL / painting... open). `FxCheck`
+is report.py's report card on what EXPORT makes (meshAll -1, tidyNow = mdlTidy, then
+restored, meshDirty): per triangle `FxAxes` (pixels a cell each way, the plane map's
+singular values), `FxPlainT`, `FxOff#` (`fxQ*` the 26 nice ways), `FxRoundT` (a facet: a
+corner-sharing triangle at 0.5-20 deg - report.py's `round_facet` the same), the weighted
+median by `FxSortD`, outlines `FxOutline!` (64 grid, `fxG`; per part for one across the
+middle), part boxes `fxBL/fxBH` from 1..holeTN, twins by mirrored box. `fxPF(p*8+k)`:
+part p carries finding k (SHOW), `fxTF` smeared triangles. It runs `FxFrame` at UiFrame's
+end (after hover picking: it remakes the triangles), .25 s after `FxSigNow$` (ModelText$ +
+pfGen) settles. Fixes: `FxMakePlain`, `FxSquareUp` (`FxSnapA`, `FxSquareMesh&`), `FxKeep`
+(`PartMirror&` in MODEL/BAKE - the port's `mirror` too - and `FxHalfMesh&`: faces clipped
+at the middle, spots carried, the half and its mirror welded, EmMerge / EmTJoin& /
+EmStraighten&), `FxTidy`. LEAVE: `mdlLeave$` (" smear asym "), `fixleave` in the .bld
+(`FxLines` / `FxFromText`, not in ModelText$). Port: `fix ...` (`RcFix`).
+
 ## c0nstruct0r
 
 Claude driving bu1ld0r to rebuild the game's props (C0NSTRUCT0R.md: the

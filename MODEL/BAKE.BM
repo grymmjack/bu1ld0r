@@ -437,3 +437,45 @@ SUB SelRectEnd (lx, ly)
     ovDirty = -1: listFollow = -1
     IF n THEN Msg "Selected" + STR$(SelCount) + IIFS$(SelCount = 1, " part", " parts") + " (drag one to move them all; Shift + box: adds)" ELSE Msg "No part's middle in the box"
 END SUB
+
+' Part p mirrored across the plane ax = at# (ax 0 x, 1 y, 2 z): a copy at the end
+' of the list, a mesh part (its points flipped, its polygons wound back so they
+' still face out): its number, 0 if nothing's there (or the model's full).
+' Not a prefab's use. No undo step: the caller's
+FUNCTION PartMirror& (p, ax, at#)
+    DIM q, id AS LONG, v AS LONG, f AS LONG, n AS LONG, c0 AS LONG, k AS LONG, j AS LONG, e AS _BYTE
+    IF pKind(p) = K_USE OR pN >= MAX_PARTS THEN EXIT FUNCTION
+    IF pKind(p) = K_MESH THEN id = pMesh(p) ELSE id = PartMeshOf&(p)
+    IF mbFN(id) = 0 THEN EXIT FUNCTION
+    pN = pN + 1: q = pN: PartCopy p, q: pName$(q) = ""
+    EmLoad id ' (its own points flipped on the same axis - p' = S R D q + S t = (S R S) D (S q) + S t)
+    FOR v = 1 TO swN
+        SELECT CASE ax
+            CASE 0: swX(v) = -swX(v)
+            CASE 1: swY(v) = -swY(v)
+            CASE ELSE: swZ(v) = -swZ(v)
+        END SELECT
+    NEXT
+    FOR f = 1 TO sfN ' (each polygon wound the other way, so it still faces out - as SelFlip)
+        IF sfLive(f) THEN
+            c0 = sfC0(f): n = sfCN(f)
+            FOR k = 0 TO n \ 2 - 1
+                j = n - 1 - k
+                SWAP scV(c0 + k), scV(c0 + j): SWAP scTU(c0 + k), scTU(c0 + j): SWAP scTV(c0 + k), scTV(c0 + j)
+            NEXT
+            e = scE(c0 + n - 1)
+            FOR k = 0 TO (n - 1) \ 2 - 1
+                SWAP scE(c0 + k), scE(c0 + n - 2 - k)
+            NEXT
+            scE(c0 + n - 1) = e
+        END IF
+    NEXT
+    MakeMeshPart q, EmWrite&
+    pCol(q) = pCol(p)
+    SELECT CASE ax ' (S R S: the turns about the other two axes the other way)
+        CASE 0: pX(q) = 2 * at# - pX(p): pRY(q) = -pRY(p): pRZ(q) = -pRZ(p)
+        CASE 1: pY(q) = 2 * at# - pY(p): pRX(q) = -pRX(p): pRZ(q) = -pRZ(p)
+        CASE ELSE: pZ(q) = 2 * at# - pZ(p): pRX(q) = -pRX(p): pRY(q) = -pRY(p)
+    END SELECT
+    PartMirror& = q
+END FUNCTION

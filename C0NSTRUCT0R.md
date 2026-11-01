@@ -11,7 +11,8 @@ reused).
 Status: started 2026-11-01 on the `c0nstruct0r` branch. Stages 1 (the
 report card, `tools/c0nstruct0r/report.py`), 2 (the port: UI/REMOTE,
 `tools/c0nstruct0r/rc.py`) and 3 (the MCP server, the `/c0nstruct0r`
-skill, alarmpc rebuilt on Rick's screen) done; stage 4 next.
+skill, alarmpc rebuilt on Rick's screen) done; 21 props rebuilt (stage 5);
+FIX THIS's bu1ld0r-alone half (stage 6) built - its Claude half next.
 
 ## Why the props look the way they do
 
@@ -141,6 +142,43 @@ the selected parts), each with its count and its own button:
 - Each fix is one undo step (a Claude fix: one backup, then its own
   steps), and its line in the panel shows before / after.
 
+**Built (2026-11-01): the panel and its bu1ld0r-alone fixes** (UI/FIX;
+F2, or FIX in the top bar). The checks are report.py's, run on what
+EXPORT makes (hidden parts too, tidied if it's to be), so the SCORE is the
+report card's: the game's alarmpc 64, c0-alarmpc 25, in both. Each row has
+SHOW (selects the parts carrying it) and LEAVE (out of the score; saved
+in the .bld as `fixleave asym ...`). What changed from the table above:
+
+- SMEAR got a bu1ld0r-alone fix, **MAKE PLAIN**: each smeared face its
+  pixels' average colour (the game's bench: 84 -> 21). Re-mapping it from
+  the painting stays Claude's (PICTURES).
+- PIXEL SIZE has **no** bu1ld0r-alone fix: refitting a face's spots shows
+  a different piece of the picture, a judgement - it goes with PICTURES.
+- SYMMETRY: **KEEP L / KEEP R** (as seen from the front; the mirror at
+  x = 0 if the model's across it, else its middle). The other side's parts
+  go, this side's are mirrored (`PartMirror&`, as the port's `mirror`), and
+  a part across the middle that's off its own mirror (its outline, or a
+  box with no twin) is cut there and rebuilt from its kept half and that
+  half mirrored (`FxHalfMesh&`) - what an imported game prop needs, one
+  mesh: the bench's asymmetry 21% -> 0, no seam.
+- ANGLES: **SQUARE UP** snaps turns 0.75-8 degrees off a multiple of 45,
+  then puts each face still that far off onto its nice way's plane (24
+  passes, shared points agree; a shape made a mesh first). A face meeting a
+  neighbour at 0.5-20 degrees is a round thing's facet: left, and no longer
+  counted - in report.py too (its docstring always said so; no score here
+  changed).
+- TRIANGLES: **TIDY** turns EXPORT: TIDIED on with the report card's
+  budget (1000; 200 for a small thing - every side 0.3 or less, or
+  `pickup-`).
+- PICTURES and REPEATS are shown (what EXPORT packs 2x2 or cuts), not
+  scored - as report.py.
+- The port: `fix [check | open | close | plain | square | keep left | keep
+  right | tidy | show W | leave W]` answers with every number
+  (`ok score 25 smear 0 size 44.6 ...`).
+
+Next: the Claude half (PICTURES, DETAIL, REBUILD; the "What should I fix?"
+box; `ask`).
+
 ## The port's commands (stage 2)
 
 bu1ld0r `--port`; `python3 tools/c0nstruct0r/rc.py CMD` (or `-f FILE`,
@@ -168,6 +206,7 @@ belongs to the connection: it ends when the connection does.
 | `view YAW [PITCH [DIST]]` | camera: yaw 0 = the front (game picture f = yaw f x 45), pitch up + |
 | `mesh P` | a shape made a mesh part |
 | `mirror P [x \| y \| z] [at=V]` | a mirrored copy across the plane axis = V (its number back) |
+| `fix [check \| open \| close \| plain \| square \| keep left \| keep right \| tidy \| show W \| leave W]` | FIX THIS: the report card on the model (`ok score S smear ...`), its panel, a fix, SHOW / LEAVE a finding (W: smear size angle asym tris pics repeats) |
 | `edit P` / `done` | E on part P (made a mesh), faces mode, camera to it / E off |
 | `pick [add] none \| all \| F... \| facing X Y Z [DEG]` | faces picked (facing: within DEG, 10, of that way) |
 | `extrude D` | picked faces out D (negative: in) with sides |
@@ -238,7 +277,9 @@ after for each rebuild.
 6. FIX THIS: the panel in bu1ld0r, a button per problem, on the open
    model. Its bu1ld0r-alone fixes (PIXEL SIZE, SYMMETRY, ANGLES,
    TRIANGLES) and LEAVE need only the report card, so they can come any
-   time after stage 1, before the Claude ones.
+   time after stage 1, before the Claude ones. The panel and its
+   bu1ld0r-alone fixes done 2026-11-01 (see *Built* under FIX THIS above);
+   the Claude ones next.
 
 Later, pixelmon: its AI meshes (`--mesh`) as a see-through reference to
 build a clean low-poly version over. bu1ld0r would need glTF import for

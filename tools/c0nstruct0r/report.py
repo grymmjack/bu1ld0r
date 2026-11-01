@@ -17,7 +17,8 @@ written to the game. Plain Python, no numpy. Per prop:
   SIZE    % of the textured surface whose pixels are more than 1.5x bigger
           or smaller than the prop's usual size (px/cell: that usual size)
   ANGLE   % of the surface tilted 0.75-8 degrees off square or 45 (the
-          staircase outlines extrude leaves) - not round things' facets
+          staircase outlines extrude leaves) - not round things' facets (a
+          face meeting a neighbour at 0.5-20 degrees)
   ASYM    how far the prop is from mirror-symmetric left to right: its
           outline from the front and from above, against its own mirror
           image (% of the outline that doesn't match; the worse of the two)
@@ -278,6 +279,24 @@ def asym(tris, lo, hi):
     return worst
 
 
+def round_facet(corners, n, tris):
+    """A round thing's facet: a triangle meeting another that shares a corner with it at
+    0.5 to 20 degrees (a cylinder's sides, a sphere's) - not a crooked face."""
+    key = lambda p: (round(p[0], 4), round(p[1], 4), round(p[2], 4))
+    mine = {key(p) for p in corners}
+    for p0, p1, p2, _, _ in tris:
+        if not ({key(p0), key(p1), key(p2)} & mine):
+            continue
+        m = cross(sub(p1, p0), sub(p2, p0))
+        ml = math.sqrt(dot(m, m))
+        if ml < 1e-12:
+            continue
+        d = max(-1.0, min(1.0, dot(n, m) / ml))
+        if 0.5 < math.degrees(math.acos(d)) < 20:
+            return True
+    return False
+
+
 def wmedian(pairs):
     """The area-weighted median of (value, area) pairs."""
     pairs = sorted(pairs)
@@ -318,6 +337,7 @@ def grade(path, name, props, shapes):
     smear = ang = flat = 0.0
     dens = []
     texs = set()
+    crooked = []
     for p0, p1, p2, t, m in tris:
         n = cross(sub(p1, p0), sub(p2, p0))
         nl = math.sqrt(dot(n, n))
@@ -327,7 +347,7 @@ def grade(path, name, props, shapes):
         area_all += a
         off = angle_off((n[0] / nl, n[1] / nl, n[2] / nl))
         if ANG_LO <= off <= ANG_HI:
-            ang += a
+            crooked.append(((p0, p1, p2), (n[0] / nl, n[1] / nl, n[2] / nl), a))
         if t is None:
             area_col += a
             continue
@@ -352,6 +372,7 @@ def grade(path, name, props, shapes):
                 smear += a
         else:
             dens.append((math.sqrt(s1 * s2), a))
+    ang = sum(a for c, n, a in crooked if not round_facet(c, n, tris))
     pxc = wmedian(dens) if dens else 0.0
     texd = area_tex - smear - flat
     offsz = sum(a for d, a in dens if d > pxc * SIZE_OFF or d * SIZE_OFF < pxc) if pxc else 0.0

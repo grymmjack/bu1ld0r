@@ -74,7 +74,7 @@ FUNCTION FieldShown (f)
     IF f = F_PNAME THEN FieldShown = (typeField = F_PNAME): EXIT FUNCTION
     IF f = F_PFNAME THEN FieldShown = (typeField = F_PFNAME): EXIT FUNCTION
     IF f = F_PICPATH THEN FieldShown = (binTab = 1 OR binTab = 2): EXIT FUNCTION ' (PICTURES' folder, or MODELS')
-    IF maOn OR brOn THEN EXIT FUNCTION ' (MATERIAL / painting on the model has the panel: its fields aren't there)
+    IF maOn OR brOn OR fxOn THEN EXIT FUNCTION ' (MATERIAL / painting on the model / FIX THIS has the panel: its fields aren't there)
     IF f = F_BUDGET THEN FieldShown = (edPart = 0 AND SelCount = 0 AND placeKind = 0): EXIT FUNCTION
     IF edPart THEN FieldShown = EdFieldShown(f): EXIT FUNCTION
     p = SelFirst
@@ -243,6 +243,7 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 17: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 70: y = 3: w = 64 ' (INSIDE, after that)
         CASE 18: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 140: y = 3: w = 34 ' (SG: smart guides)
         CASE 19: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 180: y = 3: w = 52 ' (PAINT: on the model)
+        CASE 20: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 238: y = 3: w = 40 ' (FIX: FIX THIS)
         CASE 21: x = PX0 + 46: y = 58: w = 20
         CASE 22: x = PX0 + 134: y = 58: w = 20
         CASE 23: x = PX0 + 158: y = 32: w = 72
@@ -259,6 +260,7 @@ END SUB
 FUNCTION PanelBtnName$ (k)
     SELECT CASE k
         CASE 19: PanelBtnName$ = "PAINT"
+        CASE 20: PanelBtnName$ = "FIX"
         CASE 1: PanelBtnName$ = "DUPLICATE"
         CASE 2: PanelBtnName$ = "DELETE"
         CASE 3: PanelBtnName$ = "FRAME"
@@ -632,6 +634,8 @@ SUB UiFrame
             IF InRect(mX, mY, x, y, w, h) THEN SgToggle
             PanelBtn 19, x, y, w, h
             IF InRect(mX, mY, x, y, w, h) THEN BrToggle
+            PanelBtn 20, x, y, w, h
+            IF InRect(mX, mY, x, y, w, h) THEN FxToggle
             topSlide = SliderAt(mX, mY)
         ELSEIF maOn AND mX < scrW - PANEL_W THEN
             Msg "MATERIAL is open: APPLY (Enter) or CANCEL (Esc) first"
@@ -731,6 +735,7 @@ SUB UiFrame
     END IF
     IF NOT inView THEN hoverPart = ListPartAt(mX, mY) ' (a row of the list: its part outlined in the view)
     IF hoverPart <> oldHover THEN ovDirty = -1
+    FxFrame ' (FIX THIS: a change checked again - before the view's drawn, as it makes the triangles again)
     BinIconsDue
 END SUB
 
@@ -798,6 +803,10 @@ SUB UiKey (k&)
         IF BrKey(k&) THEN EXIT SUB
     ELSEIF (k& = 80 OR k& = 112) AND kShift AND NOT kCtrl AND NOT kAlt THEN
         BrStart: EXIT SUB ' (Shift+P: paint on the model)
+    END IF
+    IF k& = 15360 AND NOT kCtrl AND edPart = 0 AND maOn = 0 THEN FxToggle: EXIT SUB ' (F2: FIX THIS)
+    IF fxOn AND NOT (kCtrl OR CtrlCode(k&)) THEN
+        IF FxKey(k&) THEN EXIT SUB
     END IF
     IF maOn AND NOT (kCtrl OR CtrlCode(k&)) THEN
         IF MaKey(k&) THEN EXIT SUB
@@ -1085,6 +1094,7 @@ SUB PanelClick
     IF maOn THEN MaClick: EXIT SUB
     IF brOn THEN BrClick: EXIT SUB
     IF edPart THEN EdPanelClick: EXIT SUB
+    IF fxOn THEN FxClick: EXIT SUB
     IF TfClick THEN EXIT SUB
     IF SelCount > 0 THEN IF AlClick(604) THEN EXIT SUB
     IF SelCount > 0 THEN IF ShClick(684) THEN EXIT SUB
@@ -1579,7 +1589,7 @@ END SUB
 
 ' The part's panel (a part selected, or a shape being set up): ZERO buttons beside its numbers
 FUNCTION ZeroOn
-    IF edPart OR maOn THEN EXIT FUNCTION
+    IF edPart OR maOn OR fxOn THEN EXIT FUNCTION
     ZeroOn = (SelCount > 0 OR TplOn)
 END FUNCTION
 
@@ -2011,6 +2021,7 @@ SUB UiDraw
     PanelBtn 17, x, y, w, h: Btn x, y, w, h, PanelBtnName$(17), viewBacks
     PanelBtn 18, x, y, w, h: Btn x, y, w, h, PanelBtnName$(18), sgOn
     PanelBtn 19, x, y, w, h: Btn x, y, w, h, PanelBtnName$(19), brOn
+    PanelBtn 20, x, y, w, h: Btn x, y, w, h, PanelBtnName$(20), fxOn
     t$ = APP_NAME$ + " " + APP_VERSION$
     IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
     IF mdlDirty THEN t$ = "* not saved   " + t$
@@ -2080,6 +2091,7 @@ SUB PanelDraw
     IF maOn THEN MaDraw: EXIT SUB
     IF brOn THEN BrDraw: EXIT SUB
     IF edPart THEN EdPanelDraw: EXIT SUB
+    IF fxOn THEN FxDraw: EXIT SUB
     p = SelFirst: n = SelCount
     IF n = 0 AND placeKind THEN p = P_TPL: n = -1 ' (the shape being put down, set up here first)
     IF n = 0 THEN
@@ -2641,6 +2653,12 @@ SUB HelpSetup
     HelpAdd "#EXPORT"
     HelpAdd "Ctrl+E  EXPORT|export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg"
     HelpAdd "TIDIED|(the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so"
+    HelpAdd "#FIX THIS (F2, or FIX in the top bar)"
+    HelpAdd "F2  FIX|the report card's checks on what EXPORT makes: SMEAR (pictures pulled into streaks), PIXEL SIZE, ANGLES (faces a little off square or 45), SYMMETRY (the outline against its mirror image), TRIANGLES (against 1000, or 200 for a small thing), PICTURES and REPEATS (what EXPORT shrinks or cuts). The SCORE: 0 is nothing found. Checked again after each change"
+    HelpAdd "SHOW|selects the parts carrying it"
+    HelpAdd "MAKE PLAIN  SQUARE UP|smeared faces their pixels' colour; faces a little off made true (turns snapped, a shape made a mesh; round things' facets left)"
+    HelpAdd "KEEP L  KEEP R|the left (or right) half, as the front's seen, mirrored over the other; parts across the middle stay"
+    HelpAdd "TIDY  LEAVE|the export cut down to the budget; LEAVE: it's meant so - out of the score, saved with the model. A fix works on the parts picked, or all of them"
     HelpAdd "#c0nstruct0r (bu1ld0r started with --port, or port= in bu1ld0r.cfg)"
     HelpAdd "c0nstruct0r|a program on this computer drives bu1ld0r through a port: a strip over the view's foot says what it's doing. While it has the model, no key, click or wheel does anything but Esc. Every change it makes is one undo step"
     HelpAdd "Esc|(c0nstruct0r has the model) take it back: c0nstruct0r stops"

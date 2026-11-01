@@ -552,6 +552,37 @@ see-through behind the model so you can build over it from any angle.
 
 - Esc, V or a right click goes back to orbiting, exactly as you left it.
 
+### FIX THIS: the report card in the program
+
+F2 (or FIX in the top bar) checks the model as EXPORT would write it, the
+same way c0nstruct0r's report card (`tools/c0nstruct0r/report.py`) grades
+the game's props, and lists what it finds with a SCORE (0: nothing found;
+the game's own props score 40-90):
+
+- **SMEAR** - pictures pulled across a face into streaks. MAKE PLAIN gives
+  each smeared face its pixels' colour instead.
+- **PIXEL SIZE** - faces whose pixels are much bigger or smaller than the
+  rest.
+- **ANGLES** - faces a few degrees off square or 45. SQUARE UP makes them
+  true (turns snapped; a shape's faces made true makes it a mesh part;
+  a round thing's facets are left alone).
+- **SYMMETRY** - the outline from the front and from above against its
+  mirror image (the panel draws it, lit where there's no match). KEEP L /
+  KEEP R keeps one half, as seen from the front, and mirrors it over the
+  other: parts on the other side go, this side's are mirrored, and a part
+  across the middle that's off its own mirror is cut there and made of its
+  kept half twice.
+- **TRIANGLES** - against 1000 (200 for a small thing). TIDY turns EXPORT:
+  TIDIED on, at that budget.
+- **PICTURES** and **REPEATS** - more than one picture (EXPORT packs them
+  2x2, shrunk) and pictures repeated across a face (EXPORT cuts those
+  faces up): shown, not scored.
+
+SHOW selects the parts carrying a finding. LEAVE says one is meant as it is:
+it's left out of the score and saved with the model. A fix works on the
+selected parts, or on everything when nothing is selected, and is one undo
+step. The panel checks again a moment after each change.
+
 ### Letting c0nstruct0r drive it
 
 c0nstruct0r (`C0NSTRUCT0R.md`, still being built) is Claude rebuilding
@@ -1116,6 +1147,16 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 |---|---|
 | Ctrl+E / EXPORT | export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg |
 | TIDIED | (the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so |
+
+#### FIX THIS (F2, or FIX in the top bar)
+
+| Keys | What it does |
+|---|---|
+| F2 / FIX | the report card's checks on what EXPORT makes: SMEAR (pictures pulled into streaks), PIXEL SIZE, ANGLES (faces a little off square or 45), SYMMETRY (the outline against its mirror image), TRIANGLES (against 1000, or 200 for a small thing), PICTURES and REPEATS (what EXPORT shrinks or cuts). The SCORE: 0 is nothing found. Checked again after each change |
+| SHOW | selects the parts carrying it |
+| MAKE PLAIN / SQUARE UP | smeared faces their pixels' colour; faces a little off made true (turns snapped, a shape made a mesh; round things' facets left) |
+| KEEP L / KEEP R | the left (or right) half, as the front's seen, mirrored over the other; parts across the middle stay |
+| TIDY / LEAVE | the export cut down to the budget; LEAVE: it's meant so - out of the score, saved with the model. A fix works on the parts picked, or all of them |
 
 #### c0nstruct0r (bu1ld0r started with --port, or port= in bu1ld0r.cfg)
 
