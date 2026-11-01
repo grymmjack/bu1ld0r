@@ -1,0 +1,96 @@
+# c0nstruct0r: tank, rebuilt from hd/tank.png (0.55 tall; subject 203x240 at +24+8)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/tank.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/tank.png)
+take
+pace 400
+say tank: a tank: a round grey drum with an orange top, a neck and lid, on four feet
+new force
+say the drum
+add cylinder 0.0057 0.0413 0 0.4492 0.3964 0.4492 seg=16 col=7A828C name=drum
+say the neck and its lid on top
+add cylinder -0.0023 0.4377 0 0.2223 0.1077 0.2223 seg=16 col=3A3E44 name=neck
+say four feet under it
+add box 0.1547 -0.0183 -0.13 0.0458 0.0596 0.05 col=3A3E44 name=foot-a
+add box 0.1547 -0.0183 0.13 0.0458 0.0596 0.05 col=3A3E44 name=foot-b
+add box -0.1547 -0.0183 -0.13 0.0458 0.0596 0.05 col=3A3E44 name=foot-c
+add box -0.1547 -0.0183 0.13 0.0458 0.0596 0.05 col=3A3E44 name=foot-d
+look all
+view 25 18
+say pictures: the drum and neck all the way round from the painting (the back mirrored); tops orange, as the painting's
+edit 1
+pick facing 0 0 -1 90
+picture c0nstruct0r/tank view 0 40 64 208 226 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/tank view 180 208 64 40 226 own
+pick facing 0 1 0 30
+colour E07A20
+pick facing 0 -1 0 30
+colour 3A3E44
+done
+edit 2
+pick facing 0 0 -1 90
+picture c0nstruct0r/tank view 0 84 14 170 55 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/tank view 180 170 14 84 55 own
+pick facing 0 1 0 30
+colour F08A30
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/tank view 0 24 8 227 248
+pick facing 0 0 1 45
+picture c0nstruct0r/tank view 180 227 8 24 248
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3E44
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/tank view 0 24 8 227 248
+pick facing 0 0 1 45
+picture c0nstruct0r/tank view 180 227 8 24 248
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3E44
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/tank view 0 24 8 227 248
+pick facing 0 0 1 45
+picture c0nstruct0r/tank view 180 227 8 24 248
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3E44
+done
+edit 6
+pick facing 0 0 -1 45
+picture c0nstruct0r/tank view 0 24 8 227 248
+pick facing 0 0 1 45
+picture c0nstruct0r/tank view 180 227 8 24 248
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3E44
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot tank0 clean
+view 45 0
+shot tank1 clean
+view 90 0
+shot tank2 clean
+view 135 0
+shot tank3 clean
+view 180 0
+shot tank4 clean
+view 225 0
+shot tank5 clean
+view 270 0
+shot tank6 clean
+view 315 0
+shot tank7 clean
+view 25 18
+save c0-tank
+export
+give

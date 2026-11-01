@@ -261,6 +261,9 @@ bu1ld0r's `export/` only. SCORE: higher is worse.
 | mimic-asleep | 7 | 84 | 1 | 58 | chest's steps on its own painting (pink glow) |
 | chest-open | 4 | 48 | 14 | 59 | body, gem heap, lid open and leaning back (its inside the painting's, its outside the body's panels), latch |
 | safe-open | 3 | 52 | 13 | 61 | plinth, cabinet with the open compartment cut in (inset, scale, move, pushed in 0.24: the shelves on its back wall), handle |
+| lamp | 5 | 224 | 32 | 58 | base disc, pole, socket, bulb, drum shade - one axis; each round part from its own patch inside its outline |
+| cryopod | 2 | 72 | 6 | 56 | the pod (front inset and pushed in 0.26: the hollow), the sleeper standing in it; the pod's outside its own blue |
+| tank | 6 | 168 | 27 | 54 | drum, neck and lid, four feet; tops orange (the painting's) |
 
 Learned on the way:
 - `own` (the part's box, not the model's) for sides and tops: each part's
@@ -277,6 +280,10 @@ Learned on the way:
   inside-out parts that vanish - check `add` lines for a negative size.
 - Round things (cylinders, spheres, cones): front half `view 0` (facing
   0 0 -1 90), back half `view 180`.
+- A cylinder mapped from the front takes the painting's outline columns
+  at its sides: map it over its own box onto a patch inside the outline
+  (else the rounded-off corners come out as holes). What's left of SMEAR
+  on round parts is the sides near +-x, where the painting has few columns.
 - An export bug it found: a spot on the picture's bottom edge (v = 1)
   counted as repeating past it, so every export of a prop whose painting
   reaches the bottom row was packed 2x2 and its pixels halved

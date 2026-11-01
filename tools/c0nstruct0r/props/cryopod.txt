@@ -1,0 +1,64 @@
+# c0nstruct0r: cryopod, rebuilt from hd/cryopod.png (0.95 tall; subject 123x252 at +66+4)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/cryopod.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/cryopod.png)
+take
+pace 400
+say cryopod: a cryopod: a blue capsule, its front open, a white sleeper standing in it
+new force
+say the pod: a box the painting's width, 0.4 deep
+add box 0.0019 0.0 0 0.4524 0.9387 0.4 col=1E6AA8 name=pod
+say its front: a frame inset, then pushed in deep - the hollow the sleeper stands in
+edit 1
+pick facing 0 0 -1
+inset 0.1
+extrude -0.26
+done
+say the sleeper: a rounded capsule standing in the hollow
+add cylinder -0.0132 0.0302 0.02 0.3016 0.5579 0.18 seg=12 col=D8DEE6 name=sleeper
+look all
+view 25 18
+say pictures: the front and the hollow's back wall from the painting; the sleeper all the way round; the pod's sides, back and top its own blue
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/cryopod view 0 66 4 189 256
+pick facing 0 0 1 45
+colour 1A5A90
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 1E6AA8
+pick facing 0 1 0 30
+colour 2A7AB8
+pick facing 0 -1 0 30
+colour 12406A
+done
+edit 2
+pick facing 0 0 -1 90
+picture c0nstruct0r/cryopod view 0 66 4 189 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/cryopod view 180 189 4 66 256
+pick facing 0 1 0 30
+colour D8DEE6
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot cryopod0 clean
+view 45 0
+shot cryopod1 clean
+view 90 0
+shot cryopod2 clean
+view 135 0
+shot cryopod3 clean
+view 180 0
+shot cryopod4 clean
+view 225 0
+shot cryopod5 clean
+view 270 0
+shot cryopod6 clean
+view 315 0
+shot cryopod7 clean
+view 25 18
+save c0-cryopod
+export
+give

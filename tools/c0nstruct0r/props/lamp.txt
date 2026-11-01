@@ -1,0 +1,80 @@
+# c0nstruct0r: lamp, rebuilt from hd/lamp.png (0.85 tall; subject 52x256 at +102+0)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/lamp.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/lamp.png)
+take
+pace 400
+say lamp: a floor lamp: a round base, a thin pole, a bulb holder and a drum shade
+new force
+say the base: a flat disc - every part on one axis, as a lathe makes it
+add cylinder 0.0 0.0 0 0.1693 0.0764 0.1693 seg=16 col=D83A4A name=base
+say the pole
+add cylinder 0.0 0.0764 0 0.0398 0.4748 0.0398 seg=8 col=D84A5A name=pole
+say the bulb holder: a cyan socket and the red bulb
+add cylinder 0.0 0.5512 0 0.0299 0.083 0.0299 seg=8 col=2AD8E0 name=socket
+add sphere 0.0 0.6309 0 0.0432 0.0431 0.0432 seg=8 col=E83A4A name=bulb
+say the drum shade
+add cylinder 0.0 0.6773 0 0.1693 0.1727 0.1693 seg=16 col=2AD8E0 name=shade
+look all
+view 25 18
+say pictures: each round part's front half from its piece of the painting (inside its outline), its back half the same mirrored; tops in their colours
+edit 1
+pick facing 0 0 -1 90
+picture c0nstruct0r/lamp view 0 106 244 147 252 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/lamp view 180 147 244 106 252 own
+pick facing 0 1 0 30
+colour D83A4A
+pick facing 0 -1 0 30
+colour 3A1A20
+done
+edit 2
+pick facing 0 0 -1 90
+picture c0nstruct0r/lamp view 0 121 95 128 228 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/lamp view 180 128 95 121 228 own
+done
+edit 3
+pick facing 0 0 -1 90
+picture c0nstruct0r/lamp view 0 124 67 129 88 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/lamp view 180 129 67 124 88 own
+done
+edit 4
+pick facing 0 0 -1 90
+picture c0nstruct0r/lamp view 0 122 55 131 64 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/lamp view 180 131 55 122 64 own
+done
+edit 5
+pick facing 0 0 -1 90
+picture c0nstruct0r/lamp view 0 105 3 150 49 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/lamp view 180 150 3 105 49 own
+pick facing 0 1 0 30
+colour 5AE8F0
+pick facing 0 -1 0 30
+colour 1A98A0
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot lamp0 clean
+view 45 0
+shot lamp1 clean
+view 90 0
+shot lamp2 clean
+view 135 0
+shot lamp3 clean
+view 180 0
+shot lamp4 clean
+view 225 0
+shot lamp5 clean
+view 270 0
+shot lamp6 clean
+view 315 0
+shot lamp7 clean
+view 25 18
+save c0-lamp
+export
+give
