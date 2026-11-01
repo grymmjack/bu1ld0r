@@ -174,7 +174,7 @@ belongs to the connection: it ends when the connection does.
 | `inset K` | each picked face inset, corners K of the way to its middle |
 | `push D`, `move DX DY DZ`, `scale K [KY KZ]` | picked faces (move: the selected parts, outside E) |
 | `colour RRGGBB`, `flip` | picked faces' colour (selected parts', outside E); faces turned over |
-| `picture REF fit \| tile N \| view YAW X0 Y0 X1 Y1 \| top X0 Y0 X1 Y1 \| none` | pictures/REF.png on the picked faces: stretched; repeated at N px a cell; seen from YAW with the model's box filling those pixels (a painting's part for each face); `top` the same from above, front at the bottom |
+| `picture REF fit \| tile N \| view YAW X0 Y0 X1 Y1 [own] \| top X0 Y0 X1 Y1 [own] \| none` | pictures/REF.png on the picked faces: stretched; repeated at N px a cell; seen from YAW with the model's box filling those pixels (a painting's part for each face; X0 > X1 mirrors); `top` the same from above, front at the bottom; `own`: the edited part's box instead of the model's |
 
 The MCP server (`tools/c0nstruct0r/mcp_server.py`) wraps these as tools:
 `bu1ld0r` (lines of commands), `look` (`yaw` / `pitch` / `dist`, `how`,
@@ -243,6 +243,35 @@ after for each rebuild.
 Later, pixelmon: its AI meshes (`--mesh`) as a see-through reference to
 build a clean low-poly version over. bu1ld0r would need glTF import for
 that, or pixelmon could write OBJ as well.
+
+## Rebuilt
+
+Each prop's steps are `tools/c0nstruct0r/props/NAME.txt` (its painting in
+`pictures/c0nstruct0r/`), its model `models/c0-NAME.bld`; exported to
+bu1ld0r's `export/` only. SCORE: higher is worse.
+
+| Prop | Parts | Triangles | Score | The game's | Notes |
+|---|---|---|---|---|---|
+| alarmpc | 5 | 72 | 25 | 64 (186 tris) | desk, riser wedge, sloped deck, monitor bank (screens inset), foot box |
+| bench | 10 | 120 | 28 | 84 | slab on four legs, pad, toolbox with a handle; the top plain dark (the painting shows only its edge) |
+| generator | 7 | 244 | 23 | 61 | cabinet with the window inset and set back, three coils, pins |
+| desk | 11 | 172 | 22 | 61 | top, legs, drawer unit, back panel, monitor (screen inset), mug, clutter |
+| labbench | 15 | 396 | 23 | 57 | cabinet, worktop, microscope stand, round and cone flasks, rack |
+
+Learned on the way:
+- `own` (the part's box, not the model's) for sides and tops: each part's
+  sides take its own piece of the painting; mapped over the whole model a
+  side took whatever was at that height (see-through, or the next part's).
+- A top the painting never shows (a bench's, a desk's) is a plain colour,
+  not a row of pixels smeared across it.
+- The back is the front mirrored (`view 180 X1 Y0 X0 Y1`), so it lines up
+  with the parts behind it.
+- Round things (cylinders, spheres, cones): front half `view 0` (facing
+  0 0 -1 90), back half `view 180`.
+- An export bug it found: a spot on the picture's bottom edge (v = 1)
+  counted as repeating past it, so every export of a prop whose painting
+  reaches the bottom row was packed 2x2 and its pixels halved
+  (`ExMarkUsed`, fixed).
 
 ## Decisions (Rick, 2026-11-01)
 

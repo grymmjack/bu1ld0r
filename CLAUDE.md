@@ -476,7 +476,8 @@ EdColour takes the picture off. RasterTri draws them with `FillTriT`
 (perspective-correct; spots carried through the near clip), except the
 ghost / holes / wireframe. Tidy keeps textured triangles as they are
 (parked at the top of the arrays, `tdHold`). Export: `ExAtlas` - one
-picture with room (`ExMarkUsed`, 16x16 squares): kept pixel for pixel,
+picture with room (`ExMarkUsed`, 16x16 squares; a spot on the edge, v = 1,
+is in it): kept pixel for pixel,
 the colours in unused squares (exMode 1); else a 2x2 / 4x4 grid (2).
 IMPORT (`ObjImport`; ModelLoad on `.obj` or `neon:NAME`; OPEN lists the
 game's props via `NeonInDir$` - read only): pieces by welded points

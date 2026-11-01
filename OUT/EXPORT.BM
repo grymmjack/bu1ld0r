@@ -358,6 +358,11 @@ SUB ExMarkUsed (t AS LONG, used() AS _BYTE)
     DIM k, x0, x1, y0, y1, x, y, i, j, px, py, d, a, b, xs(2), ys(2), hit
     FOR k = 0 TO 2
         xs(k) = tU(3 * t + k) * EX_BLK: ys(k) = tW(3 * t + k) * EX_BLK
+        ' (a spot on the picture's edge - v 1, its bottom row's foot - is in it, not past it)
+        IF xs(k) < 0 AND xs(k) > -.001 THEN xs(k) = 0
+        IF ys(k) < 0 AND ys(k) > -.001 THEN ys(k) = 0
+        IF xs(k) >= EX_BLK AND xs(k) < EX_BLK + .001 THEN xs(k) = EX_BLK - .0001
+        IF ys(k) >= EX_BLK AND ys(k) < EX_BLK + .001 THEN ys(k) = EX_BLK - .0001
     NEXT
     x0 = INT(xs(0)): x1 = x0: y0 = INT(ys(0)): y1 = y0
     FOR k = 1 TO 2

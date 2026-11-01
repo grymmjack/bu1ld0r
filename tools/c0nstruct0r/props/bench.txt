@@ -1,0 +1,158 @@
+# c0nstruct0r: bench, rebuilt from hd/bench.png (0.35 tall; subject 232x135 at +12+121)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/bench.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/bench.png)
+take
+pace 400
+say bench: the painting is a red bench on four legs, a grey pad on the left, a red toolbox with a handle on the right
+new force
+say the slab: the painting's full width, 0.6, 0.08 thick, 0.3 deep
+add box 0 0.1115 0 0.6015 0.0778 0.30 col=8A2A2A name=slab
+say four legs under its ends, front and back
+add box 0.231 0 -0.09 0.062 0.1115 0.06 col=4A4E58 name=leg-left-front
+add box 0.231 0 0.09 0.062 0.1115 0.06 col=4A4E58 name=leg-left-back
+add box -0.231 0 -0.09 0.062 0.1115 0.06 col=4A4E58 name=leg-right-front
+add box -0.231 0 0.09 0.062 0.1115 0.06 col=4A4E58 name=leg-right-back
+say the toolbox on the slab's right (the painting's right is the model's -x)
+add box -0.1335 0.1893 0 0.1841 0.114 0.11 col=C81E1E name=toolbox
+say its handle: a bar on two posts
+add box -0.1335 0.3319 0 0.1063 0.0155 0.02 col=3A3E48 name=handle
+add box -0.0894 0.3033 0 0.0181 0.0286 0.02 col=3A3E48 name=post-a
+add box -0.1776 0.3033 0 0.0181 0.0286 0.02 col=3A3E48 name=post-b
+say the grey pad on the left
+add box 0.1633 0.1893 0 0.2333 0.0388 0.16 col=9AA0AA name=pad
+look all
+view 25 18
+say pictures, all from the one painting: fronts as seen from the front; the back as the front, mirrored; each part's sides and top from its own piece of the painting
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 12 183 72 213 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 184 183 244 213 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+say the slab's top: the painting shows only a dark edge of it - a plain dark top, not that edge smeared across
+pick facing 0 1 0
+pick add facing 0 -1 0
+colour 2B2D33
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 28 213 53 256 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 28 213 53 256 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 28 213 53 256 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 28 213 53 256 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 208 213 230 256 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 208 213 230 256 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 208 213 230 256 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 208 213 230 256 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+done
+edit 6
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 144 139 184 184 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 175 139 215 184 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+pick facing 0 1 0
+picture c0nstruct0r/bench top 146 145 213 160 own
+done
+edit 7
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 159 122 200 128 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 159 122 200 128 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+pick facing 0 1 0
+picture c0nstruct0r/bench top 159 122 200 127 own
+done
+edit 8
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 159 128 166 144 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 159 128 166 144 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+done
+edit 9
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 193 128 200 144 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 193 128 200 144 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+done
+edit 10
+pick facing 0 0 -1 45
+picture c0nstruct0r/bench view 0 12 121 244 256
+pick facing 1 0 0
+picture c0nstruct0r/bench view 90 20 168 60 186 own
+pick facing -1 0 0
+picture c0nstruct0r/bench view 270 70 168 110 186 own
+pick facing 0 0 1
+picture c0nstruct0r/bench view 180 244 121 12 256
+pick facing 0 1 0
+picture c0nstruct0r/bench top 40 169 90 184 own
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot bench0 clean
+view 45 0
+shot bench1 clean
+view 90 0
+shot bench2 clean
+view 135 0
+shot bench3 clean
+view 180 0
+shot bench4 clean
+view 225 0
+shot bench5 clean
+view 270 0
+shot bench6 clean
+view 315 0
+shot bench7 clean
+view 25 18
+save c0-bench
+export
+give

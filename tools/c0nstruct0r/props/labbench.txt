@@ -1,0 +1,187 @@
+# c0nstruct0r: labbench, rebuilt from hd/labbench.png (0.45 tall; subject 248x216 at +4+40)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/labbench.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/labbench.png)
+take
+pace 400
+say labbench: a dark worktop on a three-door cabinet; on it a microscope stand, a round red flask, a green cone flask and a rack with a flask and a tube
+new force
+say the cabinet, then the worktop over it, overhanging a little
+add box -0.001 0 0 0.4771 0.2146 0.27 col=D8DCE0 name=cabinet
+add box 0.0 0.2146 0 0.5125 0.0333 0.3 col=2E3238 name=worktop
+say the stand: a foot, a post, a green lamp on top and a clamp reaching to the flask
+add box 0.1646 0.2479 0 0.1042 0.0188 0.06 col=9AA4B0 name=stand-foot
+add box 0.1771 0.2667 0 0.025 0.1521 0.025 col=B8C0C8 name=stand-post
+add box 0.1792 0.4188 0 0.0458 0.0312 0.04 col=7AE04A name=stand-lamp
+add box 0.1375 0.3187 0 0.0542 0.0167 0.015 col=9AA4B0 name=stand-clamp
+say the round flask and its neck
+add sphere 0.0625 0.2479 0 0.0958 0.0813 0.0958 seg=10 col=D82A2A name=flask
+add cylinder 0.0625 0.325 0 0.025 0.0729 0.025 seg=8 col=E8ECF0 name=flask-neck
+say the cone flask and its neck
+add cone -0.0583 0.2479 0 0.1375 0.1084 0.1375 amt=0.28 seg=12 col=3AC83A name=cone
+add cylinder -0.0583 0.35 0 0.0375 0.0417 0.0375 seg=8 col=E8ECF0 name=cone-neck
+say the rack: two posts and a bar, a red flask and a tube in it
+add box -0.1396 0.2479 0 0.0125 0.1479 0.06 col=B8C0C8 name=rack-left
+add box -0.2333 0.2479 0 0.0125 0.1479 0.06 col=B8C0C8 name=rack-right
+add box -0.1865 0.3833 0 0.1062 0.0125 0.06 col=B8C0C8 name=rack-bar
+add sphere -0.1865 0.2479 0 0.0729 0.0729 0.0729 seg=10 col=D84A2A name=rack-flask
+add cylinder -0.1771 0.2875 0.01 0.0354 0.0958 0.0354 seg=8 col=E8ECF0 name=tube
+look all
+view 25 18
+say pictures from the one painting: fronts as seen from the front, backs mirrored, sides from each part's own piece; round things all the way round
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 18 158 124 242 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 18 158 124 242 own
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 5 137 55 153 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 5 137 55 153 own
+pick facing 0 1 0
+colour 2E3238
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 24 128 74 137 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 24 128 74 137 own
+pick facing 0 1 0
+colour 9AA4B0
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 37 55 49 128 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 37 55 49 128 own
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 31 40 53 55 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 31 40 53 55 own
+pick facing 0 1 0
+colour 7AE04A
+done
+edit 6
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 49 95 75 103 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 49 95 75 103 own
+done
+edit 7
+pick facing 0 0 -1 90
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/labbench view 180 252 40 4 256
+done
+edit 8
+pick facing 0 0 -1 90
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/labbench view 180 252 40 4 256
+done
+edit 9
+pick facing 0 0 -1 90
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/labbench view 180 252 40 4 256
+done
+edit 10
+pick facing 0 0 -1 90
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/labbench view 180 252 40 4 256
+done
+edit 14
+pick facing 0 0 -1 90
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/labbench view 180 252 40 4 256
+done
+edit 15
+pick facing 0 0 -1 90
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 89.9
+picture c0nstruct0r/labbench view 180 252 40 4 256
+done
+edit 11
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 192 66 198 137 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 192 66 198 137 own
+done
+edit 12
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 237 66 243 137 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 237 66 243 137 own
+done
+edit 13
+pick facing 0 0 -1 45
+picture c0nstruct0r/labbench view 0 4 40 252 256
+pick facing 0 0 1 45
+picture c0nstruct0r/labbench view 180 252 40 4 256
+pick facing 1 0 0
+picture c0nstruct0r/labbench view 90 192 66 243 72 own
+pick facing -1 0 0
+picture c0nstruct0r/labbench view 270 192 66 243 72 own
+pick facing 0 1 0
+colour B8C0C8
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot labbench0 clean
+view 45 0
+shot labbench1 clean
+view 90 0
+shot labbench2 clean
+view 135 0
+shot labbench3 clean
+view 180 0
+shot labbench4 clean
+view 225 0
+shot labbench5 clean
+view 270 0
+shot labbench6 clean
+view 315 0
+shot labbench7 clean
+view 25 18
+save c0-labbench
+export
+give

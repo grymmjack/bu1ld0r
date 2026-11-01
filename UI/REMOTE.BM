@@ -741,12 +741,14 @@ END SUB
 ' pixels a cell from each face's top left (up as near the world's up as it
 ' goes); or seen from YAW (0: the front), the whole model's box there filling
 ' pixels X0 Y0 - X1 Y1 of it (a painting of the prop: each face gets the part
-' in front of it); top: seen from above, the front at the bottom
+' in front of it); top: seen from above, the front at the bottom. A last
+' word own: the edited part's own box, not the whole model's
 SUB RcPicture
     DIM k, how$, f AS LONG, j AS LONG, w AS LONG, n AS LONG, c0 AS LONG, i, cnt AS LONG
     DIM x#, y#, z#, nx#, ny#, nz#, l#, rx#, ry#, rz#, ux#, uy#, uz#, a#, b#, a0#, b1#, px#, yaw#
-    DIM lo AS V3, hi AS V3, q0#, q1#, h0#, h1#, sx0#, sy0#, sx1#, sy1#
+    DIM lo AS V3, hi AS V3, q0#, q1#, h0#, h1#, sx0#, sy0#, sx1#, sy1#, own
     IF NOT RcEdNeed THEN EXIT SUB
+    own = (LCASE$(rcA$(rcAN)) = "own")
     how$ = LCASE$(rcA$(3))
     IF LCASE$(rcA$(2)) = "none" THEN how$ = "none"
     IF how$ <> "none" THEN
@@ -763,7 +765,7 @@ SUB RcPicture
             yaw# = VAL(rcA$(4)) * 3.14159265358979 / 180
             sx0# = VAL(rcA$(5)): sy0# = VAL(rcA$(6)): sx1# = VAL(rcA$(7)): sy1# = VAL(rcA$(8))
             IF meshDirty THEN MeshBuild
-            MeshBounds lo, hi, 0
+            IF own THEN RcPartBounds edPart, lo, hi ELSE MeshBounds lo, hi, 0
             rx# = -COS(yaw#): rz# = -SIN(yaw#) ' (the view's right, from that side: yaw 0 looks from -z, its right is -x)
             q0# = 1E+30: q1# = -1E+30
             FOR i = 0 TO 3
@@ -777,11 +779,11 @@ SUB RcPicture
             IF rcAN < 7 THEN RcSend "err top X0 Y0 X1 Y1 (pixels of the picture the model's box from above fills)": EXIT SUB
             sx0# = VAL(rcA$(4)): sy0# = VAL(rcA$(5)): sx1# = VAL(rcA$(6)): sy1# = VAL(rcA$(7))
             IF meshDirty THEN MeshBuild
-            MeshBounds lo, hi, 0
+            IF own THEN RcPartBounds edPart, lo, hi ELSE MeshBounds lo, hi, 0
             rx# = -1: rz# = 0: q0# = -hi.x: q1# = -lo.x: h0# = lo.z: h1# = hi.z ' (right is -x, as from the front; far side at the top)
             IF q1# - q0# < 1E-9 OR h1# - h0# < 1E-9 THEN RcSend "err the model has no size from above": EXIT SUB
         CASE ELSE
-            RcSend "err picture REF fit | tile N | view YAW X0 Y0 X1 Y1 | top X0 Y0 X1 Y1 | none": EXIT SUB
+            RcSend "err picture REF fit | tile N | view YAW X0 Y0 X1 Y1 [own] | top X0 Y0 X1 Y1 [own] | none": EXIT SUB
     END SELECT
     EdBegin -1
     FOR f = 1 TO sfN
@@ -830,6 +832,30 @@ SUB RcPicture
     NEXT
     EdCommit
     RcSend "ok " + RcI$(cnt) + " faces"
+END SUB
+
+' Part p's box in the world (its triangles: all of a use's)
+SUB RcPartBounds (p, lo AS V3, hi AS V3)
+    DIM t AS LONG, k, q AS V3
+    lo.x = 1E9: lo.y = 1E9: lo.z = 1E9: hi.x = -1E9: hi.y = -1E9: hi.z = -1E9
+    FOR t = 1 TO holeTN
+        IF tPart(t) = p THEN
+            FOR k = 0 TO 2
+                SELECT CASE k
+                    CASE 0: q = tA(t)
+                    CASE 1: q = tB(t)
+                    CASE ELSE: q = tC(t)
+                END SELECT
+                IF q.x < lo.x THEN lo.x = q.x
+                IF q.y < lo.y THEN lo.y = q.y
+                IF q.z < lo.z THEN lo.z = q.z
+                IF q.x > hi.x THEN hi.x = q.x
+                IF q.y > hi.y THEN hi.y = q.y
+                IF q.z > hi.z THEN hi.z = q.z
+            NEXT
+        END IF
+    NEXT
+    IF lo.x > hi.x THEN lo.x = 0: lo.y = 0: lo.z = 0: hi.x = 0: hi.y = 0: hi.z = 0
 END SUB
 
 ' A point of the edited part's work (its own terms) in the world

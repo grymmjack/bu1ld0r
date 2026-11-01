@@ -1,0 +1,165 @@
+# c0nstruct0r: desk, rebuilt from hd/desk.png (0.45 tall; subject 240x200 at +8+56)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/desk.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/desk.png)
+take
+pace 400
+say desk: a wooden top on four legs, a drawer unit on the right, a back panel, a monitor, a mug and a little clutter
+new force
+say the top: the painting's full width, its orange edge 0.05 thick, 0.3 deep
+add box -0.0011 0.1823 0 0.5333 0.0495 0.3 col=C46A2E name=top
+say four thin legs
+add box 0.2093 0 -0.13 0.036 0.1823 0.036 col=3A3E48 name=leg-lf
+add box 0.2093 0 0.13 0.036 0.1823 0.036 col=3A3E48 name=leg-lb
+add box -0.2093 0 -0.13 0.036 0.1823 0.036 col=3A3E48 name=leg-rf
+add box -0.2093 0 0.13 0.036 0.1823 0.036 col=3A3E48 name=leg-rb
+say the drawer unit under the right side
+add box -0.1249 0 0 0.1193 0.1823 0.26 col=8A929E name=drawers
+say the back panel between the legs, set back
+add box 0.063 0.0585 0.1 0.2565 0.1238 0.02 col=6A7380 name=panel
+say the monitor on its stand; the screen inset into its bezel
+add box 0.0371 0.2318 0.04 0.0518 0.0225 0.04 col=2A2D33 name=stand
+add box 0.0383 0.2543 0.03 0.243 0.1935 0.03 col=2A2D33 name=monitor
+edit 9
+pick facing 0 0 -1
+inset 0.08
+extrude -0.006
+done
+say the mug, and the clutter on the left
+add cylinder -0.1586 0.2318 -0.05 0.0608 0.0697 0.0608 seg=10 col=C81E1E name=mug
+add box 0.2059 0.2318 -0.04 0.0833 0.063 0.06 col=9AA0AA name=clutter
+look all
+view 25 18
+say pictures from the one painting: fronts as seen from the front, backs mirrored, sides from each part's own piece; tops it never shows in plain colours
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 10 153 60 175 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 10 153 60 175 own
+pick facing 0 1 0
+colour 4A4038
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 27 175 43 256 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 27 175 43 256 own
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 27 175 43 256 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 27 175 43 256 own
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 213 175 229 256 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 213 175 229 256 own
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 213 175 229 256 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 213 175 229 256 own
+done
+edit 6
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 60 180 150 228 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 60 180 150 228 own
+done
+edit 7
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+done
+edit 8
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 100 143 123 153 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 100 143 123 153 own
+done
+edit 9
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+colour 2A2D33
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 57 57 67 143 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 57 57 67 143 own
+pick facing 0 1 0
+colour 2A2D33
+done
+edit 10
+pick facing 0 0 -1 80
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 80
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 0 1 0
+colour 3A2418
+done
+edit 11
+pick facing 0 0 -1 45
+picture c0nstruct0r/desk view 0 8 56 248 256
+pick facing 0 0 1 45
+picture c0nstruct0r/desk view 180 248 56 8 256
+pick facing 1 0 0
+picture c0nstruct0r/desk view 90 18 125 55 150 own
+pick facing -1 0 0
+picture c0nstruct0r/desk view 270 18 125 55 150 own
+pick facing 0 1 0
+colour 9AA0AA
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot desk0 clean
+view 45 0
+shot desk1 clean
+view 90 0
+shot desk2 clean
+view 135 0
+shot desk3 clean
+view 180 0
+shot desk4 clean
+view 225 0
+shot desk5 clean
+view 270 0
+shot desk6 clean
+view 315 0
+shot desk7 clean
+view 25 18
+save c0-desk
+export
+give

@@ -1,0 +1,111 @@
+# c0nstruct0r: generator, rebuilt from hd/generator.png (0.7 tall; subject 224x244 at +16+12)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/generator.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/generator.png)
+take
+pace 400
+say generator: a grey cabinet with a glowing window and a hazard stripe, three striped coils on top with a pin each
+new force
+say the cabinet: 0.6311 wide, 0.5049 tall, 0.36 deep - as deep as its side's pixels allow without smearing
+add box 0.0029 0 0 0.6311 0.5049 0.36 col=5A6370 name=cabinet
+say the window: the front inset to the painting's frame, raised to it, then set back
+edit 1
+pick facing 0 0 -1
+inset 0.4
+move 0 0.0516 0
+extrude -0.03
+done
+say coil 1: striped, on the cabinet's top
+add cylinder 0.2 0.502 0 0.1205 0.1377 0.1205 seg=12 col=E89A2A name=coil-1
+add cylinder 0.2 0.6398 0 0.0402 0.0574 0.0402 seg=8 col=9AA4B0 name=pin-1
+say coil 2: striped, on the cabinet's top
+add cylinder 0.0057 0.502 0 0.1205 0.1377 0.1205 seg=12 col=E89A2A name=coil-2
+add cylinder 0.0057 0.6398 0 0.0402 0.0574 0.0402 seg=8 col=9AA4B0 name=pin-2
+say coil 3: striped, on the cabinet's top
+add cylinder -0.1971 0.502 0 0.1205 0.1377 0.1205 seg=12 col=E89A2A name=coil-3
+add cylinder -0.1971 0.6398 0 0.0402 0.0574 0.0402 seg=8 col=9AA4B0 name=pin-3
+look all
+view 25 18
+say pictures from the one painting: fronts as seen from the front, backs the same mirrored, sides and tops from each part's own piece
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 45
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 1 0 0
+picture c0nstruct0r/generator view 90 17 80 60 256 own
+pick facing -1 0 0
+picture c0nstruct0r/generator view 270 17 80 60 256 own
+pick facing 0 1 0
+colour 4A525E
+done
+edit 2
+pick facing 0 0 -1 80
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 80
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 0 1 0
+picture c0nstruct0r/generator top 40 35 76 53 own
+done
+edit 3
+pick facing 0 0 -1 80
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 80
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 0 1 0
+picture c0nstruct0r/generator top 52 13 64 19 own
+done
+edit 4
+pick facing 0 0 -1 80
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 80
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 0 1 0
+picture c0nstruct0r/generator top 108 35 144 53 own
+done
+edit 5
+pick facing 0 0 -1 80
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 80
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 0 1 0
+picture c0nstruct0r/generator top 120 13 132 19 own
+done
+edit 6
+pick facing 0 0 -1 80
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 80
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 0 1 0
+picture c0nstruct0r/generator top 178 35 214 53 own
+done
+edit 7
+pick facing 0 0 -1 80
+picture c0nstruct0r/generator view 0 16 12 240 256
+pick facing 0 0 1 80
+picture c0nstruct0r/generator view 180 240 12 16 256
+pick facing 0 1 0
+picture c0nstruct0r/generator top 190 13 202 19 own
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot generator0 clean
+view 45 0
+shot generator1 clean
+view 90 0
+shot generator2 clean
+view 135 0
+shot generator3 clean
+view 180 0
+shot generator4 clean
+view 225 0
+shot generator5 clean
+view 270 0
+shot generator6 clean
+view 315 0
+shot generator7 clean
+view 25 18
+save c0-generator
+export
+give
