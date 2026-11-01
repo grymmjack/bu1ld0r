@@ -1,0 +1,85 @@
+# c0nstruct0r: chest-open, rebuilt from hd/chest-open.png (0.5 tall; subject 191x204 at +32+48; painted three-quarter)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/chest-open.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/chest-open.png)
+take
+pace 400
+say chest-open: the chest's body, its lid standing open and leaning back, a heap of gems inside, the latch hanging open
+new force
+say the body, as the closed chest's: 0.44 wide, 0.3 deep, 0.24 tall
+add box 0 0 0 0.44 0.24 0.3 col=2A3038 name=body
+say the gems: a heap filling it, just over the rim
+add box 0 0.18 -0.005 0.4 0.085 0.26 col=C850E0 name=gems
+say the lid: open, standing on the back edge and leaning back 18 degrees
+add box 0 0.24 0.125 0.452 0.27 0.05 rx=18 col=3A4450 name=lid
+say the latch, hanging open at the front
+add box 0 0.11 -0.158 0.036 0.1 0.016 col=1EC8E0 name=latch
+look all
+view 25 18
+say pictures: front, side and top each from its own piece of the painting; the lid's inside from its glowing inside
+edit 1
+pick facing 0 0 -1 50
+picture c0nstruct0r/chest-open view 0 104 150 216 236 own
+pick facing 0 0 1 50
+picture c0nstruct0r/chest-open view 180 216 150 104 236 own
+pick facing 1 0 0 45
+picture c0nstruct0r/chest-open view 90 45 175 100 225 own
+pick facing -1 0 0 45
+picture c0nstruct0r/chest-open view 270 100 175 45 225 own
+pick facing 0 1 0 50
+colour 2A3038
+done
+edit 2
+pick facing 0 0 -1 50
+picture c0nstruct0r/chest-open view 0 92 134 204 150 own
+pick facing 0 0 1 50
+picture c0nstruct0r/chest-open view 180 204 134 92 150 own
+pick facing 1 0 0 45
+picture c0nstruct0r/chest-open view 90 92 134 140 150 own
+pick facing -1 0 0 45
+picture c0nstruct0r/chest-open view 270 140 134 92 150 own
+pick facing 0 1 0 50
+picture c0nstruct0r/chest-open top 80 120 200 150 own
+done
+edit 3
+pick facing 0 0 -1 50
+picture c0nstruct0r/chest-open view 0 80 85 190 125 own
+pick facing 0 0 1 50
+picture c0nstruct0r/chest-open view 180 216 196 104 236 own
+pick facing 1 0 0 45
+pick add facing -1 0 0 45
+colour 3A4450
+pick facing 0 1 0 50
+picture c0nstruct0r/chest-open top 60 50 190 70 own
+done
+edit 4
+pick facing 0 0 -1 50
+picture c0nstruct0r/chest-open view 0 155 155 172 189 own
+pick facing 1 0 0 45
+pick add facing -1 0 0 45
+colour 1EC8E0
+pick facing 0 1 0 50
+colour 1EC8E0
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot chest-open0 clean
+view 45 0
+shot chest-open1 clean
+view 90 0
+shot chest-open2 clean
+view 135 0
+shot chest-open3 clean
+view 180 0
+shot chest-open4 clean
+view 225 0
+shot chest-open5 clean
+view 270 0
+shot chest-open6 clean
+view 315 0
+shot chest-open7 clean
+view 25 18
+save c0-chest-open
+export
+give

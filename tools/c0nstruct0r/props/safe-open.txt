@@ -1,0 +1,79 @@
+# c0nstruct0r: safe-open, rebuilt from hd/safe-open.png (0.55 tall; subject 204x231 at +26+25)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/safe-open.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/safe-open.png)
+take
+pace 400
+say safe-open: a steel cabinet on a wider plinth; its left compartment open (shelves inside), a handle bar, the right door shut
+new force
+say the plinth: the painting's full width, 0.0667 tall
+add box 0.0 0 0 0.4857 0.0667 0.35 col=2A3038 name=plinth
+say the cabinet on it: 0.45 wide, 0.4833 tall, 0.32 deep
+add box 0.0012 0.0667 0 0.45 0.4833 0.32 col=4A525C name=cabinet
+say the open compartment: the front inset, the inner piece shrunk and moved to where the painting's shelves are, then pushed in deep
+edit 2
+pick facing 0 0 -1
+inset 0.1
+scale 0.3373 0.9236 1
+move 0.0952 -0.0202 0
+extrude -0.24
+done
+say the handle bar beside it
+add box -0.0083 0.181 -0.17 0.019 0.1786 0.02 col=1EC8E0 name=handle
+look all
+view 25 18
+say pictures: the front from the painting as seen; the compartment's back wall gets its shelves; sides and back the shut door's panels; the top plain
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/safe-open view 0 26 25 230 256
+pick facing 1 0 0
+pick add facing -1 0 0
+pick add facing 0 0 1
+pick add facing 0 1 0
+colour 2A3038
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/safe-open view 0 26 25 230 256
+pick facing 1 0 0
+picture c0nstruct0r/safe-open view 90 147 56 192 214 own
+pick facing -1 0 0
+picture c0nstruct0r/safe-open view 270 192 56 147 214 own
+pick facing 0 0 1
+picture c0nstruct0r/safe-open view 180 222 50 145 220 own
+pick facing 0 1 0
+colour 5A6470
+pick facing 0 -1 0
+colour 3A4048
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/safe-open view 0 26 25 230 256
+pick facing 1 0 0
+pick add facing -1 0 0
+pick add facing 0 1 0
+pick add facing 0 -1 0
+colour 1EC8E0
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot safe-open0 clean
+view 45 0
+shot safe-open1 clean
+view 90 0
+shot safe-open2 clean
+view 135 0
+shot safe-open3 clean
+view 180 0
+shot safe-open4 clean
+view 225 0
+shot safe-open5 clean
+view 270 0
+shot safe-open6 clean
+view 315 0
+shot safe-open7 clean
+view 25 18
+save c0-safe-open
+export
+give

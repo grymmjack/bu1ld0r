@@ -1,0 +1,118 @@
+# c0nstruct0r: mimic-asleep, rebuilt from hd/mimic-asleep.png (0.5 tall; subject 180x158 at +38+94; painted three-quarter: front, left side and top show)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/mimic-asleep.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/mimic-asleep.png)
+take
+pace 400
+say mimic-asleep: the painting shows a chest from the front left - its front, its left side and its lid's top; each gets its own piece of the painting
+new force
+say the body: 0.44 wide, 0.26 tall, 0.3 deep - wider than the painting's front looks, which is seen at an angle
+add box 0 0 0 0.44 0.26 0.3 col=2A3038 name=body
+say the lid on it, a touch bigger all round
+add box 0 0.26 0 0.452 0.085 0.312 col=3A4450 name=lid
+say the handle: two posts and a bar across the lid
+add box 0.08 0.345 0 0.022 0.1 0.03 col=4A5058 name=post-a
+add box -0.08 0.345 0 0.022 0.1 0.03 col=4A5058 name=post-b
+add box 0 0.445 0 0.182 0.03 0.03 col=4A5058 name=handle
+say the latches: two glowing clasps on the front
+add box 0.15 0.19 -0.158 0.03 0.1 0.016 col=1EC8E0 name=latch-a
+add box -0.15 0.19 -0.158 0.03 0.1 0.016 col=1EC8E0 name=latch-b
+look all
+view 25 18
+say pictures: the front from the painting's front, the sides from its left side (mirrored for the right), the lid's top from its top, the back the front mirrored
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 114 172 212 246 own
+pick facing 0 0 1 45
+picture c0nstruct0r/mimic-asleep view 180 212 172 114 246 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 54 174 104 230 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 104 174 54 230 own
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 110 150 214 170 own
+pick facing 0 0 1 45
+picture c0nstruct0r/mimic-asleep view 180 214 150 110 170 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 52 148 104 166 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 104 148 52 166 own
+pick facing 0 1 0 45
+picture c0nstruct0r/mimic-asleep top 64 114 194 152 own
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 112 108 122 140 own
+pick facing 0 0 1 45
+picture c0nstruct0r/mimic-asleep view 180 122 108 112 140 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 112 108 122 140 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 122 108 112 140 own
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 150 108 160 140 own
+pick facing 0 0 1 45
+picture c0nstruct0r/mimic-asleep view 180 160 108 150 140 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 150 108 160 140 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 160 108 150 140 own
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 112 100 160 110 own
+pick facing 0 0 1 45
+picture c0nstruct0r/mimic-asleep view 180 160 100 112 110 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 112 100 122 110 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 122 100 112 110 own
+pick facing 0 1 0 45
+colour 4A5058
+done
+edit 6
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 198 178 185 210 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 185 178 190 210 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 190 178 185 210 own
+pick facing 0 1 0 45
+colour 1EC8E0
+done
+edit 7
+pick facing 0 0 -1 45
+picture c0nstruct0r/mimic-asleep view 0 185 178 198 210 own
+pick facing 1 0 0 45
+picture c0nstruct0r/mimic-asleep view 90 185 178 190 210 own
+pick facing -1 0 0 45
+picture c0nstruct0r/mimic-asleep view 270 190 178 185 210 own
+pick facing 0 1 0 45
+colour 1EC8E0
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot mimic-asleep0 clean
+view 45 0
+shot mimic-asleep1 clean
+view 90 0
+shot mimic-asleep2 clean
+view 135 0
+shot mimic-asleep3 clean
+view 180 0
+shot mimic-asleep4 clean
+view 225 0
+shot mimic-asleep5 clean
+view 270 0
+shot mimic-asleep6 clean
+view 315 0
+shot mimic-asleep7 clean
+view 25 18
+save c0-mimic-asleep
+export
+give

@@ -257,6 +257,10 @@ bu1ld0r's `export/` only. SCORE: higher is worse.
 | generator | 7 | 244 | 23 | 61 | cabinet with the window inset and set back, three coils, pins |
 | desk | 11 | 172 | 22 | 61 | top, legs, drawer unit, back panel, monitor (screen inset), mug, clutter |
 | labbench | 15 | 396 | 23 | 57 | cabinet, worktop, microscope stand, round and cone flasks, rack |
+| chest | 7 | 84 | 1 | 58 | body, lid, handle on two posts, two latches; painted three-quarter, so each face takes its own patch (front, left side - mirrored for the right -, lid top) |
+| mimic-asleep | 7 | 84 | 1 | 58 | chest's steps on its own painting (pink glow) |
+| chest-open | 4 | 48 | 14 | 59 | body, gem heap, lid open and leaning back (its inside the painting's, its outside the body's panels), latch |
+| safe-open | 3 | 52 | 13 | 61 | plinth, cabinet with the open compartment cut in (inset, scale, move, pushed in 0.24: the shelves on its back wall), handle |
 
 Learned on the way:
 - `own` (the part's box, not the model's) for sides and tops: each part's
@@ -266,6 +270,11 @@ Learned on the way:
   not a row of pixels smeared across it.
 - The back is the front mirrored (`view 180 X1 Y0 X0 Y1`), so it lines up
   with the parts behind it.
+- A three-quarter painting (front, side and top all showing): the true
+  width is more than the front patch looks; patches kept inside the solid
+  pixels (a slanted edge's see-through pixels cut holes at the corners).
+- A heights helper that subtracts the wrong way gives negative sizes:
+  inside-out parts that vanish - check `add` lines for a negative size.
 - Round things (cylinders, spheres, cones): front half `view 0` (facing
   0 0 -1 90), back half `view 180`.
 - An export bug it found: a spot on the picture's bottom edge (v = 1)
