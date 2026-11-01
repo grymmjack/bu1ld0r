@@ -65,7 +65,17 @@ END SUB
 
 ' The path box's folder typed / pasted (~, a .png in it, file://, or a folder in pictures/)
 SUB PicGoTo (p$)
-    DIM t$, h$, i, r$
+    DIM t$, r$
+    t$ = PathTyped$(p$, PicDir$, "pictures"): IF LEN(t$) = 0 THEN EXIT SUB
+    r$ = PathClean$(AbsPath$(PicDir$))
+    IF LEFT$(t$, LEN(r$)) = r$ THEN PicFolderOpen MID$(t$, LEN(r$) + 1) ELSE PicFolderOpen t$
+END SUB
+
+' A folder typed or pasted, from / and ending in / ("": none there - said so): quotes,
+' file:// and %20s taken off, ~ the home folder, a file's own folder; anything not from /
+' is in root$ (word$ + "/" in front is too)
+FUNCTION PathTyped$ (p$, root$, word$)
+    DIM t$, h$, i, r$, n
     t$ = LTRIM$(RTRIM$(p$))
     IF LEN(t$) >= 2 AND (LEFT$(t$, 1) = "'" OR LEFT$(t$, 1) = CHR$(34)) AND RIGHT$(t$, 1) = LEFT$(t$, 1) THEN t$ = MID$(t$, 2, LEN(t$) - 2)
     IF LCASE$(LEFT$(t$, 7)) = "file://" THEN t$ = MID$(t$, 8)
@@ -77,19 +87,19 @@ SUB PicGoTo (p$)
         END IF
         i = INSTR(i + 1, t$, "%")
     LOOP
-    IF LEN(t$) = 0 THEN EXIT SUB
+    IF LEN(t$) = 0 THEN EXIT FUNCTION
     h$ = ENVIRON$("HOME")
     IF t$ = "~" THEN t$ = h$ + "/"
     IF LEFT$(t$, 2) = "~/" THEN t$ = h$ + MID$(t$, 2)
-    IF LCASE$(t$) = "pictures" OR LCASE$(t$) = "pictures/" THEN t$ = ""
-    IF LCASE$(LEFT$(t$, 9)) = "pictures/" THEN t$ = MID$(t$, 10)
-    IF LEFT$(t$, 1) <> "/" THEN t$ = AbsPath$(PicDir$ + t$) ' (anything else: a folder in pictures/)
-    IF LCASE$(RIGHT$(t$, 4)) = ".png" AND _FILEEXISTS(t$) THEN t$ = LEFT$(t$, _INSTRREV(t$, "/"))
+    n = LEN(word$)
+    IF LCASE$(t$) = word$ OR LCASE$(t$) = word$ + "/" THEN t$ = ""
+    IF LCASE$(LEFT$(t$, n + 1)) = word$ + "/" THEN t$ = MID$(t$, n + 2)
+    IF LEFT$(t$, 1) <> "/" THEN t$ = AbsPath$(root$ + t$)
+    IF _FILEEXISTS(t$) AND NOT _DIREXISTS(t$) THEN t$ = LEFT$(t$, _INSTRREV(t$, "/")) ' (a file: its folder)
     t$ = PathClean$(t$)
-    IF NOT _DIREXISTS(t$) THEN Msg "No folder there: " + Tilde$(t$): EXIT SUB
-    r$ = PathClean$(AbsPath$(PicDir$))
-    IF LEFT$(t$, LEN(r$)) = r$ THEN PicFolderOpen MID$(t$, LEN(r$) + 1) ELSE PicFolderOpen t$
-END SUB
+    IF NOT _DIREXISTS(t$) THEN Msg "No folder there: " + Tilde$(t$): EXIT FUNCTION
+    PathTyped$ = t$
+END FUNCTION
 
 ' Path p$ from /, ending in / (. and .. and // taken out)
 FUNCTION PathClean$ (p$)
@@ -697,7 +707,7 @@ END SUB
 SUB PvToggle
     IF edPart = 0 OR edMode <> ED_FACES THEN Msg "In E, pick faces (2: FACES) with a picture, then P moves the picture": pvOn = 0: EXIT SUB
     pvOn = NOT pvOn
-    Msg IIFS$(pvOn, "Moving the picture: drag a picked face to slide it, wheel: bigger / smaller, Shift+wheel: turn. P: done", "Done moving the picture (drags move faces again)")
+    Msg IIFS$(pvOn, "Moving the picture: the tips are at the view's foot. P: done", "Done moving the picture (drags move faces again)")
 END SUB
 
 ' Is the wheel the picture's now (moving it, over the view)?
@@ -749,8 +759,13 @@ SUB PvUpdate (lx, ly)
     EdCommit
 END SUB
 
-' The wheel while moving it: the picked faces' picture bigger / smaller (Shift: turned 15) round the middle of what shows
+' The wheel while moving it: the picked faces' picture bigger / smaller (Shift: turned 15)
 SUB PvWheel (dir)
+    PvTurnSize dir, kShift
+END SUB
+
+' The picked faces' picture sized (1.1 a step) or turned (15 a step) round the middle of what shows
+SUB PvTurnSize (dir, turn)
     DIM push, f AS LONG, k AS LONG, n AS LONG, cu#, cv#, du#, dv#, s#, c#, sn#, a#
     push = (TIMER(0.001) - pvWheelT# > 1 OR TIMER(0.001) < pvWheelT#)
     pvWheelT# = TIMER(0.001)
@@ -767,7 +782,7 @@ SUB PvWheel (dir)
         IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
             FOR k = sfC0(f) TO sfC0(f) + sfCN(f) - 1
                 du# = scTU(k) - cu#: dv# = scTV(k) - cv#
-                IF kShift THEN
+                IF turn THEN
                     scTU(k) = cu# + du# * c# - dv# * sn#: scTV(k) = cv# + du# * sn# + dv# * c#
                 ELSE
                     scTU(k) = cu# + du# * s#: scTV(k) = cv# + dv# * s#
@@ -776,7 +791,82 @@ SUB PvWheel (dir)
         END IF
     NEXT
     EdCommit
-    Msg IIFS$(kShift, "Picture turned (Shift+wheel)", "Picture sized (wheel)") + " - Ctrl+Z: back"
+    Msg IIFS$(turn, "Picture turned 15 (R / Shift+R, Shift+wheel)", "Picture zoomed (wheel - out: it repeats)") + " - Ctrl+Z: back"
+END SUB
+
+' H / V while moving it: each picked face's picture mirrored in place, as
+' seen - left for right (H) or top for bottom (V), round the face's middle,
+' along whichever of the face's own two ways looks level (H) / upright (V).
+' Its slide, size and turn stay: each corner takes the spot that showed at
+' its mirror image. Worked in the world (a part's own space can be
+' stretched unevenly)
+SUB PvFlip (vert)
+    DIM f AS LONG, k AS LONG, n AS LONG, cnt AS LONG, c0 AS LONG, ok, ib AS LONG
+    DIM wx#(64), wy#(64), wz#(64), nu#(64), nv#(64)
+    DIM cx#, cy#, cz#, nx#, ny#, nz#, dx#, dy#, dz#, l#, e1#, det#, px#, py#, pz#, ux#, uy#, uz#, rx#, ry#, rz#
+    IF edPart = 0 OR edMode <> ED_FACES THEN EXIT SUB
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) <> 0 THEN
+            n = sfCN(f): c0 = sfC0(f)
+            IF n >= 3 AND n <= 64 THEN
+                ' (its corners in the world, their middle, and which way it faces)
+                cx# = 0: cy# = 0: cz# = 0
+                FOR k = 0 TO n - 1
+                    wx#(k) = swX(scV(c0 + k)): wy#(k) = swY(scV(c0 + k)): wz#(k) = swZ(scV(c0 + k))
+                    PartFwd edPart, wx#(k), wy#(k), wz#(k)
+                    cx# = cx# + wx#(k): cy# = cy# + wy#(k): cz# = cz# + wz#(k)
+                NEXT
+                cx# = cx# / n: cy# = cy# / n: cz# = cz# / n
+                nx# = 0: ny# = 0: nz# = 0
+                FOR k = 0 TO n - 1
+                    ib = (k + 1) MOD n
+                    nx# = nx# + (wy#(k) - wy#(ib)) * (wz#(k) + wz#(ib))
+                    ny# = ny# + (wz#(k) - wz#(ib)) * (wx#(k) + wx#(ib))
+                    nz# = nz# + (wx#(k) - wx#(ib)) * (wy#(k) + wy#(ib))
+                NEXT
+                ' The face's own two ways - up (as near the world's up as it can
+                ' be; a face lying flat: towards the back) and across - and the
+                ' one that looks more upright (V) or more level (H) from here:
+                ' mirrored straight along it, so the picture keeps its shape
+                det# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+                IF det# > 1E-12 THEN
+                    nx# = nx# / det#: ny# = ny# / det#: nz# = nz# / det#
+                    ux# = -ny# * nx#: uy# = 1 - ny# * ny#: uz# = -ny# * nz#
+                    l# = SQR(ux# * ux# + uy# * uy# + uz# * uz#)
+                    IF l# < .3 THEN ux# = -nz# * nx#: uy# = -nz# * ny#: uz# = 1 - nz# * nz#: l# = SQR(ux# * ux# + uy# * uy# + uz# * uz#)
+                    ux# = ux# / l#: uy# = uy# / l#: uz# = uz# / l#
+                    rx# = uy# * nz# - uz# * ny#: ry# = uz# * nx# - ux# * nz#: rz# = ux# * ny# - uy# * nx#
+                    ' (how upright each looks: its share of the screen's up)
+                    e1# = ABS(ux# * cUX + uy# * cUY + uz# * cUZ) - ABS(ux# * cRX + uy# * cRY + uz# * cRZ)
+                    e1# = e1# - (ABS(rx# * cUX + ry# * cUY + rz# * cUZ) - ABS(rx# * cRX + ry# * cRY + rz# * cRZ))
+                    IF (e1# >= 0) = (vert <> 0) THEN
+                        dx# = ux#: dy# = uy#: dz# = uz#
+                    ELSE
+                        dx# = rx#: dy# = ry#: dz# = rz#
+                    END IF
+                    det# = 1
+                END IF
+                IF det# = 1 THEN ' (it has a way of facing)
+                    ok = -1
+                    FOR k = 0 TO n - 1
+                        px# = wx#(k) - cx#: py# = wy#(k) - cy#: pz# = wz#(k) - cz#
+                        e1# = 2 * (px# * dx# + py# * dy# + pz# * dz#)
+                        px# = wx#(k) - e1# * dx#: py# = wy#(k) - e1# * dy#: pz# = wz#(k) - e1# * dz#
+                        PartInv edPart, px#, py#, pz#
+                        IF PicUVAt(f, px#, py#, pz#, nu#(k), nv#(k)) = 0 THEN ok = 0
+                    NEXT
+                    IF ok THEN
+                        FOR k = 0 TO n - 1: scTU(c0 + k) = nu#(k): scTV(c0 + k) = nv#(k): NEXT
+                        cnt = cnt + 1
+                    END IF
+                END IF
+            END IF
+        END IF
+    NEXT
+    EdCommit
+    IF cnt = 0 THEN Msg "None of the picked faces has a picture to flip": EXIT SUB
+    Msg "Picture flipped " + IIFS$(vert, "top for bottom (V)", "left for right (H)") + " on" + STR$(cnt) + " face" + IIFS$(cnt = 1, "", "s") + " - Ctrl+Z: back"
 END SUB
 
 ' ---------------------------------------------------------------- the panel's picture tools (E, faces picked)
@@ -907,11 +997,27 @@ SUB EdPicDraw
     FOR k = 1 TO PT_PAINT
         EdPicBtn k, x, y, w, h: Btn x, y, w, h, EdPicBtnName$(k), (k = PT_MOVE AND pvOn)
     NEXT
-    IF pvOn AND 700 + 7 * 26 + 50 < scrH - BAR_H THEN
+    IF pvOn AND 700 + 7 * 26 + 66 < scrH - BAR_H THEN
         Txt PX0, 888, "Drag a picked face: slide", cHi
-        Txt PX0, 904, "Wheel: size  Shift: turn", cHi
-        Txt PX0, 920, "Alt: off its pixels", cDim
+        Txt PX0, 904, "Wheel: zoom  R: turn", cHi
+        Txt PX0, 920, "H / V: flip as seen", cHi
+        Txt PX0, 936, "Alt: off its pixels", cDim
     END IF
+END SUB
+
+' MOVE IT's keys, at the view's foot (over WALK / FLY's buttons)
+SUB PvTips
+    DIM y, w, t1$, t2$, t3$
+    t1$ = "MOVING THE PICTURE  (P: done)"
+    t2$ = "drag a picked face: slide it   wheel: zoom in / out (out: it repeats)"
+    t3$ = "R / Shift+R, Shift+wheel: turn 15   H / V: flip across / up-down   Alt: free"
+    w = 8 * LEN(t3$) + 16: IF w > vW - 16 THEN w = vW - 16
+    y = vY0 + vH - 98
+    LINE (vX0 + 8, y)-(vX0 + 8 + w, y + 62), _RGBA32(10, 8, 20, 215), BF
+    LINE (vX0 + 8, y)-(vX0 + 8 + w, y + 62), cLine, B
+    Txt vX0 + 16, y + 4, t1$, cHi
+    Txt vX0 + 16, y + 23, LEFT$(t2$, (w - 16) \ 8), cText
+    Txt vX0 + 16, y + 42, LEFT$(t3$, (w - 16) \ 8), cText
 END SUB
 
 FUNCTION EdPicClick

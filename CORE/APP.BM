@@ -25,6 +25,7 @@ SUB AppStart
     fpH# = .5: fpJN = 16: fpSpd# = 1 ' (WALK's eye height and jump, FLY's speed: walk_eye= walk_jump= fly_speed=)
     gridBright = 35: texOp = 100: wireOp = 100: BIN_W = BIN_MIN: PANEL_W = PANEL_MIN: picTS = 64
     ReadCfg
+    BinFavSeed ' (no favourites in bu1ld0r.cfg yet: NEON-CASTER's folders to start)
 
     FOR i = 1 TO _COMMANDCOUNT
         a$ = COMMAND$(i)
@@ -91,6 +92,10 @@ SUB ReadCfg
                 CASE "pic_dir": binPicDir$ = v$
                 CASE "pic_size": picTS = INT(Clamp(VAL(v$), PIC_TS_MIN, PIC_TS_MAX))
                 CASE "pic_outside": binPicExt$ = v$
+                CASE "mdl_outside": binMdlExt$ = v$
+                CASE "fav_prefabs": binFav$(0) = v$: binFavSet(0) = -1
+                CASE "fav_pictures": binFav$(1) = v$: binFavSet(1) = -1
+                CASE "fav_models": binFav$(2) = v$: binFavSet(2) = -1
                 CASE "window" ' (WxH)
                     j = INSTR(LCASE$(v$), "x")
                     IF j THEN cfgWinW = VAL(LEFT$(v$, j - 1)): cfgWinH = VAL(MID$(v$, j + 1))

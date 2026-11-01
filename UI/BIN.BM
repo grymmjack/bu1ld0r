@@ -199,31 +199,106 @@ SUB BinList
     binTop = Clamp(binTop, 0, BinMaxTop)
 END SUB
 
-' MODELS: models/'s .bld files by name, each pictured as it's wanted (BinIconsDue)
+' MODELS: the folder's folders, then its models by name - .bld, .obj (NEON-CASTER's props:
+' opened as mesh parts) and .svg - each pictured as it's wanted (BinIconsDue). models/'s own
+' .bld files go by name, everything else by its path from /
 SUB MdlBinList
-    DIM f$, i
+    DIM f$, i, a, d$, ext, x$, root$
     FOR i = 1 TO MAX_BI
         IF biIcon&(i) < -1 THEN _FREEIMAGE biIcon&(i)
         biIcon&(i) = 0
     NEXT
     biN = 0
-    f$ = _FILES$(appDir$ + "models/")
+    root$ = MdlRoot$
+    IF LEN(binMdlExt$) THEN
+        IF NOT _DIREXISTS(binMdlExt$) OR binMdlExt$ = root$ THEN binMdlExt$ = ""
+    END IF
+    ext = (LEN(binMdlExt$) > 0)
+    IF ext THEN
+        d$ = binMdlExt$
+        biN = 1: biKind(1) = BI_UP: biName$(1) = "MODELS": biRef$(1) = ""
+        IF d$ <> "/" THEN biN = 2: biKind(2) = BI_UP: biName$(2) = "..": biRef$(2) = LEFT$(d$, _INSTRREV(LEFT$(d$, LEN(d$) - 1), "/"))
+    ELSE
+        d$ = root$
+    END IF
+    a = biN + 1
+    f$ = _FILES$(d$)
     DO WHILE LEN(f$)
-        IF LCASE$(RIGHT$(f$, 4)) = ".bld" AND RIGHT$(f$, 1) <> "/" AND biN < MAX_BI THEN
-            biN = biN + 1: biKind(biN) = BI_MDL: biName$(biN) = LEFT$(f$, LEN(f$) - 4): biRef$(biN) = biName$(biN)
+        IF RIGHT$(f$, 1) = "/" AND LEFT$(f$, 1) <> "." AND f$ <> "__pycache__/" AND biN < MAX_BI THEN
+            biN = biN + 1: biKind(biN) = BI_DIR: biName$(biN) = LEFT$(f$, LEN(f$) - 1): biRef$(biN) = d$ + f$
         END IF
         f$ = _FILES$
     LOOP
-    BinSort 1, biN
+    BinSort a, biN
+    a = biN + 1
+    f$ = _FILES$(d$)
+    DO WHILE LEN(f$)
+        x$ = LCASE$(RIGHT$(f$, 4))
+        IF (x$ = ".bld" OR x$ = ".obj" OR x$ = ".svg") AND RIGHT$(f$, 1) <> "/" AND biN < MAX_BI THEN
+            biN = biN + 1: biKind(biN) = BI_MDL: biName$(biN) = LEFT$(f$, LEN(f$) - 4)
+            IF ext OR x$ <> ".bld" THEN biRef$(biN) = d$ + f$ ELSE biRef$(biN) = biName$(biN)
+        END IF
+        f$ = _FILES$
+    LOOP
+    BinSort a, biN
     binTop = Clamp(binTop, 0, BinMaxTop)
 END SUB
 
+' models/, from / (ending in /)
+FUNCTION MdlRoot$
+    MdlRoot$ = PathClean$(AbsPath$(appDir$ + "models/"))
+END FUNCTION
+
+' A MODELS tile's model's file: a name in models/, or a path already
+FUNCTION MdlFile$ (n$)
+    IF LEFT$(n$, 1) = "/" THEN MdlFile$ = n$ ELSE MdlFile$ = ModelPath$(n$)
+END FUNCTION
+
+' A MODELS folder tile opened (ref$ from /; "": models/ itself)
+SUB MdlFolderOpen (ref$)
+    binMdlExt$ = ref$: IF binMdlExt$ = MdlRoot$ THEN binMdlExt$ = ""
+    binTop = 0: BinList
+    CfgSet "mdl_outside", binMdlExt$
+    IF LEN(binMdlExt$) THEN
+        Msg Tilde$(binMdlExt$) + " - click a model to open it (SAVE puts it in models/)"
+    ELSE
+        Msg "models/ - click one to open it"
+    END IF
+END SUB
+
+' The MODELS path box's folder typed / pasted
+SUB MdlGoTo (p$)
+    DIM t$
+    t$ = PathTyped$(p$, appDir$ + "models/", "models"): IF LEN(t$) = 0 THEN EXIT SUB
+    MdlFolderOpen t$
+END SUB
+
+FUNCTION MdlFolderShown$
+    IF LEN(binMdlExt$) THEN MdlFolderShown$ = Tilde$(binMdlExt$) ELSE MdlFolderShown$ = Tilde$(MdlRoot$)
+END FUNCTION
+
 ' A model in models/ pictured as the bin shows a prefab: its parts read in after
-' the library's, a prefab for a moment ("*" + its name: no file's)
+' the library's, a prefab for a moment ("*" + its name: no file's). A NEON-CASTER
+' prop (.obj): its own front picture (NAME_0.png beside it); an SVG: its name
 SUB ModelIcon (n$, img&)
-    DIM fh, t$, n AS LONG
-    IF NOT _FILEEXISTS(ModelPath$(n$)) OR pfN >= MAX_PF THEN EXIT SUB
-    fh = FREEFILE: OPEN ModelPath$(n$) FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    DIM fh, t$, n AS LONG, f$, x$, k&, w, h, s#, d&
+    f$ = MdlFile$(n$): x$ = LCASE$(RIGHT$(f$, 4))
+    IF x$ = ".obj" OR x$ = ".svg" THEN
+        d& = _DEST: _DEST img&: CLS , cBtn
+        t$ = LEFT$(f$, LEN(f$) - 4) + "_0.png"
+        IF x$ = ".obj" AND _FILEEXISTS(t$) THEN k& = _LOADIMAGE(t$, 32)
+        IF k& < -1 THEN
+            w = _WIDTH(k&): h = _HEIGHT(k&): s# = 62 / w: IF 62 / h < s# THEN s# = 62 / h
+            _PUTIMAGE ((64 - w * s#) / 2, (64 - h * s#) / 2)-STEP(w * s# - 1, h * s# - 1), k&, img&
+            _FREEIMAGE k&
+        ELSE
+            _PRINTMODE _KEEPBACKGROUND: COLOR cDim: _PRINTSTRING (20, 24), UCASE$(MID$(x$, 2))
+        END IF
+        _DEST d&
+        EXIT SUB
+    END IF
+    IF NOT _FILEEXISTS(f$) OR pfN >= MAX_PF THEN EXIT SUB
+    fh = FREEFILE: OPEN f$ FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
     n = PartsFromText&(t$, PF_BASE + pfTop, MAX_PFP - pfTop)
     IF n = 0 THEN EXIT SUB
     pfName$(pfN + 1) = "*" + n$: pfFirst(pfN + 1) = PF_BASE + pfTop: pfCnt(pfN + 1) = n: pfIcon&(pfN + 1) = 0
@@ -300,8 +375,9 @@ END SUB
 SUB MdlPlaceStart (n$)
     DIM fh, t$, n AS LONG
     MdlPlaceEnd
-    IF NOT _FILEEXISTS(ModelPath$(n$)) OR pfN >= MAX_PF THEN EXIT SUB
-    fh = FREEFILE: OPEN ModelPath$(n$) FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
+    IF LCASE$(RIGHT$(n$, 4)) = ".obj" OR LCASE$(RIGHT$(n$, 4)) = ".svg" THEN Msg "Click it to open it - only a .bld goes into this model whole": EXIT SUB
+    IF NOT _FILEEXISTS(MdlFile$(n$)) OR pfN >= MAX_PF THEN EXIT SUB
+    fh = FREEFILE: OPEN MdlFile$(n$) FOR BINARY AS #fh: t$ = SPACE$(LOF(fh)): GET #fh, , t$: CLOSE #fh
     n = PartsFromText&(t$, PF_BASE + pfTop, MAX_PFP - pfTop)
     IF n = 0 THEN Msg n$ + " has no parts": EXIT SUB
     mdlTmpPf = pfN + 1: mdlTmpTop = pfTop
@@ -344,6 +420,172 @@ FUNCTION BinItemAt (x, y)
     NEXT
 END FUNCTION
 
+' ---------------------------------------------------------------- favourite folders
+
+' Favourites to start with, for a tab bu1ld0r.cfg has none for yet: NEON-CASTER's
+' pictures (its sprites, its HD ones, the props' textures) and props, the starter prefabs
+SUB BinFavSeed
+    DIM d$
+    d$ = NeonInDir$
+    IF binFavSet(0) = 0 THEN
+        IF _DIREXISTS(PfDir$ + "starter/") THEN BinFavPut 0, "starter/"
+    END IF
+    IF binFavSet(1) = 0 AND LEN(d$) > 0 THEN
+        BinFavPut 1, PathClean$(AbsPath$(d$))
+        IF _DIREXISTS(d$ + "hd/") THEN BinFavPut 1, PathClean$(AbsPath$(d$ + "hd/"))
+        IF _DIREXISTS(d$ + "hd/models/") THEN BinFavPut 1, PathClean$(AbsPath$(d$ + "hd/models/"))
+    END IF
+    IF binFavSet(1) = 0 AND _DIREXISTS(PicDir$ + "neon/") THEN BinFavPut 1, "pictures/neon/"
+    IF binFavSet(2) = 0 AND LEN(d$) > 0 THEN BinFavPut 2, PathClean$(AbsPath$(d$ + "models/"))
+END SUB
+
+FUNCTION BinFavN (t)
+    DIM n, i, s$
+    s$ = binFav$(t): IF LEN(s$) = 0 THEN EXIT FUNCTION
+    n = 1: i = INSTR(s$, "|")
+    DO WHILE i: n = n + 1: i = INSTR(i + 1, s$, "|"): LOOP
+    BinFavN = n
+END FUNCTION
+
+' Tab t's favourite k (from 1)
+FUNCTION BinFavGet$ (t, k)
+    DIM s$, i, j, n
+    s$ = binFav$(t) + "|": i = 1
+    FOR n = 1 TO k
+        j = INSTR(i, s$, "|"): IF j = 0 THEN EXIT FUNCTION
+        IF n = k THEN BinFavGet$ = MID$(s$, i, j - i): EXIT FUNCTION
+        i = j + 1
+    NEXT
+END FUNCTION
+
+FUNCTION BinFavHas (t, f$)
+    BinFavHas = (INSTR("|" + binFav$(t) + "|", "|" + f$ + "|") > 0)
+END FUNCTION
+
+SUB BinFavPut (t, f$)
+    IF LEN(f$) = 0 OR BinFavHas(t, f$) OR BinFavN(t) >= BIN_FAV_MAX THEN EXIT SUB
+    IF LEN(binFav$(t)) THEN binFav$(t) = binFav$(t) + "|" + f$ ELSE binFav$(t) = f$
+END SUB
+
+SUB BinFavTake (t, f$)
+    DIM s$
+    s$ = "|" + binFav$(t) + "|"
+    IF INSTR(s$, "|" + f$ + "|") = 0 THEN EXIT SUB
+    s$ = LEFT$(s$, INSTR(s$, "|" + f$ + "|")) + MID$(s$, INSTR(s$, "|" + f$ + "|") + LEN(f$) + 2)
+    IF LEN(s$) <= 2 THEN binFav$(t) = "" ELSE binFav$(t) = MID$(s$, 2, LEN(s$) - 2)
+END SUB
+
+' Tab t's favourites into bu1ld0r.cfg (from now on it's the cfg's list, empty or not)
+SUB BinFavSave (t)
+    binFavSet(t) = -1
+    CfgSet IIFS$(t = 0, "fav_prefabs", IIFS$(t = 1, "fav_pictures", "fav_models")), binFav$(t)
+END SUB
+
+' The folder tab t shows, as a favourite is written: PREFABS' as "starter/"; a folder in
+' pictures/ or models/ as "pictures/neon/" (so it moves with bu1ld0r), any other from /
+FUNCTION BinHere$ (t)
+    SELECT CASE t
+        CASE 0: BinHere$ = binDir$
+        CASE 1: IF LEN(binPicExt$) THEN BinHere$ = BinFavKey$(1, PathClean$(binPicExt$)) ELSE BinHere$ = "pictures/" + binPicDir$
+        CASE ELSE: IF LEN(binMdlExt$) THEN BinHere$ = BinFavKey$(2, PathClean$(binMdlExt$)) ELSE BinHere$ = "models/"
+    END SELECT
+END FUNCTION
+
+' The tab's own folder, as BinHere$ writes it
+FUNCTION BinHome$ (t)
+    BinHome$ = IIFS$(t = 0, "", IIFS$(t = 1, "pictures/", "models/"))
+END FUNCTION
+
+' Folder a$ (from /) as a favourite's written
+FUNCTION BinFavKey$ (t, a$)
+    DIM r$
+    r$ = IIFS$(t = 1, PathClean$(AbsPath$(PicDir$)), MdlRoot$)
+    IF LEFT$(a$, LEN(r$)) = r$ THEN BinFavKey$ = BinHome$(t) + MID$(a$, LEN(r$) + 1) ELSE BinFavKey$ = a$
+END FUNCTION
+
+' A PICTURES / MODELS favourite's folder, from /
+FUNCTION BinFavAbs$ (t, f$)
+    IF LEFT$(f$, 1) = "/" THEN BinFavAbs$ = f$: EXIT FUNCTION
+    BinFavAbs$ = PathClean$(AbsPath$(IIFS$(t = 1, PicDir$, appDir$ + "models/") + MID$(f$, INSTR(f$, "/") + 1)))
+END FUNCTION
+
+' A favourite as the menu shows it: prefabs/X/, pictures/X/, models/X/, else from ~
+FUNCTION BinFavShow$ (t, f$)
+    IF t = 0 THEN BinFavShow$ = "prefabs/" + f$: EXIT FUNCTION
+    IF LEFT$(f$, 1) = "/" THEN BinFavShow$ = Tilde$(f$) ELSE BinFavShow$ = f$
+END FUNCTION
+
+' The star at the path's end
+SUB BinStarRect (x, y, w, h)
+    x = BIN_W - 28: y = BinTabY + 19: w = 22: h = 20
+END SUB
+
+' The star clicked: the tab's own folder, its favourites, then + ADD / - TAKE OFF the one open
+SUB BinFavMenu
+    DIM t, k, h$, here$, x, y, w, hh
+    t = binTab: here$ = BinHere$(t): h$ = BinHome$(t)
+    bfN = 1: bfRef$(1) = h$: bfShow$(1) = BinFavShow$(t, h$)
+    FOR k = 1 TO BinFavN(t)
+        bfN = bfN + 1: bfRef$(bfN) = BinFavGet$(t, k): bfShow$(bfN) = BinFavShow$(t, bfRef$(bfN))
+    NEXT
+    IF here$ <> h$ THEN
+        bfN = bfN + 1
+        IF BinFavHas(t, here$) THEN
+            bfRef$(bfN) = "*TAKE": bfShow$(bfN) = "- TAKE THIS FOLDER OFF"
+        ELSE
+            bfRef$(bfN) = "*ADD": bfShow$(bfN) = "+ ADD THIS FOLDER"
+        END IF
+    END IF
+    BinStarRect x, y, w, hh
+    binMenuKind = 3: binMenuRef$ = "": binMenu = -1: binMenuX = 6: binMenuY = y + hh + 2
+    BinMenuRect 0, x, y, w, hh ' (kept on the screen)
+END SUB
+
+' A favourite picked: that folder shown
+SUB BinFavGo (t, f$)
+    DIM a$
+    IF t = 0 THEN
+        IF NOT _DIREXISTS(PfDir$ + f$) THEN Msg "Not there any more: prefabs/" + f$ + " (the star: TAKE THIS FOLDER OFF)": EXIT SUB
+        binDir$ = f$: binTop = 0: BinList
+        Msg "prefabs/" + binDir$ + " - PREFAB (Ctrl+Shift+S) saves the model in here"
+        EXIT SUB
+    END IF
+    a$ = BinFavAbs$(t, f$)
+    IF NOT _DIREXISTS(a$) THEN Msg "Not there any more: " + BinFavShow$(t, f$) + " (the star: TAKE THIS FOLDER OFF)": EXIT SUB
+    IF t = 1 THEN PicGoTo a$ ELSE MdlFolderOpen a$
+END SUB
+
+SUB BinFavClick (hit)
+    DIM t, r$, here$
+    t = binTab: r$ = bfRef$(hit): here$ = BinHere$(t)
+    IF r$ = "*ADD" THEN
+        IF BinFavN(t) >= BIN_FAV_MAX THEN Msg LTRIM$(STR$(BIN_FAV_MAX)) + " favourites at most: take one off first": EXIT SUB
+        BinFavPut t, here$: BinFavSave t
+        Msg BinFavShow$(t, here$) + " is a favourite now: the star lists it"
+    ELSEIF r$ = "*TAKE" THEN
+        BinFavTake t, here$: BinFavSave t
+        Msg BinFavShow$(t, here$) + " isn't a favourite now"
+    ELSE
+        BinFavGo t, r$
+    END IF
+END SUB
+
+' A star, middle x, y, r across: solid (a favourite) or an outline
+SUB StarGlyph (x, y, r, solid, c AS _UNSIGNED LONG)
+    DIM k, j, a#, s#, px#, py#, qx#, qy#, n
+    n = 1: IF solid THEN n = 5
+    FOR j = 1 TO n
+        s# = r * j / n
+        FOR k = 0 TO 10
+            a# = (k * 36 - 90) * 3.14159265 / 180
+            qx# = x + COS(a#) * s# * IIF(k MOD 2, .42, 1): qy# = y + SIN(a#) * s# * IIF(k MOD 2, .42, 1)
+            IF k THEN LINE (px#, py#)-(qx#, qy#), c
+            px# = qx#: py# = qy#
+        NEXT
+    NEXT
+    IF solid THEN PSET (x, y), c
+END SUB
+
 ' ---------------------------------------------------------------- clicks
 
 SUB BinClick
@@ -365,10 +607,12 @@ SUB BinClick
         k = 0: IF mX >= 70 THEN k = 1
         IF mX >= 142 THEN k = 2
         IF k <> binTab THEN binTab = k: binTop = 0: BinList
-        IF binTab = 2 THEN Msg "Models: your models in models/ - click one to open it (SAVE puts the model open here)"
-        IF binTab = 1 THEN Msg "Pictures: drag one onto a face, or click it then click faces. The path under the tabs: click it to go to any folder (paste one: Ctrl+V). Right-click a picture: EDIT IN DRAW, kaleidotron. Shift + wheel: bigger or smaller"
+        IF binTab = 2 THEN Msg "Models: click one to open it (SAVE puts the model open in models/). The path: click it to go to any folder - NEON-CASTER's props (.obj) and SVGs open too. The star: favourite folders"
+        IF binTab = 1 THEN Msg "Pictures: drag one onto a face, or click it then click faces. The path under the tabs: click it to go to any folder (paste one: Ctrl+V). Right-click a picture: EDIT IN DRAW, kaleidotron. Shift + wheel: bigger or smaller. The star: favourite folders"
         EXIT SUB
     END IF
+    BinStarRect x, y, w, h
+    IF InRect(mX, mY, x, y, w, h) THEN BinFavMenu: EXIT SUB
     BinBtn x, y, w, h
     IF InRect(mX, mY, x, y, w, h) AND binTab <> 2 THEN
         IF binTab = 1 AND LEN(binPicExt$) > 0 THEN Msg "Back in PICTURES first: + FOLDER makes one in pictures/": EXIT SUB
@@ -379,6 +623,7 @@ SUB BinClick
     i = BinItemAt(mX, mY): IF i = 0 THEN EXIT SUB
     IF binTab = 2 THEN ' (let go on it: opened; dragged into the view: put in this model)
         IF biKind(i) = BI_MDL THEN mdlPress$ = biRef$(i): mdlPressI = i
+        IF biKind(i) = BI_UP OR biKind(i) = BI_DIR THEN MdlFolderOpen biRef$(i)
         EXIT SUB
     END IF
     IF binTab = 1 THEN
@@ -436,6 +681,7 @@ FUNCTION BinMenuFolder$
 END FUNCTION
 
 FUNCTION BinMenuItems
+    IF binMenuKind = 3 THEN BinMenuItems = bfN: EXIT FUNCTION
     BinMenuItems = 2: IF binMenuKind = 2 AND LEN(binMenuRef$) = 0 THEN BinMenuItems = 1
     IF binMenuKind = 1 THEN BinMenuItems = 3
 END FUNCTION
@@ -446,6 +692,8 @@ FUNCTION BinMenuItem$ (k)
         CASE 1: BinMenuItem$ = IIFS$(k = 1, "PAINT IT", IIFS$(k = 2, "EDIT IN DRAW", "OPEN IN KALEIDOTRON"))
         CASE 2
             IF BinMenuItems = 1 THEN BinMenuItem$ = "OPEN IN KALEIDOTRON" ELSE BinMenuItem$ = IIFS$(k = 1, "OPEN", "OPEN IN KALEIDOTRON")
+        CASE 3
+            BinMenuItem$ = bfShow$(k): IF LEN(bfShow$(k)) > 40 THEN BinMenuItem$ = ".." + RIGHT$(bfShow$(k), 38)
     END SELECT
 END FUNCTION
 
@@ -455,13 +703,20 @@ FUNCTION BinMenuTitle$
         CASE 0: t$ = PfBase$(binMenuRef$)
         CASE 1: t$ = MID$(binMenuRef$, _INSTRREV(binMenuRef$, "/") + 1): IF LEFT$(binMenuRef$, 1) <> "/" THEN t$ = t$ + ".png"
         CASE 2: t$ = Tilde$(PathClean$(BinMenuFolder$))
+        CASE 3: t$ = "FAVOURITE FOLDERS"
     END SELECT
     IF LEN(t$) > 22 THEN t$ = ".." + RIGHT$(t$, 20)
     BinMenuTitle$ = t$
 END FUNCTION
 
 SUB BinMenuRect (k, x, y, w, h)
+    DIM i
     w = IIF(binMenuKind = 0, 170, 196)
+    IF binMenuKind = 3 THEN
+        FOR i = 1 TO bfN
+            IF 8 * LEN(BinMenuItem$(i)) + 18 > w THEN w = 8 * LEN(BinMenuItem$(i)) + 18
+        NEXT
+    END IF
     IF binMenuX + w > scrW - 4 THEN binMenuX = scrW - 4 - w
     IF binMenuY + 22 * (BinMenuItems + 1) + 4 > scrH - BAR_H THEN binMenuY = scrH - BAR_H - 22 * (BinMenuItems + 1) - 4
     x = binMenuX: y = binMenuY + 22 + (k - 1) * 22: h = 22
@@ -469,7 +724,7 @@ SUB BinMenuRect (k, x, y, w, h)
 END SUB
 
 SUB BinMenuDraw
-    DIM x, y, w, h, k
+    DIM x, y, w, h, k, c AS _UNSIGNED LONG
     BinMenuRect 0, x, y, w, h
     LINE (x, y)-(x + w - 1, y + h - 1), _RGB32(12, 10, 22), BF
     LINE (x, y)-(x + w - 1, y + h - 1), cHi, B
@@ -477,7 +732,12 @@ SUB BinMenuDraw
     FOR k = 1 TO BinMenuItems
         BinMenuRect k, x, y, w, h
         IF InRect(mX, mY, x, y, w, h) THEN LINE (x + 2, y)-(x + w - 3, y + h - 1), cHover, BF
-        Txt x + 8, y + 3, BinMenuItem$(k), cText
+        c = cText
+        IF binMenuKind = 3 THEN ' (the folder open: lit; adding or taking off: dimmer, under a line)
+            IF bfRef$(k) = BinHere$(binTab) THEN c = cHi
+            IF LEFT$(bfRef$(k), 1) = "*" THEN c = cDim: LINE (x + 4, y)-(x + w - 5, y), cLine
+        END IF
+        Txt x + 8, y + 3, BinMenuItem$(k), c
     NEXT
 END SUB
 
@@ -489,6 +749,7 @@ SUB BinMenuClick
         IF InRect(mX, mY, x, y, w, h) THEN hit = k
     NEXT
     IF hit = 0 THEN EXIT SUB
+    IF binMenuKind = 3 THEN BinFavClick hit: EXIT SUB
     IF binMenuKind = 1 THEN
         SELECT CASE hit
             CASE 1: PntOpen binMenuRef$
@@ -621,10 +882,12 @@ SUB BinDraw
     IF binTab = 1 THEN x = 74: w = 64
     IF binTab = 2 THEN x = 146: w = 48
     LINE (x, y + 17)-(x + w - 1, y + 17), cHi
-    IF binTab = 1 THEN
+    BinStarRect x, w, k, h ' (the favourites' star: solid when the folder open is one)
+    IF InRect(mX, mY, x, w, k, h) AND binMenu = 0 THEN LINE (x, w)-(x + k - 1, w + h - 1), cHover, BF: hov$ = "FAVOURITE FOLDERS"
+    i = (BinHere$(binTab) = BinHome$(binTab)) OR BinFavHas(binTab, BinHere$(binTab))
+    StarGlyph x + k \ 2, w + h \ 2, 8, i, IIFC~&(i, _RGB32(250, 200, 60), cDim)
+    IF binTab = 1 OR binTab = 2 THEN
         FieldDraw F_PICPATH
-    ELSEIF binTab = 2 THEN
-        Txt 10, y + 22, "/models", cDim
     ELSE
         t$ = "/" + binDir$: IF LEN(t$) > 17 THEN t$ = ".." + RIGHT$(t$, 15)
         Txt 10, y + 22, t$, cDim
@@ -664,6 +927,9 @@ SUB BinDraw
         Txt 10, BI_Y0 + 4, "None here yet:", cDim
         Txt 10, BI_Y0 + 20, "SAVE puts the", cDim
         Txt 10, BI_Y0 + 36, "model here.", cDim
+    ELSEIF binTab = 2 AND biKind(biN) = BI_UP THEN
+        Txt 10, BI_Y0 + 92, "No models here", cDim
+        Txt 10, BI_Y0 + 108, "(.bld .obj .svg)", cDim
     ELSEIF biN = 0 OR (biN = 1 AND biKind(1) = BI_UP) THEN
         Txt 10, BI_Y0 + IIF(biN, 92, 4), "None here yet:", cDim
         Txt 10, BI_Y0 + IIF(biN, 108, 20), "PREFAB at the top", cDim

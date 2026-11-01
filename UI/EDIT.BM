@@ -1588,8 +1588,8 @@ FUNCTION EdKey (k&)
         CASE 115, 83: EdSplit ' (S)
         CASE 106, 74: EdConnect ' (J)
         CASE 111, 79: LcStart ' (O: a loop cut)
-        CASE 104, 72: EdDivide -1 ' (H)
-        CASE 118, 86: EdDivide 0 ' (V)
+        CASE 104, 72: IF pvOn THEN PvFlip 0 ELSE EdDivide -1 ' (H - moving the picture: flipped left for right as seen)
+        CASE 118, 86: IF pvOn THEN PvFlip -1 ELSE EdDivide 0 ' (V - moving the picture: flipped top for bottom)
         CASE 109: EdMerge 0 ' (M: points made one, faces joined)
         CASE 77: EdMerge -1 ' (Shift+M: faces each drawn to a point)
         CASE 110, 78: EdFlip ' (N)
@@ -1601,8 +1601,8 @@ FUNCTION EdKey (k&)
         CASE 19200, 19712, 18432, 20480
             IF NOT EdAny THEN EdKey = 0: EXIT FUNCTION ' (nothing picked: the view turns)
             EdNudge k&, st#
-        CASE 114: EdTurnBy 2, 15, -1 ' (R)
-        CASE 82: EdTurnBy 2, -15, -1 ' (Shift+R)
+        CASE 114: IF pvOn THEN PvTurnSize 1, -1 ELSE EdTurnBy 2, 15, -1 ' (R - moving the picture: it turns)
+        CASE 82: IF pvOn THEN PvTurnSize -1, -1 ELSE EdTurnBy 2, -15, -1 ' (Shift+R)
         CASE 61, 43: EdGrowBy 0, 2 * EdStep#, -1 ' (=, +: a grid step each side, the longest way)
         CASE 45, 95: EdGrowBy 0, -2 * EdStep#, -1 ' (-)
         CASE ELSE: EdKey = 0
@@ -1861,8 +1861,9 @@ END SUB
 SUB EdOverlay
     DIM m AS _MEM, i AS LONG, t AS LONG, f AS LONG, c AS _UNSIGNED LONG, d, id AS LONG, g AS LONG, k AS LONG, n AS LONG
     DIM ax, ay, az, bx, by, bz, x#, y#, z#, sx, sy, q, seen, v AS LONG, nx#, ny#, nz#, fx#, fy#, fz#, front
-    DIM pass, hot, eHot, v2 AS LONG, inPl
+    DIM pass, hot, eHot, v2 AS LONG, inPl, wA
     id = pMesh(edPart)
+    wA = INT(wireOp * 2.55 + .5) ' (WIRE's strength slider: the lines and points not picked, WIRE on or off)
     EdPkInMake
     IF edPlane THEN EdPlanesMake
     IF edMode = ED_FACES THEN
@@ -1899,7 +1900,7 @@ SUB EdOverlay
                 front = (fx# * (cEX - x#) + fy# * (cEY - y#) + fz# * (cEZ - z#) > 0)
             END IF
             c = mfCol(g) ' (dark lines on light faces, light on dark - the faces as solid as TEX shows them: off or faint, the dark backdrop shows through)
-            IF (_RED32(c) * 3 + _GREEN32(c) * 6 + _BLUE32(c)) * IIF(viewWire, 0, texOp / 100) < 1200 OR mfTex(g) > 0 THEN c = _RGB32(215, 215, 240) ELSE c = _RGB32(16, 10, 34)
+            IF (_RED32(c) * 3 + _GREEN32(c) * 6 + _BLUE32(c)) * IIF(viewWire, 0, texOp / 100) < 1200 OR mfTex(g) > 0 THEN c = _RGBA32(215, 215, 240, wA) ELSE c = _RGBA32(16, 10, 34, wA)
             FOR k = 0 TO n - 1
                 inPl = 0: IF edPlane THEN inPl = edPlIn(edPlC0(f) + k) ' (PLANES: the lines inside a plane not drawn)
                 IF mcE(mfC0(g) + k) <> 0 AND inPl = 0 THEN
@@ -1930,10 +1931,10 @@ SUB EdOverlay
                 ELSEIF edMode = ED_EDGES THEN
                     ' (edges: the points only as small dots)
                 ELSEIF seen THEN
-                    LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), _RGB32(8, 6, 16), BF
-                    LINE (sx - 2, sy - 2)-(sx + 2, sy + 2), _RGB32(235, 235, 255), BF
+                    LINE (sx - 3, sy - 3)-(sx + 3, sy + 3), _RGBA32(8, 6, 16, wA), BF
+                    LINE (sx - 2, sy - 2)-(sx + 2, sy + 2), _RGBA32(235, 235, 255, wA), BF
                 ELSE
-                    LINE (sx - 1, sy - 1)-(sx + 1, sy + 1), _RGBA32(150, 150, 190, 120), BF
+                    LINE (sx - 1, sy - 1)-(sx + 1, sy + 1), _RGBA32(150, 150, 190, wA * 120 \ 255), BF
                 END IF
             END IF
         NEXT

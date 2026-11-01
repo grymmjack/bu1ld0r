@@ -229,6 +229,13 @@ FUNCTION now (tabs at `BinTabY`); BIN_MIN 200. binTab 2 is MODELS
 (`MdlBinList`; `ModelIcon` reads the model into PF_BASE+pfTop as a
 throwaway prefab "*NAME" and renders it as a use, one a frame in
 BinIconsDue; `MdlBinOpen` asks once when unsaved).
+MODELS browses any folder too (`binMdlExt$`, `mdl_outside=`; the path box
+F_PICPATH serves both tabs, `PathTyped$` parses a typed path): refs from /
+outside models/ (`MdlFile$`), .obj tiles are the game's `NAME_0.png`.
+Favourites (UI/BIN, the star `BinStarRect`, menu `binMenuKind` 3, rows in
+`bfRef$`): `binFav$(tab)` "|"-joined, `fav_prefabs=` / `fav_pictures=` /
+`fav_models=`; in-app folders kept as "pictures/X/" (`BinFavKey$` /
+`BinFavAbs$`); `BinFavSeed` gives NEON-CASTER's until a tab's list is saved.
 
 The painter (UI/PAINT, `pntOn`) takes the whole window: UiFrame / UiKey /
 UiDraw hand over at their top. Ctrl+P (`PntFromPointer`): E's picked

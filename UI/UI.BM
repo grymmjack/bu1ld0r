@@ -22,16 +22,16 @@ SUB FieldRect (f, x, y, w, h)
     DIM k
     w = 74: h = 20
     SELECT CASE f
-        CASE F_PX TO F_PZ: y = 104: x = PX0 + (f - F_PX) * 78
-        CASE F_RX TO F_RZ: y = 150: x = PX0 + (f - F_RX) * 78
-        CASE F_SX TO F_SZ: y = 196: x = PX0 + (f - F_SX) * 78
+        CASE F_PX TO F_PZ: y = 104: x = PX0 + (f - F_PX) * 78: IF ZeroOn THEN w = 64 ' (its 0 button after it: ZeroRect)
+        CASE F_RX TO F_RZ: y = 150: x = PX0 + (f - F_RX) * 78: IF ZeroOn THEN w = 64
+        CASE F_SX TO F_SZ: y = 196: x = PX0 + (f - F_SX) * 78: IF ZeroOn THEN w = 64
         CASE F_SEG: y = 226: x = PX0 + 100
         CASE F_AMT: y = 252: x = PX0 + 100
         CASE F_COL: y = 282: x = PX0 + 100: w = 90
         CASE F_NAME: y = 3: x = 56: w = 200: h = 22
         CASE F_BUDGET: y = 128: x = PX0 + 100
         CASE F_DIR, F_PFNAME: BinBtn x, y, w, h
-        CASE F_PICPATH: x = 6: y = BinTabY + 19: w = BIN_W - 12: h = 20
+        CASE F_PICPATH: x = 6: y = BinTabY + 19: w = BIN_W - 38: h = 20 ' (the star after it: BinStarRect)
         CASE F_PNAME ' (in its row of the parts list)
             ListRowsMake: k = ListRowOf(listEdit)
             x = BIN_W + 58: w = LIST_W - 64: h = LIST_ROW: y = ListY0 + (k - listTop - 1) * LIST_ROW
@@ -58,7 +58,7 @@ FUNCTION FieldAt (x, y)
     FieldRect F_PFNAME, fx, fy, fw, fh
     IF InRect(x, y, fx, fy, fw, fh) AND typeField = F_PFNAME THEN FieldAt = F_PFNAME
     FieldRect F_PICPATH, fx, fy, fw, fh
-    IF InRect(x, y, fx, fy, fw, fh) AND binTab = 1 THEN FieldAt = F_PICPATH
+    IF InRect(x, y, fx, fy, fw, fh) AND (binTab = 1 OR binTab = 2) THEN FieldAt = F_PICPATH
 END FUNCTION
 
 ' A field of words (a name, a path), not a number: no wheel, no middle-click reset, Tab doesn't go on
@@ -73,7 +73,7 @@ FUNCTION FieldShown (f)
     IF f = F_DIR THEN FieldShown = (typeField = F_DIR): EXIT FUNCTION
     IF f = F_PNAME THEN FieldShown = (typeField = F_PNAME): EXIT FUNCTION
     IF f = F_PFNAME THEN FieldShown = (typeField = F_PFNAME): EXIT FUNCTION
-    IF f = F_PICPATH THEN FieldShown = (binTab = 1): EXIT FUNCTION
+    IF f = F_PICPATH THEN FieldShown = (binTab = 1 OR binTab = 2): EXIT FUNCTION ' (PICTURES' folder, or MODELS')
     IF f = F_BUDGET THEN FieldShown = (edPart = 0 AND SelCount = 0 AND placeKind = 0): EXIT FUNCTION
     IF maOn THEN EXIT FUNCTION ' (MATERIAL has the panel)
     IF edPart THEN FieldShown = EdFieldShown(f): EXIT FUNCTION
@@ -159,8 +159,7 @@ SUB SliderSet (s, v, keep)
             IF keep THEN CfgSet "tex_op", LTRIM$(STR$(texOp))
         CASE 2
             IF v <> wireOp THEN wireOp = v: viewDirty = -1
-            IF wireOn = 0 THEN wireOn = -1: viewDirty = -1: CfgSet "wire_on", "1"
-            Msg "Edges:" + STR$(wireOp) + "% strong (WIRE or W: off)"
+            Msg "Edges:" + STR$(wireOp) + "% strong - WIRE's, and E's lines and points (WIRE or W: " + IIFS$(wireOn, "off)", "on)")
             IF keep THEN CfgSet "wire_op", LTRIM$(STR$(wireOp))
         CASE 3
             GridBrightSet v
@@ -183,8 +182,8 @@ FUNCTION TopBtnName$ (k)
     END SELECT
 END FUNCTION
 
-' GUIDES / Ctrl+H: every guide drawn on the view (outlines, the widget, E's
-' points, edges and picked faces, the shadows on the walls) hidden, or back
+' GUIDES / Ctrl+H: the guides drawn on the view (outlines, E's points, edges and
+' picked faces, the shadows on the walls, WIRE) hidden, or back - not the move widget or the pivot
 SUB GuidesToggle
     guidesOn = NOT guidesOn: viewDirty = -1
     Msg IIFS$(guidesOn, "Guides shown (Ctrl+H: hidden)", "Guides hidden: just the model (Ctrl+H: back)")
@@ -243,8 +242,8 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 16: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6: y = 3: w = 64 ' (GUIDES, after it)
         CASE 17: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 70: y = 3: w = 64 ' (INSIDE, after that)
         CASE 18: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 140: y = 3: w = 34 ' (SG: smart guides)
-        CASE 21: x = PX0 + 100: y = 58: w = 24
-        CASE 22: x = PX0 + 206: y = 58: w = 24
+        CASE 21: x = PX0 + 46: y = 58: w = 20
+        CASE 22: x = PX0 + 134: y = 58: w = 20
         CASE 23: x = PX0 + 158: y = 32: w = 72
         CASE 24 TO 27, 30: i = k - 24: IF k = 30 THEN i = 4
             x = PX0 + (i MOD 3) * 78: y = 542 + (i \ 3) * 28: w = 74 ' (EDIT APPLY GROUP / KEEP MATERIAL)
@@ -1065,6 +1064,7 @@ SUB PanelClick
     IF SelCount > 0 THEN IF ShClick(684) THEN EXIT SUB
     IF SelCount > 0 THEN IF SmClick(790) THEN EXIT SUB
     IF SelCount > 0 THEN IF SnClick(880) THEN EXIT SUB
+    k = ZeroAt(mX, mY): IF k THEN ZeroDo k: EXIT SUB
     FOR k = 1 TO 37
         PanelBtn k, x, y, w, h
         IF w > 0 AND InRect(mX, mY, x, y, w, h) AND PanelBtnOn(k) THEN
@@ -1153,7 +1153,7 @@ FUNCTION FieldValue$ (f)
     IF f = F_DIR THEN EXIT FUNCTION
     IF f = F_PNAME THEN FieldValue$ = ListName$(listEdit): EXIT FUNCTION
     IF f = F_PFNAME THEN FieldValue$ = binMenuRef$: EXIT FUNCTION
-    IF f = F_PICPATH THEN FieldValue$ = PicFolderShown$: EXIT FUNCTION
+    IF f = F_PICPATH THEN FieldValue$ = IIFS$(binTab = 2, MdlFolderShown$, PicFolderShown$): EXIT FUNCTION
     IF f = F_BUDGET THEN FieldValue$ = LTRIM$(STR$(mdlBudget)): EXIT FUNCTION
     IF edPart THEN FieldValue$ = EdFieldValue$(f): EXIT FUNCTION
     p = SelFirst
@@ -1191,7 +1191,10 @@ SUB FieldApply (f, v$)
         EXIT SUB
     END IF
     IF f = F_PFNAME THEN PfRename binMenuRef$, v$: EXIT SUB
-    IF f = F_PICPATH THEN PicGoTo v$: EXIT SUB
+    IF f = F_PICPATH THEN
+        IF binTab = 2 THEN MdlGoTo v$ ELSE PicGoTo v$
+        EXIT SUB
+    END IF
     IF f = F_BUDGET THEN BudgetSet VAL(v$), -1: EXIT SUB
     IF edPart THEN EdFieldApply f, v$: EXIT SUB
     IF f = F_DIR AND binTab = 1 THEN ' (a new folder in pictures/, opened)
@@ -1545,6 +1548,103 @@ SUB FieldReset (f)
     Msg "Back to its usual value (Ctrl+Z: as it was)"
 END SUB
 
+' ---------------------------------------------------------------- ZERO
+
+' The part's panel (a part selected, or a shape being set up): ZERO buttons beside its numbers
+FUNCTION ZeroOn
+    IF edPart OR maOn THEN EXIT FUNCTION
+    ZeroOn = (SelCount > 0 OR TplOn)
+END FUNCTION
+
+' A row's name: 102 POSITION, 103 TURN, 104 SIZE / SCALE (its ZERO button after it)
+FUNCTION ZeroLabel$ (k)
+    DIM p, n
+    p = SelFirst: n = SelCount: IF p = 0 AND TplOn THEN p = P_TPL: n = -1
+    SELECT CASE k
+        CASE 102: ZeroLabel$ = "POSITION"
+        CASE 103: ZeroLabel$ = IIFS$(n = -1, "TURN ON FACE", IIFS$(n > 1, "TURN AS ONE", "TURN"))
+        CASE 104: IF p THEN ZeroLabel$ = IIFS$(pKind(p) = K_USE, "SCALE", "SIZE") ELSE ZeroLabel$ = "SIZE"
+    END SELECT
+END FUNCTION
+
+' ZERO button k: 101 ZERO ALL (under HOLE), 102-104 a row's (after its name), F_PX..F_SZ one number's (after its box)
+SUB ZeroRect (k, x, y, w, h)
+    DIM fx, fy, fw, fh
+    x = -100: y = -100: w = 0: h = 0
+    IF NOT ZeroOn THEN EXIT SUB
+    SELECT CASE k
+        CASE 101: IF FieldShown(F_SX) THEN x = PX0 + 158: y = 58: w = 72: h = 22
+        CASE 102 TO 104
+            IF FieldShown(IIF(k = 102, F_PX, IIF(k = 103, F_RX, F_SX))) THEN
+                x = PX0 + 8 * LEN(ZeroLabel$(k)) + 8: y = 84 + (k - 102) * 46: w = 44: h = 18
+            END IF
+        CASE F_PX TO F_SZ
+            IF FieldShown(k) THEN FieldRect k, fx, fy, fw, fh: x = fx + fw: y = fy: w = 10: h = fh
+    END SELECT
+END SUB
+
+FUNCTION ZeroAt (x, y)
+    DIM k, zx, zy, zw, zh
+    FOR k = F_PX TO 104
+        IF k <= F_SZ OR k >= 101 THEN
+            ZeroRect k, zx, zy, zw, zh
+            IF zw > 0 AND InRect(x, y, zx, zy, zw, zh) THEN ZeroAt = k: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
+
+SUB ZeroDraw
+    DIM k, x, y, w, h, c AS _UNSIGNED LONG
+    FOR k = F_PX TO 104
+        IF k <= F_SZ OR k >= 101 THEN
+            ZeroRect k, x, y, w, h
+            IF w > 0 THEN
+                IF k >= 101 THEN
+                    Btn x, y, w, h, IIFS$(k = 101, "ZERO ALL", "ZERO"), 0
+                ELSE ' (a small box after the number's: the value it puts there)
+                    c = cBtn: IF InRect(mX, mY, x, y, w, h) THEN c = cHover
+                    LINE (x, y)-(x + w - 1, y + h - 1), c, BF: LINE (x, y)-(x + w - 1, y + h - 1), cLine, B
+                    Txt x + 1, y + (h - 16) \ 2, IIFS$(k >= F_SX, "1", "0"), cDim
+                END IF
+            END IF
+        END IF
+    NEXT
+END SUB
+
+' ZERO button k pressed: place and turn 0, size (a prefab's scale) 1. Several parts: their
+' place moves them together (the first to 0, as typing 0 does); each one's turn is made 0
+SUB ZeroDo (k)
+    DIM f, i, a, b, t$
+    IF typeField THEN typeField = 0
+    SELECT CASE k
+        CASE 101: a = F_PX: b = F_SZ: t$ = "Place and turn 0, size 1"
+        CASE 102: a = F_PX: b = F_PZ: t$ = "Placed at 0"
+        CASE 103: a = F_RX: b = F_RZ: t$ = "Turn 0"
+        CASE 104: a = F_SX: b = F_SZ: t$ = IIFS$(ZeroLabel$(104) = "SCALE", "Scale 1", "Size 1")
+        CASE ELSE: a = k: b = k: t$ = MID$("XYZ", (k - F_PX) MOD 3 + 1, 1) + IIFS$(k >= F_SX, " size 1", IIFS$(k >= F_RX, " turn 0", " 0"))
+    END SELECT
+    IF SelFirst THEN UndoPush
+    FOR f = a TO b
+        IF FieldShown(f) THEN
+            IF f >= F_RX AND f <= F_RZ AND k >= 101 AND SelCount > 1 THEN
+                FOR i = 1 TO pN
+                    IF pSel(i) THEN
+                        SELECT CASE f
+                            CASE F_RX: pRX(i) = 0
+                            CASE F_RY: pRY(i) = 0
+                            CASE F_RZ: pRZ(i) = 0
+                        END SELECT
+                    END IF
+                NEXT
+                ModelChanged
+            ELSE
+                FieldApply f, IIFS$(f >= F_SX, "1", "0")
+            END IF
+        END IF
+    NEXT
+    Msg t$ + IIFS$(SelFirst > 0, " (Ctrl+Z: as it was)", "")
+END SUB
+
 ' ---------------------------------------------------------------- putting a shape down
 
 ' A field's new value put on the shape being put down (no undo: it isn't in the model yet)
@@ -1768,18 +1868,20 @@ END SUB
 ' ---------------------------------------------------------------- OPEN
 
 SUB OpenList
-    DIM f$, d$
+    DIM f$, d$, a
     openN = 0: openTop = 0
     f$ = _FILES$(appDir$ + "models/*.bld")
     DO WHILE LEN(f$) AND openN < 500
         IF LCASE$(RIGHT$(f$, 4)) = ".bld" THEN openN = openN + 1: openName$(openN) = LEFT$(f$, LEN(f$) - 4)
         f$ = _FILES$
     LOOP
+    OpenSort 1, openN: a = openN + 1 ' (each lot a to z: models, SVGs, NEON-CASTER's)
     f$ = _FILES$(appDir$ + "models/*.svg") ' (SVGs: opened made thick)
     DO WHILE LEN(f$) AND openN < 500
         IF LCASE$(RIGHT$(f$, 4)) = ".svg" THEN openN = openN + 1: openName$(openN) = f$
         f$ = _FILES$
     LOOP
+    OpenSort a, openN: a = openN + 1
     d$ = NeonInDir$ ' (then NEON-CASTER's props: opened as mesh parts with their texture)
     IF LEN(d$) THEN
         f$ = _FILES$(d$ + "models/*.obj")
@@ -1787,9 +1889,22 @@ SUB OpenList
             IF LCASE$(RIGHT$(f$, 4)) = ".obj" THEN openN = openN + 1: openName$(openN) = "neon:" + LEFT$(f$, LEN(f$) - 4)
             f$ = _FILES$
         LOOP
+        OpenSort a, openN
     END IF
     IF openN = 0 THEN Msg "No models yet in " + appDir$ + "models/": EXIT SUB
     openOn = -1
+END SUB
+
+' OPEN's names a to b by name, any case
+SUB OpenSort (a, b)
+    DIM i, j
+    FOR i = a + 1 TO b
+        j = i
+        DO WHILE j > a
+            IF LCASE$(openName$(j - 1)) <= LCASE$(openName$(j)) THEN EXIT DO
+            SWAP openName$(j - 1), openName$(j): j = j - 1
+        LOOP
+    NEXT
 END SUB
 
 SUB OpenRect (x, y, w, h)
@@ -1823,8 +1938,8 @@ SUB UiDraw
     PrAdd 16
     ImgBlit viewImg&, uiImg&, vX0, vY0 ' (the view is solid: copied a row at a time - _PUTIMAGE took 10 ms)
     PrAdd 12
-    IF guidesOn AND fpOn = 0 THEN ' (GUIDES / Ctrl+H off, or walking / flying: just the model)
-        _PUTIMAGE (vX0, vY0), ovImg&
+    IF fpOn = 0 THEN ' (walking / flying: just the model)
+        IF guidesOn THEN _PUTIMAGE (vX0, vY0), ovImg& ' (GUIDES / Ctrl+H off: no outlines, E's lines and picks - the widget and pivot stay)
         GzDraw
         SgDraw
         PivDraw
@@ -1834,6 +1949,7 @@ SUB UiDraw
     IF txOn THEN TxDraw
     RefDraw
     FpDraw
+    IF edPart THEN IF pvOn AND edMode = ED_FACES AND fpOn = 0 THEN PvTips
     IF selRect AND (ABS(mX - vX0 - selRX0) > 2 OR ABS(mY - vY0 - selRY0) > 2) THEN LINE (vX0 + selRX0, vY0 + selRY0)-(mX, mY), cHi, B
     LINE (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1), cLine, B
     IF TidyOn THEN
@@ -1959,7 +2075,7 @@ SUB PanelDraw
         PanelBtn 23, x, y, w, h: Btn x, y, w, h, "HOLE", pHole(p) AND pKeep(p) = 0
         IF pKind(p) = K_USE THEN
             Txt PX0, 61, "PREFAB", cDim
-            t$ = pRef$(p): IF LEN(t$) > 21 THEN t$ = ".." + RIGHT$(t$, 19)
+            t$ = pRef$(p): IF LEN(t$) > 12 THEN t$ = ".." + RIGHT$(t$, 10)
             Txt PX0 + 56, 61, t$, IIFC~&(PfFind(pRef$(p)) > 0, cText, cWarn)
             IF n = -1 THEN
                 Txt PX0, 228, "Set it up, then click", cDim
@@ -1972,21 +2088,21 @@ SUB PanelDraw
             Txt PX0, 61, "SHAPE", cDim
             Txt PX0, 228, "A MESH  (E: edit its", cDim
             Txt PX0, 244, "faces and points)", cDim
-            Txt PX0 + 126 + (78 - 32) \ 2, 61, "MESH", cText
+            Txt PX0 + 66 + (68 - 32) \ 2, 61, "MESH", cText
         ELSE
             Txt PX0, 61, "SHAPE", cDim
-            t$ = UCASE$(kindName$(pKind(p))): Txt PX0 + 126 + (78 - 8 * LEN(t$)) \ 2, 61, t$, cText
+            t$ = UCASE$(kindName$(pKind(p))): Txt PX0 + 66 + (68 - 8 * LEN(t$)) \ 2, 61, t$, cText
             PanelBtn 21, x, y, w, h: Btn x, y, w, h, "<", 0
             PanelBtn 22, x, y, w, h: Btn x, y, w, h, ">", 0
         END IF
         IF n = -1 THEN
             Txt PX0, 86, "POSITION", cDim: Txt PX0, 106, "where you click", cText
-            Txt PX0, 132, "TURN (ON THE FACE) X Y Z", cDim
         ELSE
-            Txt PX0, 86, "POSITION    X  Y  Z", cDim
-            Txt PX0, 132, IIFS$(n > 1, "TURN ALL AS ONE  X  Y  Z", "TURN        X  Y  Z"), cDim
+            Txt PX0, 86, "POSITION", cDim: Txt PX0 + 174, 86, "X  Y  Z", cDim
         END IF
-        Txt PX0, 178, IIFS$(pKind(p) = K_USE, "SCALE       X  Y  Z", "SIZE        X  Y  Z"), cDim
+        Txt PX0, 132, ZeroLabel$(103), cDim: Txt PX0 + 174, 132, "X  Y  Z", cDim
+        Txt PX0, 178, ZeroLabel$(104), cDim: Txt PX0 + 174, 178, "X  Y  Z", cDim
+        ZeroDraw
         IF FieldShown(F_SEG) THEN Txt PX0, 228, SegName$(pKind(p)), cDim
         IF FieldShown(F_AMT) THEN Txt PX0, 254, AmtName$(pKind(p)), cDim
         FOR k = F_PX TO F_AMT: FieldDraw k: NEXT
@@ -2203,7 +2319,7 @@ SUB HelpSetup
     HelpAdd "W  or  WIRE|each part's edges drawn over it, each pixel the opposite of what's under it (so they show on white or dark) - the slider: how strong"
     HelpAdd "GRID|the grid up the two walls behind, and what's selected shadowed on the floor and walls - where it is, against the lines. The ground's grid never ends: it thins and fades out with distance"
     HelpAdd "Ctrl+B  INSIDE|a face seen from behind drawn red (else left out: it looks like a hole). On a good solid there's none - red: E, then MEND turns it to face out"
-    HelpAdd "Ctrl+H  GUIDES|hide every guide (edges, points, picked colours, outlines, the widget) to see just the model; again: back"
+    HelpAdd "Ctrl+H  GUIDES|hide the guides (edges, points, picked colours, outlines) to see just the model - the move widget and the pivot stay; again: back"
     HelpAdd "The bin's edge|drag it: wider or narrower (no narrower than at first; remembered)"
     HelpAdd "The sliders|drag one, or the wheel over it. TEX, WIRE, GRID and their sliders are remembered"
     HelpAdd "L  or  PARTS|the parts list"
@@ -2247,6 +2363,7 @@ SUB HelpSetup
     HelpAdd "Type|a number, then Enter"
     HelpAdd "Wheel|over a field: a step (a turn: 1, Shift 10, Alt 0.1)"
     HelpAdd "Middle click|a field back to usual"
+    HelpAdd "ZERO|(the panel) ZERO ALL: place and turn 0, size 1. ZERO after POSITION / TURN / SIZE: that row. The small 0 / 1 after a box: that one number"
     HelpAdd "1/8 .. 1/64  OFF|(the top bar, beside GRID) what moves and sizes snap to, in cells - and the ground's finest lines"
 
     HelpTopic "LINE UP"
@@ -2322,11 +2439,12 @@ SUB HelpSetup
     HelpAdd "PICTURES tile|back to pictures/ from a folder outside it"
     HelpAdd "From outside|a picture from another folder is copied into pictures/ when you put it on"
     HelpAdd "Drop a folder|on the window: it opens in the bin"
+    HelpAdd "The star|after the path box: favourite folders - pictures/, then yours (NEON-CASTER's to start). + ADD THIS FOLDER / - TAKE THIS FOLDER OFF for the one open. Each tab has its own"
     HelpAdd "Right-click|a picture: EDIT IN DRAW, OPEN IN KALEIDOTRON (its folder, it picked). A folder, or the bin's empty space: OPEN IN KALEIDOTRON"
     HelpAdd "#ON THE PICKED FACES (E, faces)"
     HelpAdd "FIT|fit it to each face (squared to the face's box)"
     HelpAdd "DEFORM|its four corners pinned to the face's corners: it bends to the shape (a slanted or pointed face)"
-    HelpAdd "MOVE IT  or  P|move it by hand: drag a picked face to slide it, the wheel sizes it, Shift + wheel turns it (Alt: off the picture's pixels). P again: done"
+    HelpAdd "MOVE IT  or  P|move it by hand: drag a picked face to slide it, the wheel zooms it (out: it repeats), R / Shift+R or Shift + wheel turn it 15, H / V flip it left for right / top for bottom as seen (Alt: off the picture's pixels). The keys show at the view's foot. P again: done"
     HelpAdd "ACROSS ALL|one picture spread across all of them"
     HelpAdd "TURN  FLIP|a quarter turn; mirrored"
     HelpAdd "REPEAT|more or fewer times across"
@@ -2451,12 +2569,14 @@ SUB HelpSetup
     HelpAdd "U  or  UNLINK|a prefab put down made the model's own parts"
     HelpAdd "TINT|(the panel) its colours mixed towards one, by AMOUNT"
     HelpAdd "Folders|click to go in, .. back up, + FOLDER makes one"
+    HelpAdd "The star|after the path: favourite folders in prefabs/ - + ADD THIS FOLDER for the one open"
 
     HelpTopic "FILES"
     HelpAdd "#THE MODEL"
     HelpAdd "Ctrl+N  NEW|a new model"
     HelpAdd "Ctrl+O  OPEN|open one (models/, and NEON-CASTER's props)"
     HelpAdd "MODELS tab|in the bin: every saved model, as a picture - click one to open it (not saved: asks first). Drag one into the view: its parts added to this model, one group"
+    HelpAdd "MODELS folders|the path box: any folder (type or paste one) - its .bld models, NEON-CASTER's props (.obj, pictured by the game's own picture) and SVGs. The star: favourite folders (NEON-CASTER's models/ to start). SAVE still puts a model in models/"
     HelpAdd "An SVG|OPEN one in models/, or drop one on the window: each filled shape made thick (a mesh part, all one group, 1 cell across, facing the front). Holes stay holes; shapes over others stand a step out. Then E: extrude, inset... and Ctrl+S saves it as a model"
     HelpAdd "Ctrl+S  SAVE|save (models/NAME.bld)"
     HelpAdd "Ctrl+Z  Ctrl+Y|undo, redo"
