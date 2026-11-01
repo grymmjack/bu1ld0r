@@ -25,6 +25,7 @@ class Bu1ld0r:
     """One connection to bu1ld0r's port: cmd() sends a line, returns the reply."""
 
     def __init__(self, folder=REPO, timeout=60.0):
+        self.timeout = timeout
         path = os.path.join(folder, 'c0nstruct0r.port')
         try:
             port, token = open(path).read().split()[:2]
@@ -50,6 +51,16 @@ class Bu1ld0r:
 
     def cmd(self, line):
         self.sock.sendall(line.strip().encode() + b'\n')
+        asking = line.strip().lower().startswith('ask ')
+        if asking:  # (the answer waits for Rick's click: as long as it takes)
+            self.sock.settimeout(None)
+        try:
+            return self._reply()
+        finally:
+            if asking:
+                self.sock.settimeout(self.timeout)
+
+    def _reply(self):
         while b'\n' not in self.buf:
             got = self.sock.recv(65536)
             if not got:

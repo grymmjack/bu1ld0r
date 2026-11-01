@@ -35,6 +35,10 @@ Without the MCP tools, the same works from the shell: `python3 tools/c0nstruct0r
   rehearsed steps at `pace 400` with `say` lines he can read. Say in chat before it appears.
   Never kill bu1ld0r by name (Rick's own may be running); he closes the window himself.
 - Esc on his side stops it ("err stopped"): stop sending, ask what he wants. F9 gives it back.
+- When a choice is his (which part, keep or redo, a colour), ask in the program:
+  `ask Keep the lid's planks? | keep | plain` - buttons on the view; the reply `ok keep`
+  comes when he clicks (it waits as long as he takes). Only on his screen, never hidden
+  (nobody's there to click), and not for things the method already decides.
 
 ## Writing the steps
 
@@ -105,6 +109,8 @@ his screen - not a prop to start from nothing:
 - **REBUILD**: the method from step 2 for the parts given (`del` them, `add` new ones in
   place), the rest left as they are.
 - Esc on Rick's side ends you (your process is stopped): don't fight it.
+- Unsure what he meant? `ask QUESTION | A | B` in the program (he's watching) - once, not
+  for every step.
 - End: `fix` for the score, `give`, then two short lines - what you changed and the score
   before / after. bu1ld0r shows them in the panel.
 

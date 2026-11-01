@@ -626,6 +626,10 @@ in a sheet) / inspect / painting / check. The method is the skill
 `/c0nstruct0r` (.claude/skills/c0nstruct0r); a prop's steps are kept in
 `tools/c0nstruct0r/props/NAME.txt` (written by `props/recipes.py` on `stepgen.py`),
 its painting in pictures/c0nstruct0r/, the model in models/c0-NAME.bld.
+`ask Q | A | B` (`RcAsk`, in RcExec: needs l$): `rcAskN` answers, RcFrame waits while
+it's set, `RcAskDraw` in RcStripDraw, UiFrame's `RcAskClick` before RcLockedFrame (which
+keeps the pointer in `rcMX/rcMY`); Esc / RcDrop clear it. The release packages carry
+tools/c0nstruct0r, the skill, `.mcp.json`, C0NSTRUCT0R.md (build-release.yml).
 `picture ... view YAW RECT` / `top RECT` map one picture over the model's box:
 one picture, no `tile` - export packs several 2x2 (shrunk) and cuts repeats.
 

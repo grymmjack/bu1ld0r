@@ -80,6 +80,11 @@ jobs:
           cp bu1ld0r.run bu1ld0r.bas _ALL.BI _ALL.BM README.md PLAN.md "pkg/$PKG/"
           [ -f LICENSE ] && cp LICENSE "pkg/$PKG/"
           for d in CORE MODEL VIEW UI OUT docs prefabs pictures models; do [ -d "$d" ] && cp -r "$d" "pkg/$PKG/"; done
+          # c0nstruct0r: its MCP server and tools, the skill, .mcp.json - FIX THIS's ASK CLAUDE (with Claude Code installed)
+          mkdir -p "pkg/$PKG/tools" "pkg/$PKG/.claude/skills"
+          cp -r tools/c0nstruct0r "pkg/$PKG/tools/" && rm -rf "pkg/$PKG/tools/c0nstruct0r/__pycache__"
+          cp -r .claude/skills/c0nstruct0r "pkg/$PKG/.claude/skills/"
+          cp .mcp.json C0NSTRUCT0R.md "pkg/$PKG/"
           tar -czf bu1ld0r-linux-x64.tar.gz -C pkg "$PKG"
 
       - name: Upload artifact
@@ -121,6 +126,11 @@ jobs:
           cp bu1ld0r-mac bu1ld0r.bas _ALL.BI _ALL.BM README.md PLAN.md "pkg/$PKG/"
           [ -f LICENSE ] && cp LICENSE "pkg/$PKG/"
           for d in CORE MODEL VIEW UI OUT docs prefabs pictures models; do [ -d "$d" ] && cp -r "$d" "pkg/$PKG/"; done
+          # c0nstruct0r: its MCP server and tools, the skill, .mcp.json - FIX THIS's ASK CLAUDE (with Claude Code installed)
+          mkdir -p "pkg/$PKG/tools" "pkg/$PKG/.claude/skills"
+          cp -r tools/c0nstruct0r "pkg/$PKG/tools/" && rm -rf "pkg/$PKG/tools/c0nstruct0r/__pycache__"
+          cp -r .claude/skills/c0nstruct0r "pkg/$PKG/.claude/skills/"
+          cp .mcp.json C0NSTRUCT0R.md "pkg/$PKG/"
           # ditto keeps the program's "can run" permission inside the zip
           (cd pkg && ditto -c -k --keepParent "$PKG" "../bu1ld0r-macos-arm64.zip")
 
@@ -183,6 +193,12 @@ jobs:
           Copy-Item bu1ld0r.exe, bu1ld0r.bas, _ALL.BI, _ALL.BM, README.md, PLAN.md -Destination $pkg
           if (Test-Path LICENSE) { Copy-Item LICENSE -Destination $pkg }
           foreach ($d in "CORE", "MODEL", "VIEW", "UI", "OUT", "docs", "prefabs", "pictures", "models") { if (Test-Path $d) { Copy-Item $d -Destination $pkg -Recurse } }
+          # c0nstruct0r's tools and skill (the port works on Windows; FIX THIS's ASK CLAUDE is Linux / macOS for now)
+          New-Item -ItemType Directory -Force -Path "$pkg/tools", "$pkg/.claude/skills" | Out-Null
+          Copy-Item tools/c0nstruct0r -Destination "$pkg/tools" -Recurse
+          Remove-Item "$pkg/tools/c0nstruct0r/__pycache__" -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item .claude/skills/c0nstruct0r -Destination "$pkg/.claude/skills" -Recurse
+          Copy-Item .mcp.json, C0NSTRUCT0R.md -Destination $pkg
           Compress-Archive -Path $pkg -DestinationPath bu1ld0r-windows-x64.zip -Force
 
       - name: Upload artifact

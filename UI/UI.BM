@@ -509,6 +509,9 @@ SUB UiFrame
     kCtrl = _KEYDOWN(100306) OR _KEYDOWN(100305)
     kAlt = _KEYDOWN(100308) OR _KEYDOWN(100307)
     IF NOT kCtrl THEN qCtrl = 0
+    IF rcAskN AND mP1 THEN ' (c0nstruct0r asked: an answer clicked)
+        IF RcAskClick THEN mP1 = 0
+    END IF
     IF rcLock THEN RcLockedFrame: EXIT SUB ' (c0nstruct0r has the model: no clicks, wheel or pointer)
     IF fpOn THEN FpFrame: EXIT SUB ' (walking / flying: the mouse and keys are its)
     IF pntOn THEN PntFrame: EXIT SUB ' (painting: the window's the painter's)

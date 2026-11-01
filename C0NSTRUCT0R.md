@@ -193,8 +193,13 @@ PICTURES 25 -> 3 in ~4 minutes (the cabinet sides re-mapped from a cabinet
 patch at the front's pixel size; beacon and antenna plain colours); Esc
 mid-run stopped it at once.
 
-Still to come: `ask` (Claude asking Rick a question with buttons, the one
-click allowed through the lock).
+`ask QUESTION | ANSWER | ANSWER...` (built 2026-11-01): a box over the strip,
+the question and a button per answer (yes / no when none are given, up to
+four); the one click let through the lock. The reply waits for Rick:
+`ok ANSWER`, or `err stopped` if he presses Esc instead (rc.py waits with
+no timeout on an `ask` line). The downloads carry the c0nstruct0r tools,
+the skill and `.mcp.json` (build-release.yml), so ASK CLAUDE works from
+an unzipped bu1ld0r with Claude Code installed (Linux / macOS).
 
 ## The port's commands (stage 2)
 
@@ -223,6 +228,7 @@ belongs to the connection: it ends when the connection does.
 | `view YAW [PITCH [DIST]]` | camera: yaw 0 = the front (game picture f = yaw f x 45), pitch up + |
 | `mesh P` | a shape made a mesh part |
 | `mirror P [x \| y \| z] [at=V]` | a mirrored copy across the plane axis = V (its number back) |
+| `ask QUESTION [\| ANSWER \| ANSWER...]` | asks Rick, buttons on the view (yes / no by default, up to four): `ok ANSWER` once he clicks, `err stopped` on Esc |
 | `fix [check \| open \| close \| plain \| square \| keep left \| keep right \| tidy \| show W \| leave W]` | FIX THIS: the report card on the model (`ok score S smear ...`), its panel, a fix, SHOW / LEAVE a finding (W: smear size angle asym tris pics repeats) |
 | `edit P` / `done` | E on part P (made a mesh), faces mode, camera to it / E off |
 | `pick [add] none \| all \| F... \| facing X Y Z [DEG]` | faces picked (facing: within DEG, 10, of that way) |

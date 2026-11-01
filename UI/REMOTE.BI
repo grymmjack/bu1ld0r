@@ -19,3 +19,5 @@ DIM SHARED rcStrip$, rcPace, rcNextT# ' (what it says it's doing; ms waited afte
 DIM SHARED rcShotF$, rcShotN, rcShotHow, rcGuides ' (a picture being taken, frames to go; 1 the window, 2 clean - no guides)
 DIM SHARED argPort, cfgPort
 DIM SHARED rcA$(64), rcAN ' (the command's words)
+DIM SHARED rcMX, rcMY ' (the pointer where it really is, while locked: the answers light up)
+DIM SHARED rcAskN, rcAskQ$, rcAskC$(4) ' (ask: a question for Rick and its answers - the reply waits for his click)

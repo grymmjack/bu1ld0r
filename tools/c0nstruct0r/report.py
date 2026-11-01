@@ -42,7 +42,7 @@ import struct
 import subprocess
 import sys
 
-GAME = os.path.expanduser('~/git/neon-caster/neon-caster')
+GAME = os.environ.get('NEON_CASTER_DIR') or os.path.expanduser('~/git/neon-caster/neon-caster')  # (the game's folder: hd/, models/)
 BIG, SMALL = 1000, 200
 STRETCH = 3.0   # (pixels this much longer one way than the other: smeared)
 SIZE_OFF = 1.5  # (pixels this much bigger or smaller than usual: off size)

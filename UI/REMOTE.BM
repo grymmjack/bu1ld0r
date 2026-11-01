@@ -53,7 +53,7 @@ END SUB
 ' c0nstruct0r gone (or turned away): the model Rick's again
 SUB RcDrop (why$)
     IF rcConnH THEN CLOSE rcConnH
-    rcConnH = 0: rcAuth = 0: rcBuf$ = "": rcStrip$ = ""
+    rcConnH = 0: rcAuth = 0: rcBuf$ = "": rcStrip$ = "": rcAskN = 0
     IF rcLock THEN rcLock = 0: Msg why$ + " - the model is yours again" ELSE Msg why$
     RcLog "-- " + why$
 END SUB
@@ -82,6 +82,7 @@ SUB RcFrame
     s$ = "": GET #rcConnH, , s$: rcBuf$ = rcBuf$ + s$
     IF LEN(rcBuf$) > 1000000 THEN RcDrop "c0nstruct0r sent too much at once": EXIT SUB
     IF rcShotN THEN EXIT SUB
+    IF rcAskN THEN EXIT SUB ' (a question open: the next line waits for Rick's answer)
     IF rcNextT# - TIMER(.001) > 10 THEN rcNextT# = 0 ' (midnight: TIMER starts again)
     IF TIMER(.001) < rcNextT# THEN EXIT SUB
     j = INSTR(rcBuf$, CHR$(10)): IF j = 0 THEN EXIT SUB
@@ -113,7 +114,7 @@ SUB RcExec (l$)
     SELECT CASE c$
         CASE "hello": RcSend "ok bu1ld0r " + APP_VERSION$
         CASE "help"
-            RcSend "ok hello take give say pace status parts faces shot | new open save export undo redo | add set del sel look view | mesh mirror fix edit done pick extrude inset push move scale colour flip"
+            RcSend "ok hello take give say pace status parts faces shot | new open save export undo redo | add set del sel look view | ask | mesh mirror fix edit done pick extrude inset push move scale colour flip"
         CASE "status": RcSend "ok " + RcStatus$
         CASE "parts": RcSend "ok " + RcPartsJson$
         CASE "faces": RcFaces
@@ -129,6 +130,7 @@ SUB RcExec (l$)
             rcLock = 0: rcStrip$ = "": RcSend "ok"
         CASE "pace": rcPace = INT(Clamp(VAL(rcA$(2)), 0, 5000)): RcSend "ok"
         CASE "shot": RcShot
+        CASE "ask": RcAsk l$
         CASE ELSE
             IF RcHas THEN RcDo c$
     END SELECT
@@ -163,6 +165,7 @@ END FUNCTION
 
 ' Esc while it has the model: Rick's again, and it can't go on till F9
 SUB RcEsc
+    IF rcAskN THEN rcAskN = 0: RcSend "err stopped: Rick took the model back (Esc) instead of answering"
     rcLock = 0: rcStopped = -1: ovDirty = -1
     IF fxRun THEN FxClaudeStop ' (FIX THIS's Claude: ended)
     Msg "You have the model: c0nstruct0r stopped (F9 lets it go on)"
@@ -182,6 +185,7 @@ END SUB
 ' While it has the model: no pointer for the UI (no hover, no tips), the
 ' watchers still watching
 SUB RcLockedFrame
+    rcMX = mX: rcMY = mY
     mX = -9999: mY = -9999
     IF hoverPart THEN hoverPart = 0: ovDirty = -1
     PicWatchFrame
@@ -206,7 +210,73 @@ SUB RcStripDraw
     LINE (vX0 + 1, y)-(vX0 + vW - 2, y + 21), _RGB32(10, 8, 20), BF
     LINE (vX0 + 1, y)-(vX0 + vW - 2, y + 21), c, B
     Txt vX0 + 8, y + 3, LEFT$(t$, (vW - 16) \ 8), c
+    IF rcAskN THEN RcAskDraw
 END SUB
+
+' ---------------------------------------------------------------- ask: a question for Rick
+
+' ask QUESTION | ANSWER | ANSWER...: shown over the strip with a button each (yes / no if none
+' given, at most 4); the reply - ok ANSWER - waits for Rick's click (the one click let through
+' while c0nstruct0r has the model). Esc: err stopped
+SUB RcAsk (l$)
+    DIM s$, i, j, n, a$
+    s$ = LTRIM$(l$): i = INSTR(s$, " ")
+    IF i = 0 THEN RcSend "err ask QUESTION | ANSWER | ANSWER... (yes / no if none)": EXIT SUB
+    s$ = MID$(s$, i + 1) + "|"
+    n = -1
+    DO
+        j = INSTR(s$, "|"): IF j = 0 THEN EXIT DO
+        a$ = LTRIM$(RTRIM$(LEFT$(s$, j - 1))): s$ = MID$(s$, j + 1)
+        IF n = -1 THEN
+            rcAskQ$ = a$: n = 0
+        ELSEIF LEN(a$) > 0 AND n < 4 THEN
+            n = n + 1: rcAskC$(n) = LEFT$(a$, 24)
+        END IF
+    LOOP
+    IF LEN(rcAskQ$) = 0 THEN RcSend "err ask QUESTION | ANSWER | ANSWER...": EXIT SUB
+    IF n = 0 THEN rcAskC$(1) = "yes": rcAskC$(2) = "no": n = 2
+    rcAskN = n
+    Msg "c0nstruct0r asks: " + rcAskQ$
+END SUB
+
+' Answer k's button (over the strip, the question above them)
+SUB RcAskRect (k, x, y, w, h)
+    DIM i
+    x = vX0 + 8: y = vY0 + vH - 54 - 30: h = 24
+    FOR i = 1 TO k - 1: x = x + 8 * LEN(rcAskC$(i)) + 32: NEXT
+    w = 8 * LEN(rcAskC$(k)) + 24
+END SUB
+
+SUB RcAskDraw
+    DIM k, x, y, w, h, n, q$, y0, ln, px, py
+    n = (vW - 32) \ 8: q$ = rcAskQ$
+    px = rcMX: py = rcMY: IF rcLock = 0 THEN px = mX: py = mY
+    ln = (LEN(q$) + n - 1) \ n: IF ln > 3 THEN ln = 3
+    y0 = vY0 + vH - 54 - 36 - 16 * ln
+    LINE (vX0 + 1, y0)-(vX0 + vW - 2, vY0 + vH - 56), _RGB32(26, 10, 40), BF
+    LINE (vX0 + 1, y0)-(vX0 + vW - 2, vY0 + vH - 56), cHi, B
+    FOR k = 1 TO ln
+        Txt vX0 + 8, y0 + 4 + (k - 1) * 16, FxWrap$(q$, n, k), cHi
+    NEXT
+    FOR k = 1 TO rcAskN
+        RcAskRect k, x, y, w, h
+        LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(InRect(px, py, x, y, w, h), cHover, cBtn), BF
+        LINE (x, y)-(x + w - 1, y + h - 1), cHi, B
+        Txt x + 12, y + 4, rcAskC$(k), cText
+    NEXT
+END SUB
+
+' A press while a question's open: on an answer, that's the reply
+FUNCTION RcAskClick
+    DIM k, x, y, w, h
+    FOR k = 1 TO rcAskN
+        RcAskRect k, x, y, w, h
+        IF InRect(mX, mY, x, y, w, h) THEN
+            RcSend "ok " + rcAskC$(k): RcLog "-- Rick answered: " + rcAskC$(k)
+            Msg "Answered: " + rcAskC$(k): rcAskN = 0: RcAskClick = -1: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
 
 ' ---------------------------------------------------------------- pictures
 

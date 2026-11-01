@@ -616,6 +616,14 @@ view's pictures, the game's paintings and the report card as tools), and
 - Every change it makes is one undo step (Ctrl+Z works as usual
   afterwards), and it waits a moment after each so you can follow it.
 - It only exports to `export/`, never the game's folder.
+- It can **ask** you something: a question over the strip with a button
+  per answer (yes / no, or up to four choices). Click one and it goes on
+  with your answer; Esc stops it instead.
+- The downloads carry all of it (`tools/c0nstruct0r/`, the
+  `.claude/skills/c0nstruct0r` skill, `.mcp.json`): with Claude Code and
+  Python 3 installed, run `claude` in bu1ld0r's folder. ASK CLAUDE in FIX
+  THIS works on Linux and macOS; on Windows the port and the MCP server do,
+  ASK CLAUDE not yet.
 
 ### Help in the program
 

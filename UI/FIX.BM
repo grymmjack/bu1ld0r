@@ -1155,6 +1155,7 @@ FUNCTION FxClaudeExe$
         c$ = h$ + "/.claude/local/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$: EXIT FUNCTION
     END IF
     c$ = "/usr/local/bin/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$: EXIT FUNCTION
+    c$ = "/opt/homebrew/bin/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$: EXIT FUNCTION ' (a Mac's Homebrew)
     c$ = "/usr/bin/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$
 END FUNCTION
 
