@@ -662,6 +662,11 @@ END SUB
 
 ' I: each picked face inset - a smaller copy in it, a ring of faces round it
 SUB EdInset
+    EdInsetBy .25
+END SUB
+
+' Inset, each corner k# of the way to its face's middle (c0nstruct0r's inset K)
+SUB EdInsetBy (k#)
     DIM f AS LONG, k AS LONG, n AS LONG, c0 AS LONG, nf AS LONG, r AS LONG, cx#, cy#, cz#, a AS LONG, nv0 AS LONG, w AS LONG
     DIM nk(EM_MAXC) AS LONG, cv(EM_MAXC) AS LONG, ou(EM_MAXC), ow(EM_MAXC), iu(EM_MAXC), iw(EM_MAXC), cu, cw, tx
     IF edMode <> ED_FACES THEN Msg "Inset works on faces: 2 (FACES), pick some, then I": EXIT SUB
@@ -677,8 +682,8 @@ SUB EdInset
             FOR k = 0 TO n - 1: ou(k) = scTU(c0 + k): ow(k) = scTV(c0 + k): cu = cu + ou(k) / n: cw = cw + ow(k) / n: NEXT
             FOR k = 0 TO n - 1
                 a = cv(k)
-                nk(k) = EmAddV&(swX(a) + (cx# - swX(a)) * .25, swY(a) + (cy# - swY(a)) * .25, swZ(a) + (cz# - swZ(a)) * .25)
-                iu(k) = ou(k) + (cu - ou(k)) * .25: iw(k) = ow(k) + (cw - ow(k)) * .25
+                nk(k) = EmAddV&(swX(a) + (cx# - swX(a)) * k#, swY(a) + (cy# - swY(a)) * k#, swZ(a) + (cz# - swZ(a)) * k#)
+                iu(k) = ou(k) + (cu - ou(k)) * k#: iw(k) = ow(k) + (cw - ow(k)) * k#
             NEXT
             FOR k = 0 TO n - 1
                 emL(0) = cv(k): emL(1) = cv((k + 1) MOD n): emL(2) = nk((k + 1) MOD n): emL(3) = nk(k)

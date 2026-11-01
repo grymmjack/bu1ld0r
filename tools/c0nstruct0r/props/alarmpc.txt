@@ -1,0 +1,102 @@
+# c0nstruct0r: alarmpc, rebuilt from hd/alarmpc.png (0.6 tall) - no gaps, one picture (the painting) on every face
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/alarmpc.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/alarmpc.png)
+take
+pace 400
+say alarmpc, second pass: the deck sits on the desk, the monitors on the deck, and every face takes its pixels from the one painting
+new force
+say the desk: the painting's lower half, 0.59 wide, 0.26 tall, 0.3 deep
+add box -0.0125 0 0.02 0.59 0.263 0.30 col=24262E name=desk
+say a riser: a wedge filling between the desk top and the sloped deck (the gap the first pass left)
+add wedge -0.0125 0.263 0 0.59 0.129 0.336 col=24262E name=riser
+say the control deck: a slab sloping up 21 degrees to the back, its front edge on the desk
+add box 0 0.3275 0 0.63 0.05 0.36 rx=-21 col=2A2C36 name=deck
+say the monitor bank, set down into the deck
+add box 0.015 0.39 0.09 0.51 0.21 0.12 col=1E2028 name=monitors
+say the screens: inset into the bank's front, then pushed in - a bezel round them
+edit 4
+pick facing 0 0 -1
+inset 0.12
+extrude -0.015
+done
+say the small box with the red buttons at the desk's foot
+add box 0.077 0 -0.16 0.11 0.14 0.06 col=2A2C36 name=footbox
+look all
+view 25 18
+say pictures: fronts from the painting as seen from the front; sides from its drawer column; the back from its right-hand panels; tops from the monitor cases, seen from above
+edit 1
+pick facing 0 0 -1 75
+picture c0nstruct0r/alarmpc view 0 13 37 243 256
+pick facing 1 0 0
+picture c0nstruct0r/alarmpc view 90 36 156 70 240
+pick facing -1 0 0
+picture c0nstruct0r/alarmpc view 270 36 156 70 240
+pick facing 0 0 1
+picture c0nstruct0r/alarmpc view 180 172 156 222 240
+pick facing 0 1 0
+picture c0nstruct0r/alarmpc top 128 64 200 108
+done
+edit 2
+pick facing 0 0 -1 75
+picture c0nstruct0r/alarmpc view 0 13 37 243 256
+pick facing 1 0 0
+picture c0nstruct0r/alarmpc view 90 36 156 70 240
+pick facing -1 0 0
+picture c0nstruct0r/alarmpc view 270 36 156 70 240
+pick facing 0 0 1
+picture c0nstruct0r/alarmpc view 180 172 156 222 240
+done
+edit 3
+pick facing 0 0 -1 75
+picture c0nstruct0r/alarmpc view 0 13 37 243 256
+pick facing 1 0 0
+picture c0nstruct0r/alarmpc view 90 36 156 70 240
+pick facing -1 0 0
+picture c0nstruct0r/alarmpc view 270 36 156 70 240
+pick facing 0 0 1 60
+picture c0nstruct0r/alarmpc view 180 172 156 222 240
+done
+edit 4
+pick facing 0 0 -1 75
+picture c0nstruct0r/alarmpc view 0 13 37 243 256
+pick facing 1 0 0
+picture c0nstruct0r/alarmpc view 90 36 156 70 240
+pick facing -1 0 0
+picture c0nstruct0r/alarmpc view 270 36 156 70 240
+pick facing 0 0 1
+picture c0nstruct0r/alarmpc view 180 172 156 222 240
+pick facing 0 1 0
+picture c0nstruct0r/alarmpc top 128 64 200 108
+done
+edit 5
+pick facing 0 0 -1 75
+picture c0nstruct0r/alarmpc view 0 13 37 243 256
+pick facing 1 0 0
+picture c0nstruct0r/alarmpc view 90 36 156 70 240
+pick facing -1 0 0
+picture c0nstruct0r/alarmpc view 270 36 156 70 240
+pick facing 0 1 0
+picture c0nstruct0r/alarmpc top 128 64 200 108
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+shot ap0 clean
+view 45 0
+shot ap1 clean
+view 90 0
+shot ap2 clean
+view 135 0
+shot ap3 clean
+view 180 0
+shot ap4 clean
+view 225 0
+shot ap5 clean
+view 270 0
+shot ap6 clean
+view 315 0
+shot ap7 clean
+view 25 18
+save c0-alarmpc
+export
+give

@@ -483,7 +483,11 @@ SUB UiFrame
                 IF fpOn THEN FpKeyUp -k& ' (walking: letters let go, either case)
             CASE IS > 0
                 kCtrl = qCtrl: kShift = qShift: kAlt = qAlt
-                IF k& >= 100000 THEN ' (Num Lock, Caps Lock...: nothing to do)
+                IF rcLock THEN ' (c0nstruct0r has the model: no key but Esc, which takes it back)
+                    IF k& = 27 THEN RcEsc
+                ELSEIF k& = 17152 AND rcStopped THEN ' (F9: c0nstruct0r goes on)
+                    RcHandBack
+                ELSEIF k& >= 100000 THEN ' (Num Lock, Caps Lock...: nothing to do)
                 ELSE
                     f = NumpadSent(k&) ' (the numpad's: a view key - unless typing, painting, a list or HELP is up: then the key it is)
                     IF f > 0 AND typeField = 0 AND pntOn = 0 AND openOn = 0 AND helpOn = 0 AND askOn = 0 AND txOn = 0 AND fpOn = 0 AND kCtrl = 0 AND kAlt = 0 THEN
@@ -499,6 +503,7 @@ SUB UiFrame
     kCtrl = _KEYDOWN(100306) OR _KEYDOWN(100305)
     kAlt = _KEYDOWN(100308) OR _KEYDOWN(100307)
     IF NOT kCtrl THEN qCtrl = 0
+    IF rcLock THEN RcLockedFrame: EXIT SUB ' (c0nstruct0r has the model: no clicks, wheel or pointer)
     IF fpOn THEN FpFrame: EXIT SUB ' (walking / flying: the mouse and keys are its)
     IF pntOn THEN PntFrame: EXIT SUB ' (painting: the window's the painter's)
     IF askOn THEN AskFrame: EXIT SUB
@@ -1969,6 +1974,7 @@ SUB UiDraw
     IF txOn THEN TxDraw
     RefDraw
     FpDraw
+    RcStripDraw
     IF edPart THEN IF pvOn AND edMode = ED_FACES AND fpOn = 0 THEN PvTips
     IF brOn AND fpOn = 0 THEN BrTips: BrCursor
     IF selRect AND (ABS(mX - vX0 - selRX0) > 2 OR ABS(mY - vY0 - selRY0) > 2) THEN LINE (vX0 + selRX0, vY0 + selRY0)-(mX, mY), cHi, B
@@ -2635,6 +2641,10 @@ SUB HelpSetup
     HelpAdd "#EXPORT"
     HelpAdd "Ctrl+E  EXPORT|export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg"
     HelpAdd "TIDIED|(the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so"
+    HelpAdd "#c0nstruct0r (bu1ld0r started with --port, or port= in bu1ld0r.cfg)"
+    HelpAdd "c0nstruct0r|a program on this computer drives bu1ld0r through a port: a strip over the view's foot says what it's doing. While it has the model, no key, click or wheel does anything but Esc. Every change it makes is one undo step"
+    HelpAdd "Esc|(c0nstruct0r has the model) take it back: c0nstruct0r stops"
+    HelpAdd "F9|(after Esc) let c0nstruct0r go on"
     HelpTopic "WALK, FLY"
     HelpAdd "#GOING THROUGH THE MODEL (the buttons at the view's bottom left)"
     HelpAdd "V  WALK|on your feet, looking level: the ground and the model's tops hold you up, walls stop you, a ledge under a fifth of your height is stepped up"

@@ -60,8 +60,9 @@ declarations, `.BM` routines, no GOSUB/GOTO, DIM every local.
   (`pgrep -x bu1ld0r.run` / `pkill bu1ld0r` kill his too). Only the test
   copy: `pkill -f '^/tmp/claude-1000/bu1ld0r-test/app/bu1ld0r.run'`
   (drv.sh's `testkill`; `win` finds only it). The `^` keeps the pattern
-  from matching the shell running pkill. Xvfb: only `:99`'s -
-  `pkill -f '^Xvfb :99'`.
+  from matching the shell running pkill. Xvfb: only one you started -
+  `:99` may be DRAW's QA (a 3840x2160 one from xvfb-run, Rick's): if
+  it's taken, test on `:98` and `pkill -f '^Xvfb :98'` after.
 - **A SUB's `REDIM` of a SHARED array with a different type makes a
   local copy** (shX was DOUBLE in the .BI, SINGLE in the SUB: the shared
   one stayed size 0). Declare it once, the type it's used as.
@@ -585,6 +586,25 @@ a short path), `xdotool windowmove $W 0 0`, the pointer parked off the window
 (`xdotool mousemove 1850 1150`), `ffmpeg -f x11grab -video_size 1920x1200 -i
 :99.0 -frames:v 1 -vf crop=1728:1080:0:0`. `xdotool key r` after `type` once
 gave "e" (its remapped keycodes): type letters with `typ`.
+
+## c0nstruct0r
+
+Claude driving bu1ld0r to rebuild the game's props (C0NSTRUCT0R.md: the
+plan, stages, Rick's decisions). `tools/c0nstruct0r/report.py` is the
+report card (stdlib Python, reads the game's OBJs, never writes there).
+The port (UI/REMOTE, `--port` / `port=`): `RcFrame` after UiFrame (a line
+a frame, `rcNextT#` the pace), `RcAfterFrame` takes shots after Present;
+`rcLock`: UiFrame's key loop passes only Esc (`RcEsc`; F9 `RcHandBack`) and
+exits early (`RcLockedFrame`: mX off-screen, the watchers still run).
+`_OPENHOST` binds every interface: RcFrame closes anything not 127.0.0.1.
+Test with `tools/c0nstruct0r/rc.py --dir APPDIR -f steps.txt`. The MCP
+server (`tools/c0nstruct0r/mcp_server.py`, stdlib, `.mcp.json`; `--dir` /
+`$C0NSTRUCT0R_DIR` for a test copy): bu1ld0r / look (eight: the game's views
+in a sheet) / inspect / painting / check. The method is the skill
+`/c0nstruct0r` (.claude/skills/c0nstruct0r); a prop's steps are kept in
+`tools/c0nstruct0r/props/NAME.txt`, its painting in pictures/c0nstruct0r/.
+`picture ... view YAW RECT` / `top RECT` map one picture over the model's box:
+one picture, no `tile` - export packs several 2x2 (shrunk) and cuts repeats.
 
 ## Git
 

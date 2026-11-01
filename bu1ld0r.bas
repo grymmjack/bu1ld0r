@@ -26,6 +26,7 @@ DO
     PrAdd 0
     InputFrame
     UiFrame
+    RcFrame ' (c0nstruct0r's port: UI/REMOTE)
     PrAdd 7
     IF meshDirty THEN MeshBuild
     PrAdd 8
@@ -39,8 +40,10 @@ DO
     PrFrame
     WindowFrame
     UiAfterFrame
+    RcAfterFrame
     _LIMIT 60
 LOOP UNTIL quitWant
+RcStop
 SYSTEM
 
 '$INCLUDE:'./_ALL.BM'

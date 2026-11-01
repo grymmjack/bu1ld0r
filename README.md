@@ -552,6 +552,30 @@ see-through behind the model so you can build over it from any angle.
 
 - Esc, V or a right click goes back to orbiting, exactly as you left it.
 
+### Letting c0nstruct0r drive it
+
+c0nstruct0r (`C0NSTRUCT0R.md`, still being built) is Claude rebuilding
+NEON-CASTER's props in bu1ld0r while you watch. Started with `--port`
+(or `port=1` in bu1ld0r.cfg), bu1ld0r opens a port on this computer
+only (47800, or the next free one) and writes its number and a token to
+`c0nstruct0r.port`; a program that reads them can then drive bu1ld0r a
+line at a time - `add box 0 0 0 0.5 0.4 0.12`, `edit 1`, `pick facing 0 0 -1`,
+`inset 0.2`, `extrude -0.02`, `picture REF view 0 X0 Y0 X1 Y1`...
+(`tools/c0nstruct0r/rc.py` is a small one to try it by hand, or to run a
+file of steps: `tools/c0nstruct0r/props/alarmpc.txt` builds the alarm
+console from the game's painting). For Claude Code, `.mcp.json` starts
+c0nstruct0r's MCP server (`tools/c0nstruct0r/mcp_server.py`: the port, the
+view's pictures, the game's paintings and the report card as tools), and
+`/c0nstruct0r NAME` rebuilds a prop with them.
+
+- When it **takes** the model, a strip over the view's foot says what it's
+  doing, and bu1ld0r takes no keys, clicks or wheel - nothing you do can
+  get in its way - except **Esc**, which hands the model back to you and
+  stops it. **F9** lets it go on.
+- Every change it makes is one undo step (Ctrl+Z works as usual
+  afterwards), and it waits a moment after each so you can follow it.
+- It only exports to `export/`, never the game's folder.
+
 ### Help in the program
 
 ![HELP, on its WALK, FLY page](docs/screenshots/help.png)
@@ -1093,6 +1117,14 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | Ctrl+E / EXPORT | export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg |
 | TIDIED | (the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so |
 
+#### c0nstruct0r (bu1ld0r started with --port, or port= in bu1ld0r.cfg)
+
+| Keys | What it does |
+|---|---|
+| c0nstruct0r | a program on this computer drives bu1ld0r through a port: a strip over the view's foot says what it's doing. While it has the model, no key, click or wheel does anything but Esc. Every change it makes is one undo step |
+| Esc | (c0nstruct0r has the model) take it back: c0nstruct0r stops |
+| F9 | (after Esc) let c0nstruct0r go on |
+
 </details>
 
 <details>
@@ -1191,6 +1223,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 - **Painting a picture** (Ctrl+P with the pointer on a face, or with faces picked in E; PAINT IT in E's panel; PAINT IT in a picture's right-click menu in the bin): the face's picture opens over the whole window. A face with none gets a new PNG in `pictures/` in its colour (64 x 64; from E, 64 on its long side, the picked faces' shape), put on it first. A prefab put down isn't painted where it is: paint it in the prefab (EDIT IT). Left / right button: the two colours (the swatches top right; the palette with either button; TYPE a hex colour; R G B - and + nudge the first, Shift by 1); Ctrl+click picks a colour up with any tool. Tools: PENCIL (P), BRUSH (B, [ ] its size), LINE (L), BOX (R / Shift+R filled), ELLIPSE (O / Shift+O filled) - Shift keeps a line straight or at 45 and a box square -, FILL (F), GRADIENT (G: the first colour to the second over the region FILL would take, Shift+click the whole picture, right click the other way; V H D R M: down, across, slanted, round, out from the middle) and PICK (I). MIRROR L-R / U-D (M / Shift+M), WRAP (W: off one edge, on at the other), TILED (T: seen with its neighbours), GRID (Shift+G). MAKE (14) fills it with a texture made from the two colours, seeded so each click is another, all repeating seamlessly (Shift: half over what's there); FILTERS (10) change what's there. Undo / redo: 40 steps. Ctrl+S saves the PNG and every face with it shows it; Esc asks once if it isn't saved.
 - **Painting on the model** (Shift+P, PAINT in the top bar; UI/BRUSH): a mode in the 3D view. Each pixel under the brush is found through the triangle under the pointer and its corners' spots on the picture; a brush round in pixels reaches every front-facing triangle within its size, so a stroke crosses edges. A plain shape is first turned into a mesh part (as E does). A face with no picture is unwrapped flat (its own axes, as pictures put on faces) and filled with its colour; JUST HERE, a face whose pixels another face's box on the same picture overlaps (wrapping round, a repeat counting) is copied out first - pixel for pixel when its picture sits on it evenly and fits in 256, else laid out flat at the size its pixels are now. A place is a rectangle where the picture is see-through (alpha 0; the copy's own see-through pixels become alpha 1 to keep the room taken), in the model's one picture first, then `pictures/paint/MODEL.png`, `MODEL-2.png`... A prefab put down can't be given new places: its faces with no picture, or (JUST HERE) sharing their pixels, are left alone - UNLINK it first, or paint EVERYWHERE. Undo: 60 strokes, each the pixels it changed (and the model, if faces got new places). Pictures painted are saved with the model (Ctrl+S), and before the flat painter or DRAW opens one. The other tools (UI/BRTOOLS) first gather the faces their REACH takes (or, for a filled BOX / ELLIPSE, the faces facing you under it), make them ready the same way, and list their pixels with each one's place on the model: COLOUR floods that list by the picture's neighbours within a face and, across faces, by pixels within a pixel and a half of each other on the model; a gradient goes by each pixel's place on the view; MAKE takes a 64 x 64 pattern made by the painter's MAKE, laid flat from the side each face faces most, one pattern pixel a picture pixel (their average size); FILTERS run the painter's filter on each picture and keep only the REACH's pixels; a filled shape keeps the pixels inside it on the view that nothing nearer covers. TILT lays a box / ellipse out on the plane of the face pressed on (its across and up as a picture put on it has them) and paints its outline, as seen, as the screen ones are. ONE FACE notes the face a stroke starts on (made ready first) and keeps only that face's triangles in each dab's list; the other tools gather just that face.
 - **UV DRAW** (Ctrl+U, the panel's UV DRAW; OUT/UVMAP): the selected parts' faces are gathered into sides - neighbours across an edge on one plane (facing within about 2 degrees, as far out) - each laid out on one picture with a pixel spare round it. If the faces already share one picture and none overlaps another's pixels (painting on the model's JUST HERE test), that picture is used as it is; otherwise each side gets a place in `pictures/uv/MODEL-PART.png`, packed in rows, tallest first: copied pixel for pixel when its faces are all on one picture that maps onto them as one, evenly (as many pixels a step across as down), else laid flat from the side it faces at the size its pixels are now (no picture: the other sides' size, or the part half filling 256 x 256) and filled through its old spots. The `.draw` is written as DRAW's own file - a PNG of how it looks, with DRAW's layers in a `drAw` chunk (its version 2, which DRAW still opens and saves as its own) - and `MODEL-PART.uv` beside it lists the picture, the side layers' names and which pixel is whose. DRAW's saves (watched twice a second; read once the file has stayed the same for half a second) are read back by those names, any DRAW version up to 30, each layer only where its side is. Layers are the canvas's size, so their number is kept under about 96 MB together (and 60).
+- **c0nstruct0r's port** (`--port`, `port=` in bu1ld0r.cfg; UI/REMOTE): TCP on 127.0.0.1 (a connection from anywhere else is closed), one at a time, after `hello TOKEN` (`c0nstruct0r.port` holds the port and token). A line a frame is done, each answered with a line - `ok ...` (queries: JSON) or `err why`; a change waits `pace` ms (250) after it. `take` locks out keys (but Esc), clicks, the wheel and the pointer; Esc stops it (its changes then say so) until F9; the connection closing gives the model back too. `shot NAME [win | clean]` writes `c0nstruct0r/shots/NAME.png` (the view; the window; the model alone); `c0nstruct0r/log.txt` keeps every line. The commands are listed in `C0NSTRUCT0R.md`.
 - **The MODELS tab** (the bin's third): each model in `models/` as a picture, made one a frame, the open one lit; click to open (unsaved: the first click warns, the second opens). Saving relists it. Its path box opens any folder: its folders, `.bld` models, `.obj` files (NEON-CASTER's props, pictured by their `NAME_0.png`) and SVGs (remembered: `mdl_outside=`). SAVE still writes `models/NAME.bld`.
 - **Favourite folders:** the star after each tab's path lists that tab's favourites: its own folder first, then yours, then + ADD THIS FOLDER / - TAKE THIS FOLDER OFF for the one open (16 at most). PREFABS' are folders in `prefabs/`. They're kept in bu1ld0r.cfg as `fav_prefabs=`, `fav_pictures=` and `fav_models=` (paths, `|` between). Until a tab's list is changed, it starts with NEON-CASTER's folders (from `neon_dir=`): its sprites, `hd/` and `hd/models/` for PICTURES, `models/` for MODELS, and `starter/` for PREFABS.
 - **SVGs:** OPEN (models/*.svg), a drop on the window, or `--open NAME.svg`. Read: path (M L H V C S Q T A Z, either case), rect (rx / ry), circle, ellipse, polygon, polyline; `transform` (matrix, translate, scale, rotate, skewX / skewY) on them and their groups (g, svg, a); fill as an attribute or in `style`, inherited, `#rgb` / `#rrggbb` / `rgb()` / names, a gradient its stops' average. Left out: defs, clip paths, masks, text, shapes with no fill, hidden ones, ones with a filter (glows, shadows), and ones under half opaque. Each shape's outlines are nested by what's inside what: inside an odd number of others is a hole. Each becomes a mesh part (one group), fitted 1 cell across, standing on the ground, 0.1 thick, read the right way round from the front (-Z); a shape over earlier ones it overlaps stands a fiftieth further out. Points closer than a thousandth of its size are made one. Ctrl+S saves it as `models/NAME.bld`.
@@ -1280,8 +1313,10 @@ loses detail - look at it with T before switching it on for the export.
 ## Command line
 
 ```
-bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N] [--prof] [--spin] [--walk 1|2] [--yaw N] [--uvdraw] [--uvback FILE.draw]
+bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N] [--prof] [--spin] [--walk 1|2] [--yaw N] [--uvdraw] [--uvback FILE.draw] [--port [N]]
 ```
+
+`--port` opens c0nstruct0r's port (on N, if given): see *Letting c0nstruct0r drive it*.
 
 `--uvdraw` selects every part and does UV DRAW without starting DRAW;
 `--uvback FILE.draw` reads one back as if DRAW had just saved it (tests).

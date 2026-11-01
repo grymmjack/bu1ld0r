@@ -46,6 +46,9 @@ SUB AppStart
             CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
             CASE "--uvdraw": argUv = -1 ' (every part's faces written as a DRAW file, DRAW not run: tests)
             CASE "--uvback": i = i + 1: argUvBack$ = COMMAND$(i) ' (a .draw read back, as if DRAW saved it: tests)
+            CASE "--port" ' (c0nstruct0r's port open - on N if a number follows: UI/REMOTE)
+                argPort = -1
+                IF i < _COMMANDCOUNT THEN IF VAL(COMMAND$(i + 1)) > 0 THEN i = i + 1: argPort = VAL(COMMAND$(i))
             CASE ELSE
                 k$ = LCASE$(RIGHT$(a$, 4))
                 IF k$ = ".bld" OR k$ = ".obj" OR k$ = ".svg" THEN argOpen$ = a$
@@ -68,6 +71,11 @@ SUB AppStart
     ELSE
         ModelNew
         Msg "Pick a shape on the left (or 1-6), click on the grid to put it down. H: every key"
+    END IF
+    IF argPort > 0 THEN
+        RcStart argPort
+    ELSEIF argPort OR cfgPort > 0 THEN
+        RcStart cfgPort
     END IF
 END SUB
 
@@ -95,6 +103,7 @@ SUB ReadCfg
                 CASE "neon_dir": neonDir$ = v$
                 CASE "neon_in": neonIn$ = v$
                 CASE "draw": cfgDraw$ = v$
+                CASE "port": cfgPort = INT(VAL(v$)) ' (c0nstruct0r's port: 0 shut, else open on it - or the next free)
                 CASE "kaleidotron": cfgKaleido$ = v$
                 CASE "pic_dir": binPicDir$ = v$
                 CASE "pic_size": picTS = INT(Clamp(VAL(v$), PIC_TS_MIN, PIC_TS_MAX))

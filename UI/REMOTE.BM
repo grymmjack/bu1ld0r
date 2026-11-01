@@ -1,0 +1,839 @@
+''
+' bu1ld0r - UI/REMOTE.BM
+' =============================================================================
+' c0nstruct0r's port (REMOTE.BI): listening, a line a frame read and done,
+' the strip over the view, the lock (only Esc while it has the model).
+'
+
+' The port opened (want: its number - 0, the usual), its number and a token
+' written to c0nstruct0r.port beside the program for c0nstruct0r to read
+SUB RcStart (want)
+    DIM p, i, h AS LONG, fh, t$
+    IF rcHostH THEN EXIT SUB
+    p = want: IF p <= 0 OR p > 65525 THEN p = RC_PORT0
+    FOR i = 0 TO 9
+        h = _OPENHOST("TCP/IP:" + LTRIM$(STR$(p + i)))
+        IF h THEN rcPort = p + i: EXIT FOR
+    NEXT
+    IF h = 0 THEN Msg "c0nstruct0r's port didn't open (" + LTRIM$(STR$(p)) + " to" + STR$(p + 9) + " are taken)": EXIT SUB
+    rcHostH = h
+    RANDOMIZE TIMER
+    FOR i = 1 TO 32: t$ = t$ + MID$("0123456789abcdef", INT(RND * 16) + 1, 1): NEXT
+    rcToken$ = t$
+    IF NOT _DIREXISTS(appDir$ + "c0nstruct0r") THEN MKDIR appDir$ + "c0nstruct0r"
+    fh = FREEFILE: OPEN appDir$ + "c0nstruct0r.port" FOR OUTPUT AS #fh: PRINT #fh, LTRIM$(STR$(rcPort)) + " " + rcToken$: CLOSE #fh
+    fh = FREEFILE: OPEN appDir$ + "c0nstruct0r/log.txt" FOR OUTPUT AS #fh: CLOSE #fh
+    rcPace = 250
+    Msg "c0nstruct0r's port is open (" + LTRIM$(STR$(rcPort)) + "): c0nstruct0r can drive bu1ld0r - Esc takes the model back"
+END SUB
+
+' Leaving: the port closed, its file gone
+SUB RcStop
+    IF rcConnH THEN CLOSE rcConnH: rcConnH = 0
+    IF rcHostH THEN
+        CLOSE rcHostH: rcHostH = 0
+        IF _FILEEXISTS(appDir$ + "c0nstruct0r.port") THEN KILL appDir$ + "c0nstruct0r.port"
+    END IF
+END SUB
+
+SUB RcLog (t$)
+    DIM fh
+    fh = FREEFILE: OPEN appDir$ + "c0nstruct0r/log.txt" FOR APPEND AS #fh: PRINT #fh, t$: CLOSE #fh
+END SUB
+
+' A reply: a line
+SUB RcSend (t$)
+    DIM s$
+    RcLog "< " + LEFT$(t$, 400)
+    IF rcConnH = 0 THEN EXIT SUB
+    IF NOT _CONNECTED(rcConnH) THEN EXIT SUB
+    s$ = t$ + CHR$(10): PUT #rcConnH, , s$
+END SUB
+
+' c0nstruct0r gone (or turned away): the model Rick's again
+SUB RcDrop (why$)
+    IF rcConnH THEN CLOSE rcConnH
+    rcConnH = 0: rcAuth = 0: rcBuf$ = "": rcStrip$ = ""
+    IF rcLock THEN rcLock = 0: Msg why$ + " - the model is yours again" ELSE Msg why$
+    RcLog "-- " + why$
+END SUB
+
+' Each frame: a new connection taken (one at a time, from this computer
+' only), what's come read, and the next whole line done - unless it's
+' still pausing after the last change, or taking a picture
+SUB RcFrame
+    DIM c AS LONG, s$, j, l$
+    IF rcHostH = 0 THEN EXIT SUB
+    IF rcConnH THEN ' (read first: a closed one is seen closed before a new one's asked about)
+        s$ = "": GET #rcConnH, , s$: rcBuf$ = rcBuf$ + s$
+        IF NOT _CONNECTED(rcConnH) THEN RcDrop "c0nstruct0r went away"
+    END IF
+    c = _OPENCONNECTION(rcHostH)
+    IF c THEN
+        IF rcConnH <> 0 OR RIGHT$(_CONNECTIONADDRESS$(c), 10) <> ":127.0.0.1" THEN
+            s$ = "err busy, or not from this computer" + CHR$(10): PUT #c, , s$: CLOSE c
+        ELSE
+            rcConnH = c: rcAuth = 0: rcBuf$ = ""
+            RcLog "-- connected"
+        END IF
+    END IF
+    IF rcConnH = 0 THEN EXIT SUB
+    IF NOT _CONNECTED(rcConnH) THEN RcDrop "c0nstruct0r went away": EXIT SUB
+    s$ = "": GET #rcConnH, , s$: rcBuf$ = rcBuf$ + s$
+    IF LEN(rcBuf$) > 1000000 THEN RcDrop "c0nstruct0r sent too much at once": EXIT SUB
+    IF rcShotN THEN EXIT SUB
+    IF rcNextT# - TIMER(.001) > 10 THEN rcNextT# = 0 ' (midnight: TIMER starts again)
+    IF TIMER(.001) < rcNextT# THEN EXIT SUB
+    j = INSTR(rcBuf$, CHR$(10)): IF j = 0 THEN EXIT SUB
+    l$ = LEFT$(rcBuf$, j - 1): rcBuf$ = MID$(rcBuf$, j + 1)
+    IF RIGHT$(l$, 1) = CHR$(13) THEN l$ = LEFT$(l$, LEN(l$) - 1)
+    RcExec l$
+END SUB
+
+' One command line
+SUB RcExec (l$)
+    DIM c$, i, s$
+    IF LCASE$(LEFT$(LTRIM$(l$), 5)) = "hello" THEN RcLog "> hello ..." ELSE RcLog "> " + LEFT$(l$, 400) ' (the token kept out of the log)
+    Words l$
+    rcAN = 0
+    FOR i = 1 TO wdN
+        IF rcAN < 64 THEN rcAN = rcAN + 1: rcA$(rcAN) = wd$(i)
+    NEXT
+    FOR i = rcAN + 1 TO 64: rcA$(i) = "": NEXT ' (none left from the last line)
+    IF rcAN = 0 THEN EXIT SUB
+    c$ = LCASE$(rcA$(1))
+    IF rcAuth = 0 THEN
+        IF c$ = "hello" AND rcAN >= 2 AND rcA$(2) = rcToken$ THEN
+            rcAuth = -1: RcSend "ok bu1ld0r " + APP_VERSION$: Msg "c0nstruct0r connected (Esc takes the model back when it has it)"
+        ELSE
+            RcSend "err hello TOKEN first (the token's in c0nstruct0r.port)": RcDrop "c0nstruct0r's port: a stranger turned away"
+        END IF
+        EXIT SUB
+    END IF
+    SELECT CASE c$
+        CASE "hello": RcSend "ok bu1ld0r " + APP_VERSION$
+        CASE "help"
+            RcSend "ok hello take give say pace status parts faces shot | new open save export undo redo | add set del sel look view | mesh mirror edit done pick extrude inset push move scale colour flip"
+        CASE "status": RcSend "ok " + RcStatus$
+        CASE "parts": RcSend "ok " + RcPartsJson$
+        CASE "faces": RcFaces
+        CASE "say"
+            s$ = LTRIM$(l$): i = INSTR(s$, " ")
+            IF i THEN rcStrip$ = LTRIM$(MID$(s$, i + 1)) ELSE rcStrip$ = ""
+            RcSend "ok"
+        CASE "take"
+            s$ = RcGrab$
+            IF LEN(s$) THEN RcSend "err " + s$ ELSE RcSend "ok": Msg "c0nstruct0r has the model (Esc: take it back)"
+        CASE "give"
+            IF rcLock THEN Msg "c0nstruct0r handed the model back"
+            rcLock = 0: rcStrip$ = "": RcSend "ok"
+        CASE "pace": rcPace = INT(Clamp(VAL(rcA$(2)), 0, 5000)): RcSend "ok"
+        CASE "shot": RcShot
+        CASE ELSE
+            IF RcHas THEN RcDo c$
+    END SELECT
+END SUB
+
+' Whether it has the model to change (if not: told why)
+FUNCTION RcHas
+    IF rcLock THEN RcHas = -1: EXIT FUNCTION
+    IF rcStopped THEN RcSend "err stopped: Rick took the model back (Esc) - F9 lets you go on" ELSE RcSend "err take first"
+END FUNCTION
+
+' The model taken (take, or F9): "" - or why not (a mode only Rick can close)
+FUNCTION RcGrab$
+    DIM e$
+    IF pntOn THEN e$ = "the painter is open"
+    IF fpOn THEN e$ = "WALK / FLY is on"
+    IF askOn THEN e$ = "a question is open"
+    IF brOn THEN e$ = "painting on the model is on"
+    IF bvOn THEN e$ = "BEVEL / LOOP is open"
+    IF maOn THEN e$ = "MATERIAL is open"
+    IF penOn THEN e$ = "the pen is out"
+    IF txOn THEN e$ = "TEXT is out"
+    IF LEN(e$) THEN RcGrab$ = "busy: " + e$ + " (Rick closes it first)": EXIT FUNCTION
+    helpOn = 0: openOn = 0: binMenu = 0
+    IF typeField THEN FieldCommit
+    PlaceStop: pmRef$ = ""
+    dragArm = 0: dragOn = 0: edArm = 0: edDrag = 0: edRect = 0: selRect = 0: orbitOn = 0: panOn = 0
+    pvArm = 0: pvDrag = 0: topSlide = 0: typeDrag = 0: dockDrag = 0: refSlide = 0: refDrag = 0: placeDrag = 0: pmDrag = 0
+    IF hoverPart THEN hoverPart = 0
+    rcLock = -1: rcStopped = 0: ovDirty = -1: viewDirty = -1
+END FUNCTION
+
+' Esc while it has the model: Rick's again, and it can't go on till F9
+SUB RcEsc
+    rcLock = 0: rcStopped = -1: ovDirty = -1
+    Msg "You have the model: c0nstruct0r stopped (F9 lets it go on)"
+    RcLog "-- Esc: stopped"
+END SUB
+
+' F9 after Esc: it goes on (it has the model again)
+SUB RcHandBack
+    DIM e$
+    rcStopped = 0
+    IF rcConnH = 0 OR rcAuth = 0 THEN Msg "c0nstruct0r isn't connected": EXIT SUB
+    e$ = RcGrab$
+    IF LEN(e$) THEN Msg "c0nstruct0r can go on once this is closed: " + e$ ELSE Msg "c0nstruct0r goes on (Esc: take the model back)"
+    RcLog "-- F9: handed back"
+END SUB
+
+' While it has the model: no pointer for the UI (no hover, no tips), the
+' watchers still watching
+SUB RcLockedFrame
+    mX = -9999: mY = -9999
+    IF hoverPart THEN hoverPart = 0: ovDirty = -1
+    PicWatchFrame
+    UvWatchFrame
+    EdCheck
+    BinIconsDue
+END SUB
+
+' The strip over the view's foot: what it's doing, and how to take over
+SUB RcStripDraw
+    DIM y, t$, c AS _UNSIGNED LONG
+    IF rcHostH = 0 OR (rcShotN > 0 AND rcShotHow <> 1) THEN EXIT SUB ' (a picture of the view alone: not in it)
+    IF rcConnH = 0 AND rcStopped = 0 THEN EXIT SUB
+    y = vY0 + vH - 54
+    IF rcStopped THEN
+        t$ = "c0nstruct0r STOPPED - the model is yours. F9: let it go on": c = cWarn
+    ELSEIF rcLock THEN
+        t$ = "c0nstruct0r: " + IIFS$(LEN(rcStrip$) > 0, rcStrip$, "working") + "   (Esc: take over)": c = cHi
+    ELSE
+        t$ = "c0nstruct0r connected" + IIFS$(LEN(rcStrip$) > 0, ": " + rcStrip$, ""): c = cDim
+    END IF
+    LINE (vX0 + 1, y)-(vX0 + vW - 2, y + 21), _RGB32(10, 8, 20), BF
+    LINE (vX0 + 1, y)-(vX0 + vW - 2, y + 21), c, B
+    Txt vX0 + 8, y + 3, LEFT$(t$, (vW - 16) \ 8), c
+END SUB
+
+' ---------------------------------------------------------------- pictures
+
+' shot NAME [win | clean]: the view as shown (win: the whole window; clean:
+' the model alone - no guides, outlines or words) to c0nstruct0r/shots/NAME.png
+SUB RcShot
+    DIM i
+    IF rcAN < 2 THEN RcSend "err shot NAME [win | clean]": EXIT SUB
+    rcShotHow = 0
+    FOR i = 3 TO rcAN
+        SELECT CASE LCASE$(rcA$(i))
+            CASE "win": rcShotHow = 1
+            CASE "clean": rcShotHow = 2
+        END SELECT
+    NEXT
+    IF NOT _DIREXISTS(appDir$ + "c0nstruct0r/shots") THEN MKDIR appDir$ + "c0nstruct0r/shots"
+    rcShotF$ = appDir$ + "c0nstruct0r/shots/" + SafeName$(rcA$(2)) + ".png"
+    rcShotN = 2: viewDirty = -1 ' (drawn, shown: then taken - RcAfterFrame)
+END SUB
+
+' After a frame is shown: a picture waiting taken, and answered
+SUB RcAfterFrame
+    DIM img&
+    IF rcShotN = 0 THEN EXIT SUB
+    rcShotN = rcShotN - 1: IF rcShotN > 0 THEN EXIT SUB
+    IF rcShotHow = 1 THEN
+        _SAVEIMAGE rcShotF$, uiImg&
+    ELSEIF rcShotHow = 2 THEN
+        _SAVEIMAGE rcShotF$, viewImg&
+    ELSE
+        img& = _NEWIMAGE(vW, vH, 32)
+        _PUTIMAGE (0, 0), uiImg&, img&, (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1)
+        _SAVEIMAGE rcShotF$, img&
+        _FREEIMAGE img&
+    END IF
+    RcSend "ok " + rcShotF$
+END SUB
+
+' ---------------------------------------------------------------- what it can ask
+
+' A string for JSON: its quotes and backslashes escaped
+FUNCTION RcJs$ (t$)
+    DIM i, ch$, o$
+    FOR i = 1 TO LEN(t$)
+        ch$ = MID$(t$, i, 1)
+        IF ch$ = CHR$(34) OR ch$ = "\" THEN
+            o$ = o$ + "\" + ch$
+        ELSEIF ASC(ch$) >= 32 THEN
+            o$ = o$ + ch$
+        END IF
+    NEXT
+    RcJs$ = o$
+END FUNCTION
+
+FUNCTION RcQ$ (t$) ' (quoted)
+    RcQ$ = CHR$(34) + RcJs$(t$) + CHR$(34)
+END FUNCTION
+
+FUNCTION RcI$ (v AS LONG)
+    RcI$ = LTRIM$(STR$(v))
+END FUNCTION
+
+FUNCTION RcB$ (v)
+    IF v THEN RcB$ = "1" ELSE RcB$ = "0"
+END FUNCTION
+
+FUNCTION RcV3$ (a#, b#, c#)
+    RcV3$ = "[" + Fmt$(a#) + "," + Fmt$(b#) + "," + Fmt$(c#) + "]"
+END FUNCTION
+
+FUNCTION RcStatus$
+    DIM s$, i, n, f AS LONG
+    IF meshDirty THEN MeshBuild
+    s$ = "{" + RcQ$("model") + ":" + RcQ$(mdlName$) + "," + RcQ$("prefab") + ":" + RcQ$(mdlPf$)
+    s$ = s$ + "," + RcQ$("dirty") + ":" + RcB$(mdlDirty) + "," + RcQ$("parts") + ":" + RcI$(pN) + "," + RcQ$("tris") + ":" + RcI$(sceneTN)
+    s$ = s$ + "," + RcQ$("control") + ":" + RcB$(rcLock) + "," + RcQ$("stopped") + ":" + RcB$(rcStopped)
+    s$ = s$ + "," + RcQ$("edit") + ":" + RcI$(edPart)
+    IF edPart THEN
+        n = 0
+        FOR f = 0 TO edFN - 1
+            IF edSelF(f) THEN n = n + 1
+        NEXT
+        s$ = s$ + "," + RcQ$("faces") + ":" + RcI$(edFN) + "," + RcQ$("points") + ":" + RcI$(edVN) + "," + RcQ$("picked") + ":" + RcI$(n)
+    END IF
+    s$ = s$ + "," + RcQ$("sel") + ":["
+    n = 0
+    FOR i = 1 TO pN
+        IF pSel(i) THEN
+            IF n THEN s$ = s$ + ","
+            s$ = s$ + RcI$(i): n = n + 1
+        END IF
+    NEXT
+    s$ = s$ + "]," + RcQ$("undo") + ":" + RcI$(undoN) + "," + RcQ$("pace") + ":" + RcI$(rcPace)
+    s$ = s$ + "," + RcQ$("cam") + ":{" + RcQ$("yaw") + ":" + Fmt$(camYaw) + "," + RcQ$("pitch") + ":" + Fmt$(camPitch) + "," + RcQ$("dist") + ":" + Fmt$(camDist)
+    s$ = s$ + "," + RcQ$("at") + ":" + RcV3$(camTX, camTY, camTZ) + "}}"
+    RcStatus$ = s$
+END FUNCTION
+
+FUNCTION RcPartsJson$
+    DIM s$, i
+    s$ = "["
+    FOR i = 1 TO pN
+        IF i > 1 THEN s$ = s$ + ","
+        s$ = s$ + "{" + RcQ$("i") + ":" + RcI$(i) + "," + RcQ$("kind") + ":" + RcQ$(kindName$(pKind(i)))
+        IF LEN(pName$(i)) THEN s$ = s$ + "," + RcQ$("name") + ":" + RcQ$(pName$(i))
+        IF pKind(i) = K_USE THEN s$ = s$ + "," + RcQ$("ref") + ":" + RcQ$(pRef$(i))
+        s$ = s$ + "," + RcQ$("pos") + ":" + RcV3$(pX(i), pY(i), pZ(i)) + "," + RcQ$("size") + ":" + RcV3$(pSX(i), pSY(i), pSZ(i))
+        s$ = s$ + "," + RcQ$("turn") + ":" + RcV3$(pRX(i), pRY(i), pRZ(i)) + "," + RcQ$("col") + ":" + RcQ$(HexCol$(pCol(i)))
+        IF pKind(i) <> K_MESH AND pKind(i) <> K_USE THEN s$ = s$ + "," + RcQ$("amt") + ":" + Fmt$(pAmt(i)) + "," + RcQ$("seg") + ":" + RcI$(pSeg(i))
+        IF pKind(i) = K_MESH THEN s$ = s$ + "," + RcQ$("faces") + ":" + RcI$(mbFN(pMesh(i)))
+        IF pHole(i) THEN s$ = s$ + "," + RcQ$("hole") + ":" + IIFS$(pKeep(i), "2", "1")
+        IF pGrp(i) THEN s$ = s$ + "," + RcQ$("group") + ":" + RcI$(pGrp(i))
+        IF pHide(i) THEN s$ = s$ + "," + RcQ$("hide") + ":1"
+        IF pSel(i) THEN s$ = s$ + "," + RcQ$("sel") + ":1"
+        s$ = s$ + "}"
+    NEXT
+    RcPartsJson$ = s$ + "]"
+END FUNCTION
+
+' Face f (from 0) of mesh part p in the world: its middle, its way out (length 1), its area
+SUB RcFaceGeo (p, f AS LONG, cx#, cy#, cz#, nx#, ny#, nz#, ar#)
+    DIM id AS LONG, g AS LONG, k AS LONG, j AS LONG, n AS LONG, x, y, z, x#, y#, z#, l#
+    DIM rfX#(EM_MAXC), rfY#(EM_MAXC), rfZ#(EM_MAXC)
+    id = pMesh(p): g = mbF0(id) + 1 + f: n = mfCN(g)
+    IF n > EM_MAXC THEN n = EM_MAXC
+    cx# = 0: cy# = 0: cz# = 0: nx# = 0: ny# = 0: nz# = 0: ar# = 0
+    IF n < 1 THEN EXIT SUB
+    FOR k = 0 TO n - 1
+        MbPt id, mcV(mfC0(g) + k), x, y, z
+        x# = x: y# = y: z# = z: PartFwd p, x#, y#, z#
+        rfX#(k) = x#: rfY#(k) = y#: rfZ#(k) = z#
+        cx# = cx# + x# / n: cy# = cy# + y# / n: cz# = cz# + z# / n
+    NEXT
+    FOR k = 0 TO n - 1 ' (Newell's: anticlockwise from outside points out)
+        j = (k + 1) MOD n
+        nx# = nx# + (rfY#(k) - rfY#(j)) * (rfZ#(k) + rfZ#(j))
+        ny# = ny# + (rfZ#(k) - rfZ#(j)) * (rfX#(k) + rfX#(j))
+        nz# = nz# + (rfX#(k) - rfX#(j)) * (rfY#(k) + rfY#(j))
+    NEXT
+    l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#): ar# = l# / 2
+    IF l# > 0 THEN nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+END SUB
+
+' faces [P]: each face of a mesh part (the one being edited if no P) - its
+' number, way out, middle, area, corners, colour, picture, picked
+SUB RcFaces
+    DIM p, f AS LONG, id AS LONG, g AS LONG, s$, k, cx#, cy#, cz#, nx#, ny#, nz#, ar#
+    p = edPart: IF rcAN >= 2 THEN p = RcPart(2)
+    IF p = 0 THEN RcSend "err which part? faces P (or edit P first)": EXIT SUB
+    IF pKind(p) <> K_MESH THEN RcSend "err part" + STR$(p) + " isn't a mesh yet: mesh P (or edit P) first": EXIT SUB
+    id = pMesh(p): s$ = "["
+    FOR f = 0 TO mbFN(id) - 1
+        g = mbF0(id) + 1 + f
+        RcFaceGeo p, f, cx#, cy#, cz#, nx#, ny#, nz#, ar#
+        IF f THEN s$ = s$ + ","
+        s$ = s$ + "{" + RcQ$("f") + ":" + RcI$(f) + "," + RcQ$("n") + ":" + RcV3$(nx#, ny#, nz#) + "," + RcQ$("c") + ":" + RcV3$(cx#, cy#, cz#)
+        s$ = s$ + "," + RcQ$("area") + ":" + Fmt$(ar#) + "," + RcQ$("k") + ":" + RcI$(mfCN(g)) + "," + RcQ$("col") + ":" + RcQ$(HexCol$(mfCol(g)))
+        k = mfTex(g): IF k > 0 THEN s$ = s$ + "," + RcQ$("pic") + ":" + RcQ$(picRef$(k))
+        IF p = edPart THEN
+            IF f <= edFN THEN IF edSelF(f) THEN s$ = s$ + "," + RcQ$("sel") + ":1"
+        END IF
+        s$ = s$ + "}"
+    NEXT
+    RcSend "ok " + s$ + "]"
+END SUB
+
+' Word i as a part's number (0: not one, and told so)
+FUNCTION RcPart (i)
+    DIM p
+    p = INT(VAL(rcA$(i)))
+    IF i > rcAN OR p < 1 OR p > pN THEN RcSend "err no part " + CHR$(34) + rcA$(i) + CHR$(34) + " (1 to" + STR$(pN) + ")": EXIT FUNCTION
+    RcPart = p
+END FUNCTION
+
+' ---------------------------------------------------------------- what it can do
+
+' A change: each one undo step, then a pause (pace) so it can be seen
+SUB RcDo (c$)
+    DIM p, i, d#, x#, y#, z#, cl AS _UNSIGNED LONG, ok, nd$, n$, done
+    done = -1
+    SELECT CASE c$
+        CASE "new"
+            IF mdlDirty AND LCASE$(rcA$(2)) <> "force" THEN RcSend "err not saved: save first, or new force": EXIT SUB
+            EdOff: PlaceStop: ModelNew
+            RcSend "ok"
+        CASE "open"
+            n$ = rcA$(2)
+            IF LEN(n$) = 0 OR INSTR(n$, "..") > 0 OR LEFT$(n$, 1) = "/" OR INSTR(n$, "\") > 0 THEN RcSend "err open NAME (a model in models/, or neon:PROP)": EXIT SUB
+            IF mdlDirty AND LCASE$(rcA$(3)) <> "force" THEN RcSend "err not saved: save first, or open NAME force": EXIT SUB
+            EdOff: PlaceStop
+            ModelLoad n$
+            RcSend IIFS$(LEFT$(msgText$, 3) = "No ", "err ", "ok ") + msgText$
+        CASE "save"
+            IF rcAN >= 2 THEN mdlName$ = SafeName$(rcA$(2))
+            ModelSave
+            RcSend "ok " + msgText$: done = 0
+        CASE "export" ' (to export/ only: the game's folder only when Rick sends it)
+            nd$ = neonDir$: neonDir$ = ""
+            ExportAll
+            neonDir$ = nd$
+            RcSend "ok " + msgText$: done = 0
+        CASE "undo": UndoStep: EdCheck: RcSend "ok " + msgText$
+        CASE "redo": RedoStep: EdCheck: RcSend "ok " + msgText$
+        CASE "add": RcAdd
+        CASE "set": RcSet
+        CASE "del"
+            IF rcAN < 2 THEN RcSend "err del P [P...]": EXIT SUB
+            EdOff: SelNone
+            FOR i = 2 TO rcAN
+                p = RcPart(i): IF p = 0 THEN SelNone: EXIT SUB
+                pSel(p) = -1
+            NEXT
+            SelDelete
+            RcSend "ok"
+        CASE "sel"
+            RcPick 0
+        CASE "look"
+            RcPick 1
+        CASE "view" ' (yaw: 0 the front - a game picture f is yaw f x 45; pitch: up is +; dist: cells)
+            IF rcAN < 2 THEN RcSend "err view YAW [PITCH [DIST]]": EXIT SUB
+            camYaw = VAL(rcA$(2))
+            IF rcAN >= 3 THEN camPitch = Clamp(VAL(rcA$(3)), -89, 89)
+            IF rcAN >= 4 THEN camDist = Clamp(VAL(rcA$(4)), .03, 60)
+            viewDirty = -1: RcSend "ok"
+        CASE "mesh"
+            p = RcPart(2): IF p = 0 THEN EXIT SUB
+            IF pKind(p) = K_MESH THEN RcSend "ok already": EXIT SUB
+            EdOff: UndoPush
+            RcMakeMesh p, ok
+            IF ok = 0 THEN undoN = undoN - 1: RcSend "err nothing there to make a mesh of": EXIT SUB
+            ModelChanged: RcSend "ok " + RcI$(mbFN(pMesh(p))) + " faces"
+        CASE "mirror": RcMirror
+        CASE "edit"
+            p = RcPart(2): IF p = 0 THEN EXIT SUB
+            EdOff: PlaceStop: SelNone: pSel(p) = -1
+            EdToggle
+            IF edPart <> p THEN RcSend "err " + msgText$: EXIT SUB
+            edPlane = 0: IF edMode <> ED_FACES THEN EdSetMode ED_FACES
+            ViewFrame -1
+            RcSend "ok {" + RcQ$("faces") + ":" + RcI$(edFN) + "," + RcQ$("points") + ":" + RcI$(edVN) + "}"
+        CASE "done"
+            EdOff: RcSend "ok"
+        CASE "pick": RcFacePick
+        CASE "extrude"
+            IF NOT RcEdNeed THEN EXIT SUB
+            d# = EdStep#: IF rcAN >= 2 THEN d# = VAL(rcA$(2))
+            x# = EdStep#
+            EdExtrude
+            IF ABS(d# - x#) > 1E-9 THEN EdPushBy d# - x#, 0
+            RcSend "ok " + RcI$(edFN) + " faces"
+        CASE "inset" ' (K: how far each corner goes in, towards its face's middle - 0 to 1)
+            IF NOT RcEdNeed THEN EXIT SUB
+            d# = .25: IF rcAN >= 2 THEN d# = Clamp(VAL(rcA$(2)), .001, .999)
+            EdInsetBy d#
+            RcSend "ok " + RcI$(edFN) + " faces"
+        CASE "push"
+            IF NOT RcEdNeed THEN EXIT SUB
+            EdPushBy VAL(rcA$(2)), -1
+            RcSend "ok"
+        CASE "move"
+            x# = VAL(rcA$(2)): y# = VAL(rcA$(3)): z# = VAL(rcA$(4))
+            IF edPart THEN
+                IF NOT RcEdNeed THEN EXIT SUB
+                EdMoveBy x#, y#, z#, -1
+            ELSE
+                IF SelCount = 0 THEN RcSend "err sel P first (or edit P and pick)": EXIT SUB
+                UndoPush
+                FOR i = 1 TO pN
+                    IF pSel(i) THEN pX(i) = pX(i) + x#: pY(i) = pY(i) + y#: pZ(i) = pZ(i) + z#
+                NEXT
+                ModelChanged
+            END IF
+            RcSend "ok"
+        CASE "scale" ' (in E: the picked faces' corners, round their middle)
+            IF NOT RcEdNeed THEN EXIT SUB
+            x# = VAL(rcA$(2)): y# = x#: z# = x#
+            IF rcAN >= 4 THEN y# = VAL(rcA$(3)): z# = VAL(rcA$(4))
+            EdScaleBy x#, y#, z#, -1
+            RcSend "ok"
+        CASE "colour", "color"
+            cl = ParseCol~&(rcA$(2), ok)
+            IF ok = 0 THEN RcSend "err colour RRGGBB": EXIT SUB
+            IF edPart THEN
+                IF NOT RcEdNeed THEN EXIT SUB
+                EdColour cl, -1
+            ELSE
+                IF SelCount = 0 THEN RcSend "err sel P first (or edit P and pick)": EXIT SUB
+                UndoPush
+                FOR i = 1 TO pN
+                    IF pSel(i) THEN pCol(i) = cl
+                NEXT
+                ModelChanged
+            END IF
+            RcSend "ok"
+        CASE "flip"
+            IF NOT RcEdNeed THEN EXIT SUB
+            EdFlip: RcSend "ok"
+        CASE "picture": RcPicture
+        CASE ELSE
+            RcSend "err no such command: " + c$ + " (help lists them)": done = 0
+    END SELECT
+    IF done THEN rcNextT# = TIMER(.001) + rcPace / 1000
+END SUB
+
+' Editing, with faces picked? (if not: told so)
+FUNCTION RcEdNeed
+    IF edPart = 0 THEN RcSend "err edit P first": EXIT FUNCTION
+    IF edMode <> ED_FACES THEN EdSetMode ED_FACES
+    IF NOT EdAny THEN RcSend "err pick some faces first": EXIT FUNCTION
+    RcEdNeed = -1
+END FUNCTION
+
+' Part p made a mesh part (ok: it had something to make)
+SUB RcMakeMesh (p, ok)
+    DIM id AS LONG
+    ok = 0
+    IF pKind(p) = K_MESH THEN ok = -1: EXIT SUB
+    IF pKind(p) = K_USE THEN EXIT SUB
+    id = PartMeshOf&(p)
+    IF mbFN(id) = 0 THEN EXIT SUB
+    MakeMeshPart p, id: ok = -1
+END SUB
+
+' A part's word "key=value" put on part p (ok 0: not one it knows)
+SUB RcPartKey (p, kv$, ok)
+    DIM j, k$, v$, c AS _UNSIGNED LONG, cok
+    ok = 0: j = INSTR(kv$, "="): IF j < 2 THEN EXIT SUB
+    k$ = LCASE$(LEFT$(kv$, j - 1)): v$ = MID$(kv$, j + 1): ok = -1
+    SELECT CASE k$
+        CASE "x": pX(p) = VAL(v$)
+        CASE "y": pY(p) = VAL(v$)
+        CASE "z": pZ(p) = VAL(v$)
+        CASE "sx": pSX(p) = PosSize(VAL(v$))
+        CASE "sy": pSY(p) = PosSize(VAL(v$))
+        CASE "sz": pSZ(p) = PosSize(VAL(v$))
+        CASE "rx": pRX(p) = VAL(v$)
+        CASE "ry": pRY(p) = VAL(v$)
+        CASE "rz": pRZ(p) = VAL(v$)
+        CASE "amt": pAmt(p) = Clamp(VAL(v$), 0, 1)
+        CASE "seg": pSeg(p) = INT(Clamp(VAL(v$), 0, 256))
+        CASE "col", "colour", "color"
+            c = ParseCol~&(v$, cok): IF cok THEN pCol(p) = c ELSE ok = 0
+        CASE "name": pName$(p) = SafeName$(v$): IF v$ = "" THEN pName$(p) = ""
+        CASE "hole": pHole(p) = (VAL(v$) <> 0): IF pHole(p) = 0 THEN pKeep(p) = 0
+        CASE "keep": pKeep(p) = (VAL(v$) <> 0): IF pKeep(p) THEN pHole(p) = -1
+        CASE "hide": pHide(p) = (VAL(v$) <> 0)
+        CASE "group": pGrp(p) = INT(Clamp(VAL(v$), 0, 32000))
+        CASE ELSE: ok = 0
+    END SELECT
+END SUB
+
+' add SHAPE [X Y Z [SX SY SZ [RX RY RZ]]] [key=value...]: a new part (its number back)
+SUB RcAdd
+    DIM k, p, i, n, ok, v#
+    k = KindOf(rcA$(2))
+    IF k = 0 THEN RcSend "err no such shape: " + rcA$(2) + " (box cylinder sphere cone wedge tube die star gear donut diamond spike pill arrow)": EXIT SUB
+    IF pN >= MAX_PARTS THEN RcSend "err the model is full": EXIT SUB
+    p = P_SWAP
+    PartFresh p, k, 0, 0, 0
+    pSX(p) = defSX(k): pSY(p) = defSY(k): pSZ(p) = defSZ(k): pCol(p) = defCol
+    n = 0
+    FOR i = 3 TO rcAN
+        IF INSTR(rcA$(i), "=") THEN
+            RcPartKey p, rcA$(i), ok
+            IF ok = 0 THEN RcSend "err not a part's: " + rcA$(i) + " (x y z sx sy sz rx ry rz col amt seg name hole keep hide group)": EXIT SUB
+        ELSE
+            n = n + 1: v# = VAL(rcA$(i))
+            SELECT CASE n
+                CASE 1: pX(p) = v#
+                CASE 2: pY(p) = v#
+                CASE 3: pZ(p) = v#
+                CASE 4: pSX(p) = PosSize(v#)
+                CASE 5: pSY(p) = PosSize(v#)
+                CASE 6: pSZ(p) = PosSize(v#)
+                CASE 7: pRX(p) = v#
+                CASE 8: pRY(p) = v#
+                CASE 9: pRZ(p) = v#
+            END SELECT
+        END IF
+    NEXT
+    EdOff: PlaceStop: UndoPush
+    pN = pN + 1: PartCopy p, pN
+    SelNone: pSel(pN) = -1
+    ModelChanged
+    RcSend "ok " + RcI$(pN)
+END SUB
+
+' set P key=value...: a part changed (all of them, or none if one's wrong)
+SUB RcSet
+    DIM p, i, ok
+    p = RcPart(2): IF p = 0 THEN EXIT SUB
+    IF rcAN < 3 THEN RcSend "err set P key=value... (x y z sx sy sz rx ry rz col amt seg name hole keep hide group)": EXIT SUB
+    PartCopy p, P_SWAP
+    FOR i = 3 TO rcAN
+        RcPartKey P_SWAP, rcA$(i), ok
+        IF ok = 0 THEN RcSend "err not a part's: " + rcA$(i): EXIT SUB
+    NEXT
+    IF edPart = p THEN EdOff
+    UndoPush
+    PartCopy P_SWAP, p
+    ModelChanged
+    RcSend "ok"
+END SUB
+
+' sel (look 0) / look (1): none | all | P... - sel picks them; look turns
+' the camera to see them (all: the whole model), what's selected kept
+SUB RcPick (look)
+    DIM i, p, w$
+    REDIM wasSel(pN) AS INTEGER
+    w$ = LCASE$(rcA$(2))
+    FOR i = 1 TO pN: wasSel(i) = pSel(i): NEXT
+    IF w$ <> "" AND w$ <> "none" AND w$ <> "all" THEN
+        FOR i = 2 TO rcAN
+            p = RcPart(i): IF p = 0 THEN EXIT SUB
+        NEXT
+    END IF
+    IF look = 0 THEN EdOff
+    IF w$ = "all" OR w$ = "" AND look THEN
+        FOR i = 1 TO pN: pSel(i) = -1: NEXT
+    ELSE
+        SelNone
+        IF w$ <> "none" THEN
+            FOR i = 2 TO rcAN: pSel(INT(VAL(rcA$(i)))) = -1: NEXT
+        END IF
+    END IF
+    IF look THEN
+        ViewFrame -1
+        FOR i = 1 TO pN: pSel(i) = wasSel(i): NEXT
+    END IF
+    ovDirty = -1
+    RcSend "ok"
+END SUB
+
+' pick none | all | F... | facing X Y Z [DEGREES] - the edited part's faces
+' (pick add ... adds to what's picked)
+SUB RcFacePick
+    DIM a, w$, f AS LONG, n AS LONG, i, nx#, ny#, nz#, l#, deg#, cx#, cy#, cz#, fx#, fy#, fz#, ar#
+    IF edPart = 0 THEN RcSend "err edit P first": EXIT SUB
+    IF edMode <> ED_FACES THEN EdSetMode ED_FACES
+    edPlane = 0
+    a = 2: IF LCASE$(rcA$(2)) = "add" THEN a = 3
+    w$ = LCASE$(rcA$(a))
+    IF w$ = "" THEN RcSend "err pick none | all | F... | facing X Y Z [DEGREES]": EXIT SUB
+    IF w$ = "facing" THEN
+        nx# = VAL(rcA$(a + 1)): ny# = VAL(rcA$(a + 2)): nz# = VAL(rcA$(a + 3))
+        l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+        IF l# < 1E-9 THEN RcSend "err facing X Y Z: a way, e.g. 0 0 -1 (the front)": EXIT SUB
+        nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+        deg# = 10: IF rcAN >= a + 4 THEN deg# = Clamp(VAL(rcA$(a + 4)), 0, 180)
+    ELSEIF w$ <> "none" AND w$ <> "all" THEN
+        FOR i = a TO rcAN
+            f = INT(VAL(rcA$(i)))
+            IF f < 0 OR f >= edFN OR (VAL(rcA$(i)) = 0 AND rcA$(i) <> "0") THEN RcSend "err no face " + rcA$(i) + " (0 to" + STR$(edFN - 1) + ")": EXIT SUB
+        NEXT
+    END IF
+    IF a = 2 THEN EdSelClear
+    SELECT CASE w$
+        CASE "none"
+        CASE "all"
+            FOR f = 0 TO edFN - 1: edSelF(f) = -1: NEXT
+        CASE "facing"
+            FOR f = 0 TO edFN - 1
+                RcFaceGeo edPart, f, cx#, cy#, cz#, fx#, fy#, fz#, ar#
+                IF ar# > 0 AND fx# * nx# + fy# * ny# + fz# * nz# >= COS(deg# * 3.14159265358979 / 180) - 1E-9 THEN edSelF(f) = -1
+            NEXT
+        CASE ELSE
+            FOR i = a TO rcAN: edSelF(INT(VAL(rcA$(i)))) = -1: NEXT
+    END SELECT
+    n = 0
+    FOR f = 0 TO edFN - 1
+        IF edSelF(f) THEN n = n + 1
+    NEXT
+    edGen = edGen + 1: ovDirty = -1
+    RcSend "ok " + RcI$(n)
+END SUB
+
+' mirror P [x | y | z] [at=V]: a mirror image of part p across the plane
+' axis = V (x 0: left to right) - a mesh part, selected; its number back
+SUB RcMirror
+    DIM p, q, ax, i, at#, id AS LONG, v AS LONG, f AS LONG, n AS LONG, c0 AS LONG, k AS LONG, j AS LONG, e AS _BYTE
+    p = RcPart(2): IF p = 0 THEN EXIT SUB
+    IF pKind(p) = K_USE THEN RcSend "err a prefab put down: unlink it first": EXIT SUB
+    FOR i = 3 TO rcAN
+        SELECT CASE LCASE$(rcA$(i))
+            CASE "x": ax = 0
+            CASE "y": ax = 1
+            CASE "z": ax = 2
+            CASE ELSE
+                IF LCASE$(LEFT$(rcA$(i), 3)) = "at=" THEN at# = VAL(MID$(rcA$(i), 4)) ELSE RcSend "err mirror P [x | y | z] [at=V]": EXIT SUB
+        END SELECT
+    NEXT
+    IF pN >= MAX_PARTS THEN RcSend "err the model is full": EXIT SUB
+    EdOff: PlaceStop: UndoPush
+    IF pKind(p) = K_MESH THEN id = pMesh(p) ELSE id = PartMeshOf&(p)
+    IF mbFN(id) = 0 THEN undoN = undoN - 1: RcSend "err nothing there to mirror": EXIT SUB
+    pN = pN + 1: q = pN: PartCopy p, q: pName$(q) = ""
+    EmLoad id ' (its own points flipped on the same axis - p' = S R D q + S t = (S R S) D (S q) + S t)
+    FOR v = 1 TO swN
+        SELECT CASE ax
+            CASE 0: swX(v) = -swX(v)
+            CASE 1: swY(v) = -swY(v)
+            CASE ELSE: swZ(v) = -swZ(v)
+        END SELECT
+    NEXT
+    FOR f = 1 TO sfN ' (each polygon wound the other way, so it still faces out - as SelFlip)
+        IF sfLive(f) THEN
+            c0 = sfC0(f): n = sfCN(f)
+            FOR k = 0 TO n \ 2 - 1
+                j = n - 1 - k
+                SWAP scV(c0 + k), scV(c0 + j): SWAP scTU(c0 + k), scTU(c0 + j): SWAP scTV(c0 + k), scTV(c0 + j)
+            NEXT
+            e = scE(c0 + n - 1)
+            FOR k = 0 TO (n - 1) \ 2 - 1
+                SWAP scE(c0 + k), scE(c0 + n - 2 - k)
+            NEXT
+            scE(c0 + n - 1) = e
+        END IF
+    NEXT
+    MakeMeshPart q, EmWrite&
+    pCol(q) = pCol(p)
+    SELECT CASE ax ' (S R S: the turns about the other two axes the other way)
+        CASE 0: pX(q) = 2 * at# - pX(p): pRY(q) = -pRY(p): pRZ(q) = -pRZ(p)
+        CASE 1: pY(q) = 2 * at# - pY(p): pRX(q) = -pRX(p): pRZ(q) = -pRZ(p)
+        CASE ELSE: pZ(q) = 2 * at# - pZ(p): pRX(q) = -pRX(p): pRY(q) = -pRY(p)
+    END SELECT
+    SelNone: pSel(q) = -1
+    ModelChanged: MeshGcDue
+    RcSend "ok " + RcI$(q)
+END SUB
+
+' picture REF fit | tile N | view YAW X0 Y0 X1 Y1 | top X0 Y0 X1 Y1 | none -
+' pictures/REF.png on the picked faces: stretched over each; repeated at N
+' pixels a cell from each face's top left (up as near the world's up as it
+' goes); or seen from YAW (0: the front), the whole model's box there filling
+' pixels X0 Y0 - X1 Y1 of it (a painting of the prop: each face gets the part
+' in front of it); top: seen from above, the front at the bottom
+SUB RcPicture
+    DIM k, how$, f AS LONG, j AS LONG, w AS LONG, n AS LONG, c0 AS LONG, i, cnt AS LONG
+    DIM x#, y#, z#, nx#, ny#, nz#, l#, rx#, ry#, rz#, ux#, uy#, uz#, a#, b#, a0#, b1#, px#, yaw#
+    DIM lo AS V3, hi AS V3, q0#, q1#, h0#, h1#, sx0#, sy0#, sx1#, sy1#
+    IF NOT RcEdNeed THEN EXIT SUB
+    how$ = LCASE$(rcA$(3))
+    IF LCASE$(rcA$(2)) = "none" THEN how$ = "none"
+    IF how$ <> "none" THEN
+        k = PicFind(rcA$(2))
+        IF k <= 0 THEN RcSend "err no such picture: pictures/" + rcA$(2) + ".png": EXIT SUB
+        IF picW(k) = 0 THEN RcSend "err pictures/" + rcA$(2) + ".png can't be read": EXIT SUB
+    END IF
+    SELECT CASE how$
+        CASE "none", "fit"
+        CASE "tile"
+            px# = VAL(rcA$(4)): IF px# <= 0 THEN RcSend "err tile N: pixels a cell (more than 0)": EXIT SUB
+        CASE "view"
+            IF rcAN < 8 THEN RcSend "err view YAW X0 Y0 X1 Y1 (pixels of the picture the model's box fills)": EXIT SUB
+            yaw# = VAL(rcA$(4)) * 3.14159265358979 / 180
+            sx0# = VAL(rcA$(5)): sy0# = VAL(rcA$(6)): sx1# = VAL(rcA$(7)): sy1# = VAL(rcA$(8))
+            IF meshDirty THEN MeshBuild
+            MeshBounds lo, hi, 0
+            rx# = -COS(yaw#): rz# = -SIN(yaw#) ' (the view's right, from that side: yaw 0 looks from -z, its right is -x)
+            q0# = 1E+30: q1# = -1E+30
+            FOR i = 0 TO 3
+                a# = IIF(i AND 1, hi.x, lo.x) * rx# + IIF(i AND 2, hi.z, lo.z) * rz#
+                IF a# < q0# THEN q0# = a#
+                IF a# > q1# THEN q1# = a#
+            NEXT
+            h0# = lo.y: h1# = hi.y
+            IF q1# - q0# < 1E-9 OR h1# - h0# < 1E-9 THEN RcSend "err the model has no size from there": EXIT SUB
+        CASE "top"
+            IF rcAN < 7 THEN RcSend "err top X0 Y0 X1 Y1 (pixels of the picture the model's box from above fills)": EXIT SUB
+            sx0# = VAL(rcA$(4)): sy0# = VAL(rcA$(5)): sx1# = VAL(rcA$(6)): sy1# = VAL(rcA$(7))
+            IF meshDirty THEN MeshBuild
+            MeshBounds lo, hi, 0
+            rx# = -1: rz# = 0: q0# = -hi.x: q1# = -lo.x: h0# = lo.z: h1# = hi.z ' (right is -x, as from the front; far side at the top)
+            IF q1# - q0# < 1E-9 OR h1# - h0# < 1E-9 THEN RcSend "err the model has no size from above": EXIT SUB
+        CASE ELSE
+            RcSend "err picture REF fit | tile N | view YAW X0 Y0 X1 Y1 | top X0 Y0 X1 Y1 | none": EXIT SUB
+    END SELECT
+    EdBegin -1
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) THEN
+            cnt = cnt + 1
+            IF how$ = "none" THEN
+                sfTex(f) = 0
+            ELSE
+                sfTex(f) = k
+                n = sfCN(f): c0 = sfC0(f)
+                IF how$ = "fit" THEN
+                    PicFit f
+                ELSEIF how$ = "tile" THEN
+                    nx# = 0: ny# = 0: nz# = 0 ' (its way out in the world, Newell's)
+                    FOR i = 0 TO n - 1
+                        w = scV(c0 + i): j = scV(c0 + (i + 1) MOD n)
+                        RcWorldOf swX(w), swY(w), swZ(w), x#, y#, z#
+                        RcWorldOf swX(j), swY(j), swZ(j), a#, b#, l#
+                        nx# = nx# + (y# - b#) * (z# + l#): ny# = ny# + (z# - l#) * (x# + a#): nz# = nz# + (x# - a#) * (y# + b#)
+                    NEXT
+                    l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#): IF l# < 1E-12 THEN l# = 1
+                    nx# = nx# / l#: ny# = ny# / l#: nz# = nz# / l#
+                    PicAxes nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+                    a0# = 1E+30: b1# = -1E+30
+                    FOR i = 0 TO n - 1
+                        w = scV(c0 + i): RcWorldOf swX(w), swY(w), swZ(w), x#, y#, z#
+                        a# = x# * rx# + y# * ry# + z# * rz#: b# = x# * ux# + y# * uy# + z# * uz#
+                        IF a# < a0# THEN a0# = a#
+                        IF b# > b1# THEN b1# = b#
+                    NEXT
+                    FOR i = 0 TO n - 1
+                        w = scV(c0 + i): RcWorldOf swX(w), swY(w), swZ(w), x#, y#, z#
+                        a# = x# * rx# + y# * ry# + z# * rz#: b# = x# * ux# + y# * uy# + z# * uz#
+                        scTU(c0 + i) = (a# - a0#) * px# / picW(k): scTV(c0 + i) = (b1# - b#) * px# / picH(k)
+                    NEXT
+                ELSE
+                    FOR i = 0 TO n - 1
+                        w = scV(c0 + i): RcWorldOf swX(w), swY(w), swZ(w), x#, y#, z#
+                        a# = x# * rx# + z# * rz#: b# = y#: IF how$ = "top" THEN b# = z#
+                        scTU(c0 + i) = (sx0# + (a# - q0#) / (q1# - q0#) * (sx1# - sx0#)) / picW(k)
+                        scTV(c0 + i) = (sy0# + (h1# - b#) / (h1# - h0#) * (sy1# - sy0#)) / picH(k)
+                    NEXT
+                END IF
+            END IF
+        END IF
+    NEXT
+    EdCommit
+    RcSend "ok " + RcI$(cnt) + " faces"
+END SUB
+
+' A point of the edited part's work (its own terms) in the world
+SUB RcWorldOf (x0#, y0#, z0#, wx#, wy#, wz#)
+    wx# = x0#: wy# = y0#: wz# = z0#
+    PartFwd edPart, wx#, wy#, wz#
+END SUB

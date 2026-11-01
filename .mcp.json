@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "c0nstruct0r": {
+      "command": "python3",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/tools/c0nstruct0r/mcp_server.py"]
+    }
+  }
+}
