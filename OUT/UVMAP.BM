@@ -1,0 +1,1181 @@
+''
+' bu1ld0r - OUT/UVMAP.BM
+' =============================================================================
+' UV DRAW: the selected parts' faces as a layered DRAW file, and its saves
+' brought back (see UVMAP.BI)
+
+' ---------------------------------------------------------------- UV DRAW
+
+SUB UvExport
+    DIM p, i, n, uses, pushed, id AS LONG, base$, lab$, ref$, dpath$, kT, keep, side AS LONG, e$, relaid$
+    IF bvOn THEN BvCancel
+    IF maOn THEN MaCancel
+    REDIM sel(pN) AS _BYTE
+    FOR p = 1 TO pN
+        IF pSel(p) THEN
+            IF pKind(p) = K_USE THEN
+                uses = uses + 1
+            ELSEIF pHole(p) = 0 THEN
+                sel(p) = -1
+            END IF
+        END IF
+    NEXT
+    FOR p = 1 TO pN ' (shapes made mesh parts: faces of their own)
+        IF sel(p) AND pKind(p) <> K_MESH THEN
+            IF pushed = 0 THEN UndoPush: pushed = -1
+            id = PartMeshOf&(p)
+            IF mbFN(id) > 0 THEN MakeMeshPart p, id ELSE sel(p) = 0
+        END IF
+    NEXT
+    IF pushed THEN ModelChanged: MeshBuild
+    p = 0: n = 0
+    FOR i = 1 TO pN
+        IF sel(i) THEN
+            n = n + 1
+            IF p = 0 THEN p = i
+        END IF
+    NEXT
+    IF n = 0 THEN
+        IF uses THEN Msg "A prefab put down keeps its pictures as they are: UNLINK it (U) first, then UV DRAW" ELSE Msg "UV DRAW: select the parts to paint in DRAW first (their faces laid out flat, a layer each)"
+        EXIT SUB
+    END IF
+    ' Named after the model and the part
+    base$ = SafeName$(mdlName$)
+    lab$ = pName$(p)
+    IF LEN(lab$) THEN lab$ = SafeName$(lab$) ELSE lab$ = "part" + LTRIM$(STR$(p))
+    IF n > 1 THEN lab$ = lab$ + "-" + LTRIM$(STR$(n)) + "parts"
+    ref$ = "uv/" + base$ + "-" + lab$
+    IF NOT _DIREXISTS(PicDir$) THEN MKDIR PicDir$
+    IF NOT _DIREXISTS(PicDir$ + "uv") THEN MKDIR PicDir$ + "uv"
+    dpath$ = PicDir$ + ref$ + ".draw"
+    UvSyncFirst dpath$ ' (saved in DRAW since it was last read: that first, so it isn't lost)
+    UvSides sel()
+    IF uvN = 0 THEN Msg "UV DRAW: no faces to lay out": EXIT SUB
+    kT = UvKeepK
+    IF kT THEN
+        keep = -1
+    ELSE
+        UvSizes
+        side = UvPackAll&
+        IF side = 0 THEN Msg "UV DRAW: the faces don't fit in a" + STR$(UV_MAXPIC) + " picture": EXIT SUB
+        kT = UvTarget(ref$, sel(), side)
+        IF kT = 0 THEN Msg "UV DRAW: couldn't make pictures/" + ref$ + ".png (or another part shows it)": EXIT SUB
+        IF pushed = 0 THEN UndoPush: pushed = -1
+        UvRelay sel(), kT
+        relaid$ = " - the faces were given pixels of their own first: pictures/" + ref$ + ".png"
+    END IF
+    IF UvWrite(dpath$, kT, keep, n) = 0 THEN EXIT SUB
+    UvWatch dpath$
+    e$ = DrawExe$
+    IF argUv <> 0 OR uvNoRun <> 0 THEN
+        Msg "Written: pictures/" + MID$(dpath$, LEN(PicDir$) + 1) + relaid$
+    ELSEIF LEN(e$) = 0 THEN
+        Msg "Written: pictures/" + MID$(dpath$, LEN(PicDir$) + 1) + " (DRAW not found: draw= in bu1ld0r.cfg)" + relaid$
+    ELSE
+        SHELL "cd " + ShQ$(LEFT$(e$, _INSTRREV(e$, "/"))) + " && setsid " + ShQ$(e$) + " " + ShQ$(AbsPath$(dpath$)) + " >/dev/null 2>&1 </dev/null &"
+        Msg "pictures/" + MID$(dpath$, LEN(PicDir$) + 1) + " opened in DRAW:" + STR$(uvLN) + " layer" + IIFS$(uvLN = 1, "", "s") + " to paint, numbered as the legend. Ctrl+S there and it shows here" + relaid$
+    END IF
+END SUB
+
+' ---------------------------------------------------------------- the sides
+
+' Every selected part's faces, gathered into sides: neighbours on one plane
+SUB UvSides (sel() AS _BYTE)
+    DIM p, f AS LONG, g AS LONG, w AS LONG, c AS LONG, n AS LONG, i AS LONG, j AS LONG, s AS LONG, r AS LONG, a AS LONG, b AS LONG
+    DIM k, s0 AS LONG, x#, y#, z#, nx#, ny#, nz#, l#, tol#, lo#(2), hi#(2), ext#
+    uvN = 0: uqN = 0
+    REDIM uvS(64) AS UVSIDE
+    REDIM uqP(256) AS INTEGER, uqF(256) AS LONG, uqS(256) AS LONG, uqNx(256) AS LONG, uqK(256) AS INTEGER
+    FOR p = 1 TO pN
+        IF sel(p) THEN
+            EmLoad pMesh(p): EmEdgeMap
+            REDIM lqX(swN) AS DOUBLE, lqY(swN) AS DOUBLE, lqZ(swN) AS DOUBLE
+            REDIM lqNX(sfN) AS DOUBLE, lqNY(sfN) AS DOUBLE, lqNZ(sfN) AS DOUBLE, lqD(sfN) AS DOUBLE, lqR(sfN) AS LONG, lqS(sfN) AS LONG
+            FOR i = 0 TO 2: lo#(i) = 1E+30: hi#(i) = -1E+30: NEXT
+            FOR w = 1 TO swN
+                x# = swX(w): y# = swY(w): z# = swZ(w): PartFwd p, x#, y#, z#
+                lqX(w) = x#: lqY(w) = y#: lqZ(w) = z#
+                IF x# < lo#(0) THEN lo#(0) = x#
+                IF x# > hi#(0) THEN hi#(0) = x#
+                IF y# < lo#(1) THEN lo#(1) = y#
+                IF y# > hi#(1) THEN hi#(1) = y#
+                IF z# < lo#(2) THEN lo#(2) = z#
+                IF z# > hi#(2) THEN hi#(2) = z#
+            NEXT
+            ext# = 0
+            FOR i = 0 TO 2
+                IF hi#(i) - lo#(i) > ext# THEN ext# = hi#(i) - lo#(i)
+            NEXT
+            tol# = ext# * .0002 + 1E-9
+            FOR f = 1 TO sfN ' (each face's way out, as big as it is: Newell's)
+                lqR(f) = f
+                IF sfLive(f) AND sfCN(f) >= 3 THEN
+                    n = sfCN(f): nx# = 0: ny# = 0: nz# = 0
+                    FOR c = 0 TO n - 1
+                        a = scV(sfC0(f) + c): b = scV(sfC0(f) + (c + 1) MOD n)
+                        nx# = nx# + (lqY(a) - lqY(b)) * (lqZ(a) + lqZ(b))
+                        ny# = ny# + (lqZ(a) - lqZ(b)) * (lqX(a) + lqX(b))
+                        nz# = nz# + (lqX(a) - lqX(b)) * (lqY(a) + lqY(b))
+                    NEXT
+                    lqNX(f) = nx#: lqNY(f) = ny#: lqNZ(f) = nz#
+                    l# = SQR(nx# * nx# + ny# * ny# + nz# * nz#)
+                    IF l# > 1E-18 THEN a = scV(sfC0(f)): lqD(f) = (lqX(a) * nx# + lqY(a) * ny# + lqZ(a) * nz#) / l#
+                END IF
+            NEXT
+            FOR f = 1 TO sfN ' (neighbours across an edge on one plane: one side)
+                IF sfLive(f) AND sfCN(f) >= 3 THEN
+                    n = sfCN(f)
+                    FOR c = 0 TO n - 1
+                        a = scV(sfC0(f) + c): b = scV(sfC0(f) + (c + 1) MOD n)
+                        g = EmEdgeFind&(b, a)
+                        IF g > 0 AND g <> f THEN
+                            IF sfCN(g) >= 3 THEN
+                                IF UvSamePlane(f, g, tol#, lqNX(), lqNY(), lqNZ(), lqD()) THEN
+                                    i = UvRoot&(lqR(), f): j = UvRoot&(lqR(), g)
+                                    IF i <> j THEN lqR(j) = i
+                                END IF
+                            END IF
+                        END IF
+                    NEXT
+                END IF
+            NEXT
+            s0 = uvN + 1
+            FOR f = 1 TO sfN
+                IF sfLive(f) AND sfCN(f) >= 3 THEN
+                    l# = SQR(lqNX(f) * lqNX(f) + lqNY(f) * lqNY(f) + lqNZ(f) * lqNZ(f))
+                    IF l# > 1E-18 THEN
+                        r = UvRoot&(lqR(), f)
+                        IF lqS(r) = 0 THEN
+                            uvN = uvN + 1
+                            IF uvN > UBOUND(uvS) THEN REDIM _PRESERVE uvS(uvN * 2) AS UVSIDE
+                            lqS(r) = uvN: uvS(uvN).p = p
+                        END IF
+                        s = lqS(r)
+                        uqN = uqN + 1
+                        IF uqN > UBOUND(uqP) THEN
+                            REDIM _PRESERVE uqP(uqN * 2) AS INTEGER: REDIM _PRESERVE uqF(uqN * 2) AS LONG: REDIM _PRESERVE uqS(uqN * 2) AS LONG
+                            REDIM _PRESERVE uqNx(uqN * 2) AS LONG: REDIM _PRESERVE uqK(uqN * 2) AS INTEGER
+                        END IF
+                        uqP(uqN) = p: uqF(uqN) = f: uqS(uqN) = s: uqNx(uqN) = uvS(s).q0: uvS(s).q0 = uqN
+                        k = sfTex(f)
+                        IF k > 0 THEN IF picW(k) = 0 THEN k = 0
+                        uqK(uqN) = k
+                        uvS(s).nx = uvS(s).nx + lqNX(f): uvS(s).ny = uvS(s).ny + lqNY(f): uvS(s).nz = uvS(s).nz + lqNZ(f)
+                        uvS(s).area = uvS(s).area + l# / 2
+                    END IF
+                END IF
+            NEXT
+            FOR s = s0 TO uvN
+                UvSideGeo s, lqX(), lqY(), lqZ()
+            NEXT
+        END IF
+    NEXT
+END SUB
+
+FUNCTION UvRoot& (r() AS LONG, f AS LONG)
+    DIM a AS LONG
+    a = f
+    DO WHILE r(a) <> a
+        r(a) = r(r(a)): a = r(a)
+    LOOP
+    UvRoot& = a
+END FUNCTION
+
+' Faces f and g on one plane (facing the same way, as far out)
+FUNCTION UvSamePlane (f AS LONG, g AS LONG, tol#, nx() AS DOUBLE, ny() AS DOUBLE, nz() AS DOUBLE, d() AS DOUBLE)
+    DIM la#, lb#
+    la# = SQR(nx(f) * nx(f) + ny(f) * ny(f) + nz(f) * nz(f)): lb# = SQR(nx(g) * nx(g) + ny(g) * ny(g) + nz(g) * nz(g))
+    IF la# < 1E-18 OR lb# < 1E-18 THEN EXIT FUNCTION
+    IF (nx(f) * nx(g) + ny(f) * ny(g) + nz(f) * nz(g)) / (la# * lb#) < .9995 THEN EXIT FUNCTION
+    IF ABS(d(f) - d(g)) > tol# THEN EXIT FUNCTION
+    UvSamePlane = -1
+END FUNCTION
+
+' Side s's way out, its box on its own plane, and whether its pixels can be kept
+' as they are: its faces all on one picture, which sits on them as one (each corner
+' where the first face's mapping says), as many pixels a step across as down
+SUB UvSideGeo (s AS LONG, qx() AS DOUBLE, qy() AS DOUBLE, qz() AS DOUBLE)
+    DIM q AS LONG, f AS LONG, c AS LONG, n AS LONG, w AS LONG, c0 AS LONG, i AS LONG, l#, a#, b#, k0, ok, found
+    DIM sw0 AS LONG, sh0 AS LONG, du1#, dv1#, du2#, dv2#, det#, e1x#, e1y#, e1z#, e2x#, e2y#, e2z#
+    DIM wux#, wuy#, wuz#, wvx#, wvy#, wvz#, lu#, lv#, q0x#, q0y#, q0z#, u0#, v0#
+    DIM g11#, g12#, g22#, gd#, d1#, d2#, ss#, tt#, er#, ermax#, umin#, umax#, vmin#, vmax#, pu#, pv#, rw AS LONG, rh AS LONG
+    l# = SQR(uvS(s).nx * uvS(s).nx + uvS(s).ny * uvS(s).ny + uvS(s).nz * uvS(s).nz)
+    IF l# < 1E-18 THEN uvS(s).w = -1: EXIT SUB
+    uvS(s).nx = uvS(s).nx / l#: uvS(s).ny = uvS(s).ny / l#: uvS(s).nz = uvS(s).nz / l#
+    PicAxes uvS(s).nx, uvS(s).ny, uvS(s).nz, uvS(s).rx, uvS(s).ry, uvS(s).rz, uvS(s).ux, uvS(s).uy, uvS(s).uz
+    uvS(s).a0 = 1E+30: uvS(s).a1 = -1E+30: uvS(s).b0 = 1E+30: uvS(s).b1 = -1E+30
+    q = uvS(s).q0
+    DO WHILE q
+        f = uqF(q): n = sfCN(f)
+        FOR c = 0 TO n - 1
+            w = scV(sfC0(f) + c)
+            a# = qx(w) * uvS(s).rx + qy(w) * uvS(s).ry + qz(w) * uvS(s).rz: b# = qx(w) * uvS(s).ux + qy(w) * uvS(s).uy + qz(w) * uvS(s).uz
+            IF a# < uvS(s).a0 THEN uvS(s).a0 = a#
+            IF a# > uvS(s).a1 THEN uvS(s).a1 = a#
+            IF b# < uvS(s).b0 THEN uvS(s).b0 = b#
+            IF b# > uvS(s).b1 THEN uvS(s).b1 = b#
+        NEXT
+        q = uqNx(q)
+    LOOP
+    ' How big its pixels are now: the first face with a picture, its first triangle the picture doesn't squash
+    q = uvS(s).q0: k0 = 0
+    DO WHILE q
+        IF uqK(q) > 0 THEN k0 = uqK(q): EXIT DO
+        q = uqNx(q)
+    LOOP
+    IF k0 = 0 THEN EXIT SUB
+    f = uqF(q): n = sfCN(f): c0 = sfC0(f): sw0 = picW(k0): sh0 = picH(k0)
+    FOR i = 1 TO n - 2
+        du1# = (scTU(c0 + i) - scTU(c0)) * sw0: dv1# = (scTV(c0 + i) - scTV(c0)) * sh0
+        du2# = (scTU(c0 + i + 1) - scTU(c0)) * sw0: dv2# = (scTV(c0 + i + 1) - scTV(c0)) * sh0
+        det# = du1# * dv2# - du2# * dv1#
+        IF ABS(det#) > .01 THEN
+            w = scV(c0): q0x# = qx(w): q0y# = qy(w): q0z# = qz(w)
+            w = scV(c0 + i): e1x# = qx(w) - q0x#: e1y# = qy(w) - q0y#: e1z# = qz(w) - q0z#
+            w = scV(c0 + i + 1): e2x# = qx(w) - q0x#: e2y# = qy(w) - q0y#: e2z# = qz(w) - q0z#
+            wux# = (e1x# * dv2# - e2x# * dv1#) / det#: wuy# = (e1y# * dv2# - e2y# * dv1#) / det#: wuz# = (e1z# * dv2# - e2z# * dv1#) / det#
+            wvx# = (e2x# * du1# - e1x# * du2#) / det#: wvy# = (e2y# * du1# - e1y# * du2#) / det#: wvz# = (e2z# * du1# - e1z# * du2#) / det#
+            u0# = scTU(c0) * sw0: v0# = scTV(c0) * sh0: found = -1
+            EXIT FOR
+        END IF
+    NEXT
+    IF found = 0 THEN EXIT SUB
+    lu# = SQR(wux# * wux# + wuy# * wuy# + wuz# * wuz#): lv# = SQR(wvx# * wvx# + wvy# * wvy# + wvz# * wvz#)
+    IF lu# < 1E-12 OR lv# < 1E-12 THEN EXIT SUB
+    uvS(s).d0 = 1 / SQR(lu# * lv#)
+    IF lu# / lv# > 1.6 OR lv# / lu# > 1.6 THEN EXIT SUB
+    ' Pixel for pixel: every face on k0, every corner where that mapping puts it
+    g11# = wux# * wux# + wuy# * wuy# + wuz# * wuz#: g12# = wux# * wvx# + wuy# * wvy# + wuz# * wvz#: g22# = wvx# * wvx# + wvy# * wvy# + wvz# * wvz#
+    gd# = g11# * g22# - g12# * g12#: IF ABS(gd#) < 1E-30 THEN EXIT SUB
+    umin# = 1E+30: umax# = -1E+30: vmin# = 1E+30: vmax# = -1E+30: ok = -1
+    q = uvS(s).q0
+    DO WHILE q
+        IF uqK(q) <> k0 THEN ok = 0: EXIT DO
+        f = uqF(q): n = sfCN(f): c0 = sfC0(f)
+        FOR c = 0 TO n - 1
+            w = scV(c0 + c)
+            d1# = (qx(w) - q0x#) * wux# + (qy(w) - q0y#) * wuy# + (qz(w) - q0z#) * wuz#
+            d2# = (qx(w) - q0x#) * wvx# + (qy(w) - q0y#) * wvy# + (qz(w) - q0z#) * wvz#
+            ss# = (d1# * g22# - d2# * g12#) / gd#: tt# = (d2# * g11# - d1# * g12#) / gd#
+            pu# = scTU(c0 + c) * sw0: pv# = scTV(c0 + c) * sh0
+            er# = ABS(u0# + ss# - pu#): IF ABS(v0# + tt# - pv#) > er# THEN er# = ABS(v0# + tt# - pv#)
+            IF er# > ermax# THEN ermax# = er#
+            IF pu# < umin# THEN umin# = pu#
+            IF pu# > umax# THEN umax# = pu#
+            IF pv# < vmin# THEN vmin# = pv#
+            IF pv# > vmax# THEN vmax# = pv#
+        NEXT
+        q = uqNx(q)
+    LOOP
+    IF ok = 0 OR ermax# > .75 THEN EXIT SUB
+    uvS(s).ox = INT(umin# + .001): uvS(s).oy = INT(vmin# + .001)
+    rw = -INT(-(umax# - .001)) - uvS(s).ox: rh = -INT(-(vmax# - .001)) - uvS(s).oy
+    IF rw < 1 THEN rw = 1
+    IF rh < 1 THEN rh = 1
+    IF rw + 2 > UV_MAXPIC OR rh + 2 > UV_MAXPIC THEN EXIT SUB
+    uvS(s).ex = -1: uvS(s).k = k0: uvS(s).w = rw + 2: uvS(s).h = rh + 2
+END SUB
+
+' The flat ones' pixels a cell: as their pictures show them now - none: as the
+' other sides' (the middle one by area), else all of them half filling 256 x 256
+SUB UvSizes
+    DIM s AS LONG, b, tot#, acc#, area#, d#
+    DIM hist#(127)
+    FOR s = 1 TO uvN
+        IF uvS(s).w <> -1 THEN
+            area# = area# + uvS(s).area
+            IF uvS(s).d0 > 0 THEN
+                b = INT(LOG(uvS(s).d0) / LOG(2) * 8): IF b < 0 THEN b = 0
+                IF b > 127 THEN b = 127
+                hist#(b) = hist#(b) + uvS(s).area: tot# = tot# + uvS(s).area
+            END IF
+        END IF
+    NEXT
+    IF tot# > 0 THEN
+        FOR b = 0 TO 127
+            acc# = acc# + hist#(b)
+            IF acc# >= tot# / 2 THEN EXIT FOR
+        NEXT
+        d# = 2 ^ ((b + .5) / 8)
+    ELSEIF area# > 0 THEN
+        d# = SQR(.5 * 256 * 256 / area#)
+    ELSE
+        d# = 64
+    END IF
+    IF brDensity# > 0 THEN d# = brDensity# ' (painting on the model's NEW PLACES setting)
+    IF d# < 2 THEN d# = 2
+    IF d# > 1024 THEN d# = 1024
+    FOR s = 1 TO uvN
+        IF uvS(s).w <> -1 THEN
+            IF uvS(s).d0 > 0 THEN uvS(s).d = uvS(s).d0 ELSE uvS(s).d = d#
+        END IF
+    NEXT
+END SUB
+
+' Side s laid out flat at its pixels a cell times sc (a pixel spare all round)
+SUB UvFlatSize (s AS LONG, sc#)
+    DIM d#, m#
+    d# = uvS(s).d * sc#
+    m# = uvS(s).a1 - uvS(s).a0: IF uvS(s).b1 - uvS(s).b0 > m# THEN m# = uvS(s).b1 - uvS(s).b0
+    IF m# * d# > UV_MAXPIC - 3 THEN d# = (UV_MAXPIC - 3) / m#
+    uvS(s).ex = 0: uvS(s).dl = d#
+    uvS(s).w = -INT(-(uvS(s).a1 - uvS(s).a0) * d#) + 2: uvS(s).h = -INT(-(uvS(s).b1 - uvS(s).b0) * d#) + 2
+    IF uvS(s).w < 3 THEN uvS(s).w = 3
+    IF uvS(s).h < 3 THEN uvS(s).h = 3
+END SUB
+
+' The picture's size the sides fit in (256 up; still too many: all of them smaller) - 0: none
+FUNCTION UvPackAll&
+    DIM side AS LONG, tries, sc#, tot#, s AS LONG
+    sc# = 1
+    FOR tries = 1 TO 14
+        tot# = 0
+        FOR s = 1 TO uvN
+            IF uvS(s).w <> -1 THEN
+                IF uvS(s).ex = 0 OR sc# < 1 THEN UvFlatSize s, sc#
+                tot# = tot# + CDBL(uvS(s).w) * uvS(s).h
+            END IF
+        NEXT
+        side = 256
+        DO WHILE side < UV_MAXPIC AND CDBL(side) * side < tot# * 1.1
+            side = side * 2
+        LOOP
+        DO
+            IF UvPack(side) THEN UvPackAll& = side: EXIT FUNCTION
+            IF side >= UV_MAXPIC THEN EXIT DO
+            side = side * 2
+        LOOP
+        sc# = sc# * .75
+    NEXT
+END FUNCTION
+
+' The sides put in a side x side picture in rows, tallest first (-1: they fit)
+FUNCTION UvPack (side AS LONG)
+    DIM i AS LONG, j AS LONG, s AS LONG, x AS LONG, y AS LONG, sh AS LONG, m AS LONG, t AS LONG
+    REDIM ord(uvN) AS LONG
+    FOR s = 1 TO uvN
+        IF uvS(s).w > 0 THEN m = m + 1: ord(m) = s
+    NEXT
+    FOR i = 2 TO m
+        t = ord(i): j = i - 1
+        DO WHILE j >= 1
+            IF uvS(ord(j)).h >= uvS(t).h THEN EXIT DO
+            ord(j + 1) = ord(j): j = j - 1
+        LOOP
+        ord(j + 1) = t
+    NEXT
+    FOR i = 1 TO m
+        s = ord(i)
+        IF uvS(s).w > side OR uvS(s).h > side THEN EXIT FUNCTION
+        IF x + uvS(s).w > side THEN y = y + sh: x = 0: sh = 0
+        IF y + uvS(s).h > side THEN EXIT FUNCTION
+        uvS(s).x = x: uvS(s).y = y
+        x = x + uvS(s).w
+        IF uvS(s).h > sh THEN sh = uvS(s).h
+    NEXT
+    UvPack = -1
+END FUNCTION
+
+' The picture the faces already share, if it can be painted as it is: all of them on
+' it, no face's pixels another's (BrShareScan: JUST HERE's test) - 0: lay them out
+FUNCTION UvKeepK
+    DIM i AS LONG, j AS LONG, k, fky AS LONG
+    FOR i = 1 TO uqN
+        IF uqK(i) = 0 THEN EXIT FUNCTION
+        IF k = 0 THEN k = uqK(i)
+        IF uqK(i) <> k THEN EXIT FUNCTION
+    NEXT
+    IF k = 0 THEN EXIT FUNCTION
+    IF LEFT$(picRef$(k), 1) = "/" OR LEFT$(picRef$(k), 1) = "*" THEN EXIT FUNCTION
+    BrShareScan
+    FOR i = 1 TO uqN
+        fky = CLNG(uqP(i)) * 65536& + uqF(i) - 1
+        FOR j = 1 TO brShN
+            IF brShK(j) = fky THEN
+                IF brShS(j) THEN EXIT FUNCTION
+                EXIT FOR
+            END IF
+        NEXT
+    NEXT
+    UvKeepK = k
+END FUNCTION
+
+' The picture the sides are laid out in: ref$ (made side x side, see-through), or
+' ref$-2.. if a part not selected shows it. One the selected show now is copied
+' first (uvSnapK: what they showed is read from that)
+FUNCTION UvTarget (ref$, sel() AS _BYTE, side AS LONG)
+    DIM r$, nn, k, t AS LONG, other, mine, img&, i AS LONG
+    uvSnapK = 0
+    FOR nn = 1 TO 50
+        r$ = ref$: IF nn > 1 THEN r$ = ref$ + "-" + LTRIM$(STR$(nn))
+        k = PicFind(r$): IF k = 0 THEN EXIT FUNCTION
+        other = 0: mine = 0
+        FOR t = 1 TO sceneTN
+            IF tTex(t) = k THEN
+                IF tPart(t) >= 1 AND tPart(t) <= pN THEN
+                    IF sel(tPart(t)) THEN mine = -1 ELSE other = -1
+                ELSE
+                    other = -1
+                END IF
+            END IF
+        NEXT
+        IF other = 0 THEN EXIT FOR
+    NEXT
+    IF other THEN EXIT FUNCTION
+    IF mine AND picW(k) > 0 THEN uvSnapK = UvSnap(k)
+    img& = _NEWIMAGE(side, side, 32)
+    _SAVEIMAGE PicDir$ + r$ + ".png", img&: _FREEIMAGE img&
+    picW(k) = 0: k = PicFind(r$)
+    IF k = 0 THEN EXIT FUNCTION
+    IF picW(k) = 0 THEN EXIT FUNCTION
+    FOR i = 0 TO picW(k) * picH(k) - 1: picPix(picOff(k) + i) = 0: NEXT
+    IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
+    pcThumb&(k) = 0
+    ref$ = r$
+    UvTarget = k
+END FUNCTION
+
+' A copy of picture k's pixels, as a picture of its own ("*uvsnap")
+FUNCTION UvSnap (k)
+    DIM s, n AS LONG, i AS LONG
+    s = PicFind("*uvsnap"): IF s = 0 THEN EXIT FUNCTION
+    n = picW(k) * picH(k)
+    IF picTop + n > UBOUND(picPix) THEN REDIM _PRESERVE picPix(picTop + n + 65536) AS _UNSIGNED LONG
+    picOff(s) = picTop: picTop = picTop + n
+    FOR i = 0 TO n - 1: picPix(picOff(s) + i) = picPix(picOff(k) + i): NEXT
+    picW(s) = picW(k): picH(s) = picH(k): picDirty(s) = 0
+    UvSnap = s
+END FUNCTION
+
+' Every side given its place in picture kT, filled with what it showed; its faces' spots there
+SUB UvRelay (sel() AS _BYTE, kT)
+    DIM p, s AS LONG, q AS LONG, id AS LONG, w AS LONG, x#, y#, z#
+    FOR p = 1 TO pN
+        IF sel(p) THEN
+            EmLoad pMesh(p)
+            REDIM lqX(swN) AS DOUBLE, lqY(swN) AS DOUBLE, lqZ(swN) AS DOUBLE
+            FOR w = 1 TO swN
+                x# = swX(w): y# = swY(w): z# = swZ(w): PartFwd p, x#, y#, z#
+                lqX(w) = x#: lqY(w) = y#: lqZ(w) = z#
+            NEXT
+            FOR s = 1 TO uvN
+                IF uvS(s).p = p AND uvS(s).w > 0 THEN UvFillSide s, kT, lqX(), lqY(), lqZ()
+            NEXT
+            id = EmWrite&: pMesh(p) = id
+            FOR q = 1 TO uqN ' (the faces as the new mesh numbers them)
+                IF uqP(q) = p THEN
+                    IF uqF(q) <= UBOUND(sfMap) THEN uqF(q) = sfMap(uqF(q)) + 1 ELSE uqF(q) = 0
+                END IF
+            NEXT
+        END IF
+    NEXT
+    picDirty(kT) = -1: PicSave kT
+    ModelChanged: MeshBuild: MeshGcDue
+END SUB
+
+' Side s's pixels in its place in kT: copied (pixel for pixel), or laid out flat - each
+' face's triangles filled through its old spots (or its colour), the rest of the place
+' from its neighbours. Its faces' spots point there.
+SUB UvFillSide (s AS LONG, kT, qx() AS DOUBLE, qy() AS DOUBLE, qz() AS DOUBLE)
+    DIM aw AS LONG, ah AS LONG, po AS LONG, i AS LONG, j AS LONG, q AS LONG, f AS LONG, n AS LONG, c0 AS LONG, c AS LONG, w AS LONG
+    DIM ks, kq, sw0 AS LONG, sh0 AS LONG, sxx AS LONG, syy AS LONG, cc AS _UNSIGNED LONG, x0 AS LONG, y0 AS LONG, rw AS LONG, rh AS LONG
+    DIM a#, b#, d#, xa#, ya#, xb#, yb#, xc#, yc#, den#, w0#, w1#, w2#, px#, py#, uu!, vv!, ix0 AS LONG, ix1 AS LONG, iy0 AS LONG, iy1 AS LONG
+    DIM hd AS LONG, tl AS LONG, g AS LONG, nb AS LONG, dx, dy, anyp
+    aw = picW(kT): ah = picH(kT): po = picOff(kT)
+    x0 = uvS(s).x: y0 = uvS(s).y: rw = uvS(s).w: rh = uvS(s).h
+    IF uvS(s).ex THEN
+        ks = uvS(s).k: IF ks = kT THEN ks = uvSnapK
+        sw0 = picW(ks): sh0 = picH(ks)
+        IF sw0 > 0 THEN
+            FOR j = 0 TO rh - 1
+                syy = (uvS(s).oy + j - 1) MOD sh0: IF syy < 0 THEN syy = syy + sh0
+                FOR i = 0 TO rw - 1
+                    sxx = (uvS(s).ox + i - 1) MOD sw0: IF sxx < 0 THEN sxx = sxx + sw0
+                    cc = picPix(picOff(ks) + syy * sw0 + sxx)
+                    IF (cc AND &HFF000000~&) = 0 THEN cc = cc OR &H01000000~& ' (see-through stays so - but the place is taken)
+                    picPix(po + (y0 + j) * aw + x0 + i) = cc
+                NEXT
+            NEXT
+        END IF
+        q = uvS(s).q0
+        DO WHILE q
+            f = uqF(q): c0 = sfC0(f)
+            FOR c = 0 TO sfCN(f) - 1
+                scTU(c0 + c) = (scTU(c0 + c) * sw0 - uvS(s).ox + 1 + x0) / aw
+                scTV(c0 + c) = (scTV(c0 + c) * sh0 - uvS(s).oy + 1 + y0) / ah
+            NEXT
+            sfTex(f) = kT
+            q = uqNx(q)
+        LOOP
+        EXIT SUB
+    END IF
+    d# = uvS(s).dl
+    REDIM lqM(rw * rh) AS _BYTE
+    q = uvS(s).q0
+    DO WHILE q
+        f = uqF(q): n = sfCN(f): c0 = sfC0(f)
+        REDIM lqU(n) AS DOUBLE, lqV(n) AS DOUBLE
+        FOR c = 0 TO n - 1
+            w = scV(c0 + c)
+            a# = qx(w) * uvS(s).rx + qy(w) * uvS(s).ry + qz(w) * uvS(s).rz: b# = qx(w) * uvS(s).ux + qy(w) * uvS(s).uy + qz(w) * uvS(s).uz
+            lqU(c) = 1 + (a# - uvS(s).a0) * d#: lqV(c) = 1 + (uvS(s).b1 - b#) * d#
+        NEXT
+        kq = uqK(q): IF kq = kT THEN kq = uvSnapK
+        FOR c = 1 TO n - 2
+            xa# = lqU(0): ya# = lqV(0): xb# = lqU(c): yb# = lqV(c): xc# = lqU(c + 1): yc# = lqV(c + 1)
+            den# = (yb# - yc#) * (xa# - xc#) + (xc# - xb#) * (ya# - yc#)
+            IF ABS(den#) > 1E-12 THEN
+                ix0 = INT(UvMin3#(xa#, xb#, xc#)): ix1 = INT(UvMax3#(xa#, xb#, xc#))
+                iy0 = INT(UvMin3#(ya#, yb#, yc#)): iy1 = INT(UvMax3#(ya#, yb#, yc#))
+                IF ix0 < 0 THEN ix0 = 0
+                IF iy0 < 0 THEN iy0 = 0
+                IF ix1 > rw - 1 THEN ix1 = rw - 1
+                IF iy1 > rh - 1 THEN iy1 = rh - 1
+                FOR j = iy0 TO iy1
+                    py# = j + .5
+                    FOR i = ix0 TO ix1
+                        px# = i + .5
+                        w0# = ((yb# - yc#) * (px# - xc#) + (xc# - xb#) * (py# - yc#)) / den#
+                        w1# = ((yc# - ya#) * (px# - xc#) + (xa# - xc#) * (py# - yc#)) / den#
+                        w2# = 1 - w0# - w1#
+                        IF w0# >= -.0001 AND w1# >= -.0001 AND w2# >= -.0001 THEN
+                            IF kq > 0 THEN
+                                uu! = w0# * scTU(c0) + w1# * scTU(c0 + c) + w2# * scTU(c0 + c + 1)
+                                vv! = w0# * scTV(c0) + w1# * scTV(c0 + c) + w2# * scTV(c0 + c + 1)
+                                cc = PicAt~&(kq, uu!, vv!)
+                            ELSE
+                                cc = sfCol(f) OR &HFF000000~&
+                            END IF
+                            IF (cc AND &HFF000000~&) = 0 THEN cc = cc OR &H01000000~&
+                            picPix(po + (y0 + j) * aw + x0 + i) = cc: lqM(j * rw + i) = 1: anyp = -1
+                        END IF
+                    NEXT
+                NEXT
+            END IF
+        NEXT
+        q = uqNx(q)
+    LOOP
+    ' The rest of the place (the pixel spare round, an L's corner) from its neighbours
+    IF anyp = 0 THEN
+        cc = sfCol(uqF(uvS(s).q0)) OR &HFF000000~&
+        FOR j = 0 TO rh - 1
+            FOR i = 0 TO rw - 1: picPix(po + (y0 + j) * aw + x0 + i) = cc: NEXT
+        NEXT
+    ELSE
+        REDIM lqQ(rw * rh) AS LONG
+        FOR g = 0 TO rw * rh - 1
+            IF lqM(g) THEN lqQ(tl) = g: tl = tl + 1
+        NEXT
+        DO WHILE hd < tl
+            g = lqQ(hd): hd = hd + 1
+            i = g MOD rw: j = g \ rw
+            FOR nb = 0 TO 3
+                dx = 0: dy = 0
+                SELECT CASE nb
+                    CASE 0: dx = 1
+                    CASE 1: dx = -1
+                    CASE 2: dy = 1
+                    CASE 3: dy = -1
+                END SELECT
+                IF i + dx >= 0 AND i + dx < rw AND j + dy >= 0 AND j + dy < rh THEN
+                    IF lqM((j + dy) * rw + i + dx) = 0 THEN
+                        lqM((j + dy) * rw + i + dx) = 1
+                        picPix(po + (y0 + j + dy) * aw + x0 + i + dx) = picPix(po + (y0 + j) * aw + x0 + i)
+                        lqQ(tl) = (j + dy) * rw + i + dx: tl = tl + 1
+                    END IF
+                END IF
+            NEXT
+        LOOP
+    END IF
+    q = uvS(s).q0
+    DO WHILE q
+        f = uqF(q): n = sfCN(f): c0 = sfC0(f)
+        FOR c = 0 TO n - 1
+            w = scV(c0 + c)
+            a# = qx(w) * uvS(s).rx + qy(w) * uvS(s).ry + qz(w) * uvS(s).rz: b# = qx(w) * uvS(s).ux + qy(w) * uvS(s).uy + qz(w) * uvS(s).uz
+            scTU(c0 + c) = (x0 + 1 + (a# - uvS(s).a0) * d#) / aw: scTV(c0 + c) = (y0 + 1 + (uvS(s).b1 - b#) * d#) / ah
+        NEXT
+        sfTex(f) = kT
+        q = uqNx(q)
+    LOOP
+END SUB
+
+FUNCTION UvMin3# (a#, b#, c#)
+    DIM m#
+    m# = a#: IF b# < m# THEN m# = b#
+    IF c# < m# THEN m# = c#
+    UvMin3# = m#
+END FUNCTION
+
+FUNCTION UvMax3# (a#, b#, c#)
+    DIM m#
+    m# = a#: IF b# > m# THEN m# = b#
+    IF c# > m# THEN m# = c#
+    UvMax3# = m#
+END FUNCTION
+
+' The way a side faces, in words (coarse: only the nearest of the six; brief: 3 letters)
+FUNCTION UvWay$ (nx#, ny#, nz#, coarse, brief)
+    DIM r$, m#, t$
+    m# = ABS(nx#): IF ABS(ny#) > m# THEN m# = ABS(ny#)
+    IF ABS(nz#) > m# THEN m# = ABS(nz#)
+    IF coarse OR m# > .92 THEN
+        IF ABS(ny#) = m# THEN
+            t$ = IIFS$(ny# > 0, "TOP", "BOTTOM")
+        ELSEIF ABS(nz#) = m# THEN
+            t$ = IIFS$(nz# < 0, "FRONT", "BACK")
+        ELSE
+            t$ = IIFS$(nx# < 0, "LEFT", "RIGHT")
+        END IF
+        UvWay$ = UvBrief$(t$, brief): EXIT FUNCTION
+    END IF
+    IF ny# > .38 THEN r$ = r$ + "-" + UvBrief$("TOP", brief)
+    IF ny# < -.38 THEN r$ = r$ + "-" + UvBrief$("BOTTOM", brief)
+    IF nz# < -.38 THEN r$ = r$ + "-" + UvBrief$("FRONT", brief)
+    IF nz# > .38 THEN r$ = r$ + "-" + UvBrief$("BACK", brief)
+    IF nx# < -.38 THEN r$ = r$ + "-" + UvBrief$("LEFT", brief)
+    IF nx# > .38 THEN r$ = r$ + "-" + UvBrief$("RIGHT", brief)
+    UvWay$ = MID$(r$, 2)
+END FUNCTION
+
+FUNCTION UvBrief$ (t$, brief)
+    IF brief = 0 THEN UvBrief$ = t$: EXIT FUNCTION
+    SELECT CASE t$
+        CASE "BOTTOM": UvBrief$ = "BOT"
+        CASE "FRONT": UvBrief$ = "FRT"
+        CASE "BACK": UvBrief$ = "BCK"
+        CASE "LEFT": UvBrief$ = "LFT"
+        CASE "RIGHT": UvBrief$ = "RGT"
+        CASE ELSE: UvBrief$ = t$
+    END SELECT
+END FUNCTION
+
+' Side number i's colour on the guides
+FUNCTION UvHue~& (i AS LONG)
+    DIM h#, f#, r#, g#, b#, s#, v#, p#, q#, t#, k
+    h# = (i * .6180339887#) - INT(i * .6180339887#): s# = .7: v# = 1
+    k = INT(h# * 6): f# = h# * 6 - k: p# = v# * (1 - s#): q# = v# * (1 - s# * f#): t# = v# * (1 - s# * (1 - f#))
+    SELECT CASE k MOD 6
+        CASE 0: r# = v#: g# = t#: b# = p#
+        CASE 1: r# = q#: g# = v#: b# = p#
+        CASE 2: r# = p#: g# = v#: b# = t#
+        CASE 3: r# = p#: g# = q#: b# = v#
+        CASE 4: r# = t#: g# = p#: b# = v#
+        CASE ELSE: r# = v#: g# = p#: b# = q#
+    END SELECT
+    UvHue~& = _RGB32(INT(r# * 255), INT(g# * 255), INT(b# * 255))
+END FUNCTION
+
+' ---------------------------------------------------------------- the DRAW file
+
+' pictures/uv/NAME.draw written from picture k: a layer a side (or a way of facing, if
+' there are too many), OUTLINES, NUMBERS, LEGEND; and NAME.uv, which pixels are which
+' layer's. keep: the picture as it was (other parts' pixels: a layer of their own)
+FUNCTION UvWrite (dpath$, k, keep, np)
+    DIM aw AS LONG, ah AS LONG, po AS LONG, cw AS LONG, ch AS LONG, cols, rows AS LONG, rpc0 AS LONG, rpc AS LONG, capL AS LONG
+    DIM s AS LONG, i AS LONG, j AS LONG, x AS LONG, y AS LONG, q AS LONG, f AS LONG, n AS LONG, c AS LONG, c0 AS LONG, a AS LONG, b AS LONG, g AS LONG
+    DIM p, L, nm$, gi, mode, sx#, sy#, umin#, umax#, vmin#, vmax#, x0#, y0#, x1#, y1#, cc AS _UNSIGNED LONG, other AS LONG
+    DIM outI&, numI&, legI&, comp&, m AS _MEM, oldD&, t$, lx AS LONG, ly AS LONG, col, rowi AS LONG
+    aw = picW(k): ah = picH(k): po = picOff(k)
+    ' Numbered, coloured
+    FOR s = 1 TO uvN
+        IF uvS(s).w <> -1 THEN rows = rows + 1: uvS(s).num = rows: uvS(s).col = UvHue~&(rows) ELSE uvS(s).num = 0
+    NEXT
+    IF rows = 0 THEN Msg "UV DRAW: no faces to lay out": EXIT FUNCTION
+    ch = ah: IF ch < 200 THEN ch = 200
+    rpc0 = (ch - 92) \ 10: rpc = (ch - 8) \ 10: cols = 1
+    IF rows > rpc0 THEN cols = 1 + -INT(-(rows - rpc0) / rpc)
+    cw = aw + 4 + cols * UV_LEG
+    capL = 96000000 \ (CDBL(cw) * ch * 4) - 4
+    IF capL > UV_MAXL THEN capL = UV_MAXL
+    IF capL < 1 THEN capL = 1
+    ' The layers: a side each - too many: a way of facing each (then only the six), else one
+    REDIM uvLName$(rows + 8)
+    FOR mode = 0 TO 3
+        uvLN = 0
+        FOR s = 1 TO uvN
+            IF uvS(s).num > 0 THEN
+                SELECT CASE mode
+                    CASE 0: nm$ = LTRIM$(STR$(uvS(s).num)) + " " + UvWay$(uvS(s).nx, uvS(s).ny, uvS(s).nz, 0, 0)
+                        IF LEN(nm$) > 16 THEN nm$ = LTRIM$(STR$(uvS(s).num)) + " " + UvWay$(uvS(s).nx, uvS(s).ny, uvS(s).nz, 0, -1)
+                    CASE 1: nm$ = UvWay$(uvS(s).nx, uvS(s).ny, uvS(s).nz, 0, 0)
+                        IF LEN(nm$) > 16 THEN nm$ = UvWay$(uvS(s).nx, uvS(s).ny, uvS(s).nz, 0, -1)
+                    CASE 2: nm$ = UvWay$(uvS(s).nx, uvS(s).ny, uvS(s).nz, -1, 0)
+                    CASE ELSE: nm$ = "SIDES"
+                END SELECT
+                nm$ = LEFT$(nm$, 16)
+                FOR gi = 1 TO uvLN
+                    IF uvLName$(gi) = nm$ THEN EXIT FOR
+                NEXT
+                IF gi > uvLN THEN uvLN = uvLN + 1: uvLName$(uvLN) = nm$
+                uvS(s).lay = gi
+            END IF
+        NEXT
+        IF uvLN <= capL THEN EXIT FOR
+    NEXT
+    ' Which pixels are which layer's: laid out, each side's place; kept, each face's box (and a pixel round)
+    REDIM uvOwn(aw * ah - 1) AS _UNSIGNED _BYTE
+    IF keep = 0 THEN
+        FOR s = 1 TO uvN
+            IF uvS(s).num > 0 THEN
+                FOR y = uvS(s).y TO uvS(s).y + uvS(s).h - 1
+                    FOR x = uvS(s).x TO uvS(s).x + uvS(s).w - 1
+                        uvOwn(y * aw + x) = uvS(s).lay
+                    NEXT
+                NEXT
+                uvS(s).cx = uvS(s).x + uvS(s).w \ 2: uvS(s).cy = uvS(s).y + uvS(s).h \ 2: uvS(s).bw = uvS(s).w: uvS(s).bh = uvS(s).h
+            END IF
+        NEXT
+    ELSE
+        FOR s = 1 TO uvN: uvS(s).best = -1: NEXT
+        FOR p = 1 TO pN
+            IF UvPartIn(p) THEN
+                EmLoad pMesh(p)
+                FOR q = 1 TO uqN
+                    IF uqP(q) = p AND uqF(q) > 0 THEN
+                        s = uqS(q): f = uqF(q)
+                        IF uvS(s).num > 0 AND f <= sfN THEN
+                            UvFaceBox f, aw, ah, umin#, umax#, vmin#, vmax#, sx#, sy#
+                            FOR y = INT(vmin# - sy#) TO -INT(-(vmax# - sy#)) - 1
+                                FOR x = INT(umin# - sx#) TO -INT(-(umax# - sx#)) - 1
+                                    g = ((y MOD ah + ah) MOD ah) * aw + ((x MOD aw + aw) MOD aw)
+                                    IF uvOwn(g) = 0 THEN uvOwn(g) = uvS(s).lay
+                                NEXT
+                            NEXT
+                            IF (umax# - umin#) * (vmax# - vmin#) > uvS(s).best THEN
+                                uvS(s).best = (umax# - umin#) * (vmax# - vmin#)
+                                uvS(s).cx = INT((umin# + umax#) / 2 - sx#): uvS(s).cy = INT((vmin# + vmax#) / 2 - sy#)
+                                uvS(s).bw = INT(umax# - umin#): uvS(s).bh = INT(vmax# - vmin#)
+                            END IF
+                        END IF
+                    END IF
+                NEXT
+            END IF
+        NEXT
+        REDIM lqO2(aw * ah - 1) AS _UNSIGNED _BYTE ' (a pixel round each: nearest-pixel lookups at an edge)
+        FOR g = 0 TO aw * ah - 1: lqO2(g) = uvOwn(g): NEXT
+        FOR y = 0 TO ah - 1
+            FOR x = 0 TO aw - 1
+                g = y * aw + x
+                IF lqO2(g) = 0 THEN ' (the eight round it: a box's corner too)
+                    FOR j = -1 TO 1
+                        FOR i = -1 TO 1
+                            IF uvOwn(g) = 0 AND x + i >= 0 AND x + i < aw AND y + j >= 0 AND y + j < ah THEN
+                                IF lqO2(g + j * aw + i) THEN uvOwn(g) = lqO2(g + j * aw + i)
+                            END IF
+                        NEXT
+                    NEXT
+                END IF
+            NEXT
+        NEXT
+        FOR g = 0 TO aw * ah - 1 ' (other parts' pixels in it: a layer of their own - not a stray few)
+            IF uvOwn(g) = 0 THEN
+                IF (picPix(po + g) AND &HFF000000~&) <> 0 THEN other = other + 1
+            END IF
+        NEXT
+        IF other < 32 THEN other = 0
+    END IF
+    ' The guides: each side's outline (edges to another side, or none), its number, the legend
+    outI& = _NEWIMAGE(cw, ch, 32): numI& = _NEWIMAGE(cw, ch, 32): legI& = _NEWIMAGE(cw, ch, 32)
+    oldD& = _DEST
+    FOR p = 1 TO pN
+        IF UvPartIn(p) THEN
+            EmLoad pMesh(p): EmEdgeMap
+            REDIM lqS(sfN) AS LONG
+            FOR q = 1 TO uqN
+                IF uqP(q) = p AND uqF(q) > 0 THEN
+                    IF uqF(q) <= sfN THEN lqS(uqF(q)) = uqS(q)
+                END IF
+            NEXT
+            _DEST outI&
+            FOR f = 1 TO sfN
+                s = lqS(f)
+                IF s > 0 THEN
+                    IF uvS(s).num > 0 THEN
+                        UvFaceBox f, aw, ah, umin#, umax#, vmin#, vmax#, sx#, sy#
+                        n = sfCN(f): c0 = sfC0(f)
+                        FOR c = 0 TO n - 1
+                            a = scV(c0 + c): b = scV(c0 + (c + 1) MOD n)
+                            g = EmEdgeFind&(b, a)
+                            IF g = 0 THEN g = -1 ELSE g = lqS(g)
+                            IF g <> s THEN
+                                x0# = scTU(c0 + c) * aw - sx#: y0# = scTV(c0 + c) * ah - sy#
+                                x1# = scTU(c0 + (c + 1) MOD n) * aw - sx#: y1# = scTV(c0 + (c + 1) MOD n) * ah - sy#
+                                LINE (x0#, y0#)-(x1#, y1#), uvS(s).col
+                            END IF
+                        NEXT
+                    END IF
+                END IF
+            NEXT
+        END IF
+    NEXT
+    FOR s = 1 TO uvN
+        IF uvS(s).num > 0 THEN
+            t$ = LTRIM$(STR$(uvS(s).num))
+            IF LEN(t$) * 8 + 2 > uvS(s).bw AND uvS(s).bh > uvS(s).bw THEN ' (a tall thin side: the digits one under another)
+                FOR i = 1 TO LEN(t$)
+                    UvText numI&, uvS(s).cx - 4, uvS(s).cy - LEN(t$) * 4 + (i - 1) * 8, MID$(t$, i, 1), uvS(s).col, -1
+                NEXT
+            ELSE
+                UvText numI&, uvS(s).cx - LEN(t$) * 4, uvS(s).cy - 4, t$, uvS(s).col, -1
+            END IF
+        END IF
+    NEXT
+    _DEST legI&
+    LINE (aw + 2, 0)-(cw - 1, ch - 1), _RGB32(24, 26, 32), BF
+    lx = aw + 8
+    UvText legI&, lx, 4, "UV MAP", _RGB32(255, 255, 255), 0
+    t$ = MID$(dpath$, _INSTRREV(dpath$, "/") + 1): t$ = LEFT$(t$, LEN(t$) - 5): IF LEN(t$) > 21 THEN t$ = LEFT$(t$, 20) + "~"
+    UvText legI&, lx, 14, t$, _RGB32(180, 190, 200), 0
+    UvText legI&, lx, 28, "Paint each side on", _RGB32(150, 160, 170), 0
+    UvText legI&, lx, 38, IIFS$(uvLN = rows, "its own layer, then", "its layer, then"), _RGB32(150, 160, 170), 0
+    UvText legI&, lx, 48, "Ctrl+S: the model", _RGB32(150, 160, 170), 0
+    UvText legI&, lx, 58, "shows it. OUTLINES,", _RGB32(150, 160, 170), 0
+    UvText legI&, lx, 68, "NUMBERS and LEGEND", _RGB32(150, 160, 170), 0
+    UvText legI&, lx, 78, "are guides only.", _RGB32(150, 160, 170), 0
+    rowi = 0
+    FOR s = 1 TO uvN
+        IF uvS(s).num > 0 THEN
+            IF rowi < rpc0 THEN
+                col = 0: ly = 92 + rowi * 10
+            ELSE
+                col = 1 + (rowi - rpc0) \ rpc: ly = 6 + ((rowi - rpc0) MOD rpc) * 10
+            END IF
+            lx = aw + 8 + col * UV_LEG
+            _DEST legI&: LINE (lx, ly)-(lx + 7, ly + 7), uvS(s).col, BF
+            t$ = LTRIM$(STR$(uvS(s).num)) + " " + UvWay$(uvS(s).nx, uvS(s).ny, uvS(s).nz, 0, 0)
+            IF np > 1 THEN t$ = t$ + " " + UvPartName$(uvS(s).p)
+            IF uvLN < rows THEN t$ = t$ + " [" + uvLName$(uvS(s).lay) + "]"
+            IF LEN(t$) > 19 THEN t$ = LEFT$(t$, 18) + "~"
+            UvText legI&, lx + 12, ly, t$, _RGB32(220, 225, 230), 0
+            rowi = rowi + 1
+        END IF
+    NEXT
+    _DEST oldD&
+    ' The picture DRAW shows first (its file's own image: everything as it'll look)
+    comp& = _NEWIMAGE(cw, ch, 32)
+    m = _MEMIMAGE(comp&)
+    FOR y = 0 TO ah - 1
+        FOR x = 0 TO aw - 1
+            cc = picPix(po + y * aw + x)
+            IF keep = 0 AND uvOwn(y * aw + x) = 0 THEN cc = 0
+            _MEMPUT m, m.OFFSET + (CLNG(y) * cw + x) * 4, cc
+        NEXT
+    NEXT
+    _MEMFREE m
+    _PUTIMAGE (0, 0), outI&, comp&: _PUTIMAGE (0, 0), numI&, comp&: _PUTIMAGE (0, 0), legI&, comp&
+    UvWrite = UvDrawFile(dpath$, k, cw, ch, other, outI&, numI&, legI&, comp&)
+    _FREEIMAGE outI&: _FREEIMAGE numI&: _FREEIMAGE legI&: _FREEIMAGE comp&
+END FUNCTION
+
+' Is part p one of those laid out?
+FUNCTION UvPartIn (p)
+    DIM s AS LONG
+    FOR s = 1 TO uvN
+        IF uvS(s).p = p THEN UvPartIn = -1: EXIT FUNCTION
+    NEXT
+END FUNCTION
+
+FUNCTION UvPartName$ (p)
+    IF LEN(pName$(p)) THEN UvPartName$ = pName$(p) ELSE UvPartName$ = "part" + LTRIM$(STR$(p))
+END FUNCTION
+
+' Work face f's box on a w x h picture, in its pixels, and how far it's moved onto the picture (it repeats)
+SUB UvFaceBox (f AS LONG, w AS LONG, h AS LONG, umin#, umax#, vmin#, vmax#, sx#, sy#)
+    DIM c AS LONG, u#, v#
+    umin# = 1E+30: umax# = -1E+30: vmin# = 1E+30: vmax# = -1E+30
+    FOR c = 0 TO sfCN(f) - 1
+        u# = scTU(sfC0(f) + c) * w: v# = scTV(sfC0(f) + c) * h
+        IF u# < umin# THEN umin# = u#
+        IF u# > umax# THEN umax# = u#
+        IF v# < vmin# THEN vmin# = v#
+        IF v# > vmax# THEN vmax# = v#
+    NEXT
+    sx# = INT((umin# + .001) / w) * w: sy# = INT((vmin# + .001) / h) * h
+END SUB
+
+' Text on image img& in the 8 x 8 letters (ring: a dark edge round, to read over anything)
+SUB UvText (img&, x AS LONG, y AS LONG, t$, c AS _UNSIGNED LONG, ring)
+    DIM o&, dx, dy
+    o& = _DEST: _DEST img&
+    _FONT 8: _PRINTMODE _KEEPBACKGROUND
+    IF ring THEN
+        COLOR _RGB32(0, 0, 0)
+        FOR dy = -1 TO 1
+            FOR dx = -1 TO 1
+                IF dx <> 0 OR dy <> 0 THEN _PRINTSTRING (x + dx, y + dy), t$
+            NEXT
+        NEXT
+    END IF
+    COLOR c: _PRINTSTRING (x, y), t$
+    _DEST o&
+END SUB
+
+' The .draw itself (DRAW's version 2: layers - name, shown, opacity, order -, then
+' five tool numbers; DRAW reads it, and saves its own version back) and the .uv
+FUNCTION UvDrawFile (dpath$, k, cw AS LONG, ch AS LONG, other, outI&, numI&, legI&, comp&)
+    DIM aw AS LONG, ah AS LONG, po AS LONG, nL, cur, lsz AS LONG, pd$, wp AS LONG, hdr$, i AS LONG, L, g AS LONG, x AS LONG, y AS LONG
+    DIM m AS _MEM, lay$, cmp$, payload$, png$, tmp$, fh, s$, own$, uvf$, sig$, palN, nm$, op, pal$
+    aw = picW(k): ah = picH(k): po = picOff(k)
+    nL = uvLN + 3 - (other <> 0): cur = 1 - (other <> 0)
+    lsz = cw * ch * 4
+    pal$ = UvPalette$(k, palN)
+    hdr$ = "DRW1" + MKI$(2) + MKL$(cw) + MKL$(ch) + MKI$(palN) + pal$ + MKI$(0) + MKI$(1) + MKI$(nL) + MKI$(cur)
+    pd$ = SPACE$(LEN(hdr$) + nL * (26 + lsz) + 10)
+    MID$(pd$, 1) = hdr$: wp = LEN(hdr$) + 1
+    REDIM lqA(cw * ch - 1) AS _UNSIGNED LONG
+    lay$ = SPACE$(lsz)
+    FOR L = 1 TO nL
+        ' (bottom first: OTHER PARTS, the sides, OUTLINES, NUMBERS, LEGEND)
+        g = L + (other <> 0): op = 255
+        IF other <> 0 AND L = 1 THEN
+            nm$ = "OTHER PARTS": op = 128
+        ELSEIF g <= uvLN THEN
+            nm$ = uvLName$(g)
+        ELSEIF g = uvLN + 1 THEN
+            nm$ = "OUTLINES"
+        ELSEIF g = uvLN + 2 THEN
+            nm$ = "NUMBERS"
+        ELSE
+            nm$ = "LEGEND"
+        END IF
+        MID$(pd$, wp) = LEFT$(nm$ + SPACE$(16), 16) + MKI$(-1) + MKI$(op) + MKI$(L) + MKI$(0) + MKI$(0): wp = wp + 26
+        IF g <= uvLN THEN
+            FOR i = 0 TO cw * ch - 1: lqA(i) = 0: NEXT
+            FOR y = 0 TO ah - 1
+                FOR x = 0 TO aw - 1
+                    IF uvOwn(y * aw + x) = g THEN
+                        IF g > 0 OR (picPix(po + y * aw + x) AND &HFF000000~&) <> 0 THEN lqA(y * cw + x) = picPix(po + y * aw + x)
+                    END IF
+                NEXT
+            NEXT
+            m = _MEM(lqA()): _MEMGET m, m.OFFSET, lay$: _MEMFREE m
+        ELSEIF g = uvLN + 1 THEN
+            m = _MEMIMAGE(outI&): _MEMGET m, m.OFFSET, lay$: _MEMFREE m
+        ELSEIF g = uvLN + 2 THEN
+            m = _MEMIMAGE(numI&): _MEMGET m, m.OFFSET, lay$: _MEMFREE m
+        ELSE
+            m = _MEMIMAGE(legI&): _MEMGET m, m.OFFSET, lay$: _MEMFREE m
+        END IF
+        MID$(pd$, wp) = lay$: wp = wp + lsz
+    NEXT
+    MID$(pd$, wp) = MKI$(1) + MKI$(1) + MKI$(0) + MKI$(0) + MKI$(8) ' (the tool: the brush, 1 pixel; no grid)
+    ' A PNG of how it looks, with the drAw chunk before its end
+    tmp$ = dpath$ + ".tmp.png"
+    IF _FILEEXISTS(tmp$) THEN KILL tmp$
+    _SAVEIMAGE tmp$, comp&
+    IF NOT _FILEEXISTS(tmp$) THEN Msg "UV DRAW: couldn't write " + Tilde$(tmp$): EXIT FUNCTION
+    png$ = _READFILE$(tmp$): KILL tmp$
+    cmp$ = _DEFLATE$(pd$): pd$ = ""
+    payload$ = MKI$(1) + MKL$(LEN(hdr$) + nL * (26 + lsz) + 10) + cmp$
+    png$ = LEFT$(png$, LEN(png$) - 12) + UvBE$(LEN(payload$)) + "drAw" + payload$ + UvBE$(_CRC32("drAw" + payload$)) + RIGHT$(png$, 12)
+    IF _FILEEXISTS(dpath$) THEN KILL dpath$
+    fh = FREEFILE: OPEN dpath$ FOR BINARY AS #fh: PUT #fh, 1, png$: CLOSE #fh
+    ' The .uv: the picture, the layers' names, which pixels are which's
+    sig$ = UvSig$(dpath$)
+    own$ = SPACE$(aw * ah)
+    m = _MEM(uvOwn()): _MEMGET m, m.OFFSET, own$: _MEMFREE m
+    s$ = "BUV1" + LEFT$(sig$ + STRING$(20, 0), 20) + MKI$(LEN(picRef$(k))) + picRef$(k) + MKL$(aw) + MKL$(ah) + MKL$(cw) + MKL$(ch) + MKI$(uvLN)
+    FOR L = 1 TO uvLN: s$ = s$ + MKI$(LEN(uvLName$(L))) + uvLName$(L): NEXT
+    cmp$ = _DEFLATE$(own$)
+    s$ = s$ + MKL$(LEN(own$)) + MKL$(LEN(cmp$)) + cmp$
+    uvf$ = UvSidecar$(dpath$)
+    IF _FILEEXISTS(uvf$) THEN KILL uvf$
+    fh = FREEFILE: OPEN uvf$ FOR BINARY AS #fh: PUT #fh, 1, s$: CLOSE #fh
+    UvDrawFile = -1
+END FUNCTION
+
+' The palette: black, white, then the picture's commonest colours (30 at most) - as
+' DRAW wants it after the count (n: how many)
+FUNCTION UvPalette$ (k, n)
+    DIM i AS LONG, j AS LONG, h AS LONG, c AS _UNSIGNED LONG, r$, best AS LONG, bi AS LONG, t
+    REDIM hk(4095) AS _UNSIGNED LONG, hc(4095) AS LONG
+    FOR i = 0 TO picW(k) * picH(k) - 1
+        c = picPix(picOff(k) + i)
+        IF (c AND &HFF000000~&) >= &H80000000~& THEN
+            c = c OR &HFF000000~&
+            h = (c AND &HFFFFFF) MOD 4093
+            FOR j = 0 TO 4095
+                IF hc(h) = 0 THEN hk(h) = c: hc(h) = 1: EXIT FOR
+                IF hk(h) = c THEN hc(h) = hc(h) + 1: EXIT FOR
+                h = (h + 1) AND 4095
+            NEXT
+        END IF
+    NEXT
+    r$ = _MK$(_UNSIGNED LONG, &HFF000000~&) + _MK$(_UNSIGNED LONG, &HFFFFFFFF~&): n = 2
+    FOR t = 1 TO 30
+        best = 0: bi = -1
+        FOR h = 0 TO 4095
+            IF hc(h) > best THEN best = hc(h): bi = h
+        NEXT
+        IF bi < 0 THEN EXIT FOR
+        hc(bi) = -1
+        IF hk(bi) <> &HFF000000~& AND hk(bi) <> &HFFFFFFFF~& THEN r$ = r$ + _MK$(_UNSIGNED LONG, hk(bi)): n = n + 1
+    NEXT
+    UvPalette$ = r$
+END FUNCTION
+
+FUNCTION UvBE$ (v AS _UNSIGNED LONG)
+    UvBE$ = CHR$(_SHR(v, 24) AND 255) + CHR$(_SHR(v, 16) AND 255) + CHR$(_SHR(v, 8) AND 255) + CHR$(v AND 255)
+END FUNCTION
+
+FUNCTION UvSidecar$ (dpath$)
+    UvSidecar$ = LEFT$(dpath$, LEN(dpath$) - 5) + ".uv"
+END FUNCTION
+
+' A .draw as it is now, cheaply: its size and its last 16 bytes (the drAw chunk's check and the end)
+FUNCTION UvSig$ (path$)
+    DIM fh, n AS LONG, t$
+    IF NOT _FILEEXISTS(path$) THEN EXIT FUNCTION
+    fh = FREEFILE: OPEN path$ FOR BINARY AS #fh
+    n = LOF(fh)
+    IF n >= 16 THEN t$ = SPACE$(16): GET #fh, n - 15, t$
+    CLOSE #fh
+    IF n >= 16 THEN UvSig$ = MKL$(n) + t$
+END FUNCTION
+
+' ---------------------------------------------------------------- back from DRAW
+
+' A .draw saved in DRAW since bu1ld0r last read it: read before it's written again
+SUB UvSyncFirst (dpath$)
+    DIM uvf$, s$, fh
+    uvf$ = UvSidecar$(dpath$)
+    IF NOT _FILEEXISTS(dpath$) OR NOT _FILEEXISTS(uvf$) THEN EXIT SUB
+    s$ = SPACE$(20)
+    fh = FREEFILE: OPEN uvf$ FOR BINARY AS #fh: GET #fh, 5, s$: CLOSE #fh
+    IF s$ <> LEFT$(UvSig$(dpath$) + STRING$(20, 0), 20) THEN UvReadBack dpath$
+END SUB
+
+' The .draw at dpath$ (as DRAW saved it) read back: each side layer's own pixels into the picture
+SUB UvReadBack (dpath$)
+    DIM uvf$, s$, ps AS LONG, ref$, aw AS LONG, ah AS LONG, cw AS LONG, ch AS LONG, nL, L, i AS LONG, ol AS LONG, oc AS LONG, own$
+    DIM d$, cl AS _UNSIGNED LONG, ct$, payload$, dat$, ver, lc, nm$, ly, ltype, k, po AS LONG, x AS LONG, y AS LONG, got, fh, lsz AS LONG
+    DIM m AS _MEM, blk$, g AS LONG, w AS LONG, h AS LONG
+    uvf$ = UvSidecar$(dpath$)
+    IF NOT _FILEEXISTS(dpath$) OR NOT _FILEEXISTS(uvf$) THEN EXIT SUB
+    s$ = _READFILE$(uvf$)
+    IF LEFT$(s$, 4) <> "BUV1" THEN Msg "UV DRAW: " + Tilde$(uvf$) + " isn't bu1ld0r's": EXIT SUB
+    ps = 25
+    i = CVI(MID$(s$, ps, 2)): ref$ = MID$(s$, ps + 2, i): ps = ps + 2 + i
+    aw = CVL(MID$(s$, ps, 4)): ah = CVL(MID$(s$, ps + 4, 4)): cw = CVL(MID$(s$, ps + 8, 4)): ch = CVL(MID$(s$, ps + 12, 4)): ps = ps + 16
+    nL = CVI(MID$(s$, ps, 2)): ps = ps + 2
+    REDIM nms$(nL)
+    FOR L = 1 TO nL
+        i = CVI(MID$(s$, ps, 2)): nms$(L) = MID$(s$, ps + 2, i): ps = ps + 2 + i
+    NEXT
+    ol = CVL(MID$(s$, ps, 4)): oc = CVL(MID$(s$, ps + 4, 4)): own$ = _INFLATE$(MID$(s$, ps + 8, oc), ol)
+    IF LEN(own$) <> aw * ah THEN Msg "UV DRAW: " + Tilde$(uvf$) + " is damaged": EXIT SUB
+    k = PicFind(ref$)
+    IF k = 0 THEN EXIT SUB
+    IF picW(k) <> aw OR picH(k) <> ah THEN Msg "UV DRAW: pictures/" + ref$ + ".png isn't the size it was laid out at - not read back (UV DRAW again)": EXIT SUB
+    REDIM lqO(aw * ah - 1) AS _UNSIGNED _BYTE
+    m = _MEM(lqO()): _MEMPUT m, m.OFFSET, own$: _MEMFREE m
+    ' Each layer's box (only it is looked at)
+    REDIM bx0(nL) AS LONG, by0(nL) AS LONG, bx1(nL) AS LONG, by1(nL) AS LONG
+    FOR L = 1 TO nL: bx0(L) = aw: by0(L) = ah: bx1(L) = -1: by1(L) = -1: NEXT
+    FOR y = 0 TO ah - 1
+        FOR x = 0 TO aw - 1
+            L = lqO(y * aw + x)
+            IF L > 0 AND L <= nL THEN
+                IF x < bx0(L) THEN bx0(L) = x
+                IF x > bx1(L) THEN bx1(L) = x
+                IF y < by0(L) THEN by0(L) = y
+                IF y > by1(L) THEN by1(L) = y
+            END IF
+        NEXT
+    NEXT
+    ' The drAw chunk, unpacked
+    d$ = _READFILE$(dpath$): ps = 9
+    DO WHILE ps + 7 <= LEN(d$)
+        cl = CVL(MID$(d$, ps + 3, 1) + MID$(d$, ps + 2, 1) + MID$(d$, ps + 1, 1) + MID$(d$, ps, 1))
+        ct$ = MID$(d$, ps + 4, 4)
+        IF ct$ = "drAw" THEN payload$ = MID$(d$, ps + 8, cl): EXIT DO
+        IF ct$ = "IEND" OR cl > LEN(d$) THEN EXIT DO
+        ps = ps + 12 + cl
+    LOOP
+    d$ = ""
+    IF LEN(payload$) < 7 THEN Msg "UV DRAW: " + Tilde$(dpath$) + " has no layers in it (saved as a plain PNG?)": EXIT SUB
+    dat$ = _INFLATE$(MID$(payload$, 7), CVL(MID$(payload$, 3, 4))): payload$ = ""
+    IF LEFT$(dat$, 4) <> "DRW1" THEN Msg "UV DRAW: " + Tilde$(dpath$) + ": not DRAW's layers": EXIT SUB
+    ver = CVI(MID$(dat$, 5, 2)): w = CVL(MID$(dat$, 7, 4)): h = CVL(MID$(dat$, 11, 4))
+    IF ver > 30 THEN Msg "UV DRAW: " + Tilde$(dpath$) + " is from a newer DRAW (its version" + STR$(ver) + ") than bu1ld0r reads": EXIT SUB
+    IF w <> cw OR h <> ch THEN Msg "UV DRAW: its canvas was made a different size in DRAW - not read back (UV DRAW again)": EXIT SUB
+    ps = 15
+    i = CVI(MID$(dat$, ps, 2)): ps = ps + 2 + i * 4 + 4 ' (the palette, then the colours in use)
+    lc = CVI(MID$(dat$, ps, 2)): ps = ps + 4
+    lsz = cw * ch * 4
+    po = picOff(k)
+    REDIM lqA(cw * ch - 1) AS _UNSIGNED LONG
+    FOR ly = 1 TO lc
+        IF ver >= 28 THEN nm$ = MID$(dat$, ps, 64): ps = ps + 64 ELSE nm$ = MID$(dat$, ps, 16): ps = ps + 16
+        i = INSTR(nm$, CHR$(0)): IF i THEN nm$ = LEFT$(nm$, i - 1)
+        nm$ = _TRIM$(nm$)
+        ps = ps + 6 ' (shown, opacity, order)
+        IF ver >= 2 THEN ps = ps + 4
+        IF ver >= 7 THEN ps = ps + 4
+        ltype = 0
+        IF ver >= 24 THEN ltype = CVI(MID$(dat$, ps, 2)): ps = ps + 8
+        IF ver >= 25 THEN ps = ps + 18
+        IF ver >= 27 THEN ps = ps + 2
+        IF ltype <> 2 THEN ' (a group has no pixels)
+            IF ps + lsz - 1 > LEN(dat$) THEN EXIT FOR
+            FOR L = 1 TO nL
+                IF nms$(L) = nm$ THEN EXIT FOR
+            NEXT
+            IF L <= nL THEN
+                IF bx1(L) >= 0 THEN
+                    blk$ = MID$(dat$, ps, lsz)
+                    m = _MEM(lqA()): _MEMPUT m, m.OFFSET, blk$: _MEMFREE m
+                    blk$ = ""
+                    FOR y = by0(L) TO by1(L)
+                        FOR x = bx0(L) TO bx1(L)
+                            g = y * aw + x
+                            IF lqO(g) = L THEN picPix(po + g) = lqA(y * cw + x)
+                        NEXT
+                    NEXT
+                END IF
+                got = got + 1
+            END IF
+            ps = ps + lsz
+        END IF
+    NEXT
+    IF got = 0 THEN Msg "UV DRAW: none of the side layers are in " + Tilde$(dpath$) + " (renamed in DRAW?)": EXIT SUB
+    picDirty(k) = -1: PicSave k
+    viewDirty = -1
+    s$ = LEFT$(UvSig$(dpath$) + STRING$(20, 0), 20)
+    fh = FREEFILE: OPEN uvf$ FOR BINARY AS #fh: PUT #fh, 5, s$: CLOSE #fh
+    Msg "pictures/" + MID$(dpath$, LEN(PicDir$) + 1) + " saved in DRAW:" + STR$(got) + " layer" + IIFS$(got = 1, "", "s") + " brought back to pictures/" + ref$ + ".png" + IIFS$(got < nL, " (" + LTRIM$(STR$(nL - got)) + " not found)", "")
+END SUB
+
+' A .draw watched: each save in DRAW is read back
+SUB UvWatch (dpath$)
+    DIM i
+    FOR i = 1 TO uvWN
+        IF uvWD$(i) = dpath$ THEN uvWS$(i) = UvSig$(dpath$): uvWP$(i) = "": EXIT SUB
+    NEXT
+    IF uvWN >= UV_WMAX THEN
+        FOR i = 1 TO uvWN - 1: uvWD$(i) = uvWD$(i + 1): uvWS$(i) = uvWS$(i + 1): uvWP$(i) = uvWP$(i + 1): NEXT
+        uvWN = uvWN - 1
+    END IF
+    uvWN = uvWN + 1: uvWD$(uvWN) = dpath$: uvWS$(uvWN) = UvSig$(dpath$): uvWP$(uvWN) = ""
+END SUB
+
+' Each frame: twice a second, a watched .draw that's changed - and stayed so for half a
+' second (DRAW writes it in two goes) - read back
+SUB UvWatchFrame
+    DIM i, s$
+    IF uvWN = 0 THEN EXIT SUB
+    IF TIMER(0.001) < uvWNext# AND uvWNext# - TIMER(0.001) < 2 THEN EXIT SUB
+    uvWNext# = TIMER(0.001) + .5
+    FOR i = 1 TO uvWN
+        s$ = UvSig$(uvWD$(i))
+        IF LEN(s$) > 0 AND s$ <> uvWS$(i) THEN
+            IF s$ = uvWP$(i) THEN
+                uvWS$(i) = s$: uvWP$(i) = ""
+                UvReadBack uvWD$(i)
+            ELSE
+                uvWP$(i) = s$
+            END IF
+        END IF
+    NEXT
+END SUB

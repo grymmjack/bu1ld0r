@@ -1,0 +1,639 @@
+''
+' bu1ld0r - UI/BRTOOLS.BM
+' =============================================================================
+' Painting on the model: the tools that reach past the brush (BRTOOLS.BI).
+
+' ---------------------------------------------------------------- where things are
+
+' World point (x, y, z) on the view: (sx, sy), q as the depth buffer has it (1 / how far
+' ahead). 0: behind the eye
+FUNCTION BrToScreen (x#, y#, z#, sx#, sy#, q#)
+    DIM vx, vy, vz
+    CamSpace CSNG(x#), CSNG(y#), CSNG(z#), vx, vy, vz
+    IF vz < rNear THEN EXIT FUNCTION
+    sx# = cMidX + vx / vz * cFoc: sy# = cMidY - vy / vz * cFoc: q# = 1 / vz
+    BrToScreen = -1
+END FUNCTION
+
+' Part p can take paint (any part but a hole: a prefab put down only where its pixels are)
+FUNCTION BrPaintable (p)
+    IF p < 1 OR p > pN THEN EXIT FUNCTION
+    IF pHole(p) THEN EXIT FUNCTION
+    BrPaintable = -1
+END FUNCTION
+
+SUB BrNLAdd (t AS LONG)
+    brNN = brNN + 1
+    IF brNN > UBOUND(brNL) THEN REDIM _PRESERVE brNL(brNN + 1024) AS LONG
+    brNL(brNN) = t
+END SUB
+
+' Corner c (0-2) of triangle t
+SUB BrCorner (t AS LONG, c, x#, y#, z#)
+    SELECT CASE c
+        CASE 0: x# = tA(t).x: y# = tA(t).y: z# = tA(t).z
+        CASE 1: x# = tB(t).x: y# = tB(t).y: z# = tB(t).z
+        CASE ELSE: x# = tC(t).x: y# = tC(t).y: z# = tC(t).z
+    END SELECT
+END SUB
+
+' The triangles a tool reaches, into brNL (brGR: 0 the brush's, round (hx, hy, hz) - BrNear;
+' 1 t0's face; 2 t0's part; 3 the whole model; 4 those facing the eye whose corners' box on
+' the view meets brSB*)
+SUB BrGather (hx#, hy#, hz#, r#, t0 AS LONG)
+    DIM t AS LONG, p, f AS LONG, c, x#, y#, z#, sx#, sy#, q#, x0#, y0#, x1#, y1#, behind
+    DIM j AS LONG
+    IF brGR = 0 THEN
+        BrNear hx#, hy#, hz#, r#, t0
+        IF brFaceOnly AND brFK <> 0 THEN ' (ONE FACE: only the stroke's face)
+            j = 0
+            FOR t = 1 TO brNN
+                IF CLNG(tPart(brNL(t))) * 65536& + tFace(brNL(t)) = brFK THEN j = j + 1: brNL(j) = brNL(t)
+            NEXT
+            brNN = j
+        END IF
+        EXIT SUB
+    END IF
+    brNN = 0
+    IF brGR = 1 OR brGR = 2 THEN
+        IF t0 < 1 OR t0 > sceneTN THEN EXIT SUB
+        p = tPart(t0): f = tFace(t0)
+    END IF
+    FOR t = 1 TO sceneTN
+        IF BrPaintable(tPart(t)) THEN
+            SELECT CASE brGR
+                CASE 1: IF tPart(t) = p AND tFace(t) = f THEN BrNLAdd t
+                CASE 2: IF tPart(t) = p THEN BrNLAdd t
+                CASE 3: BrNLAdd t
+                CASE 4
+                    IF BrFacing(t) THEN
+                        x0# = 1E+30: y0# = 1E+30: x1# = -1E+30: y1# = -1E+30: behind = 0
+                        FOR c = 0 TO 2
+                            BrCorner t, c, x#, y#, z#
+                            IF BrToScreen(x#, y#, z#, sx#, sy#, q#) THEN
+                                IF sx# < x0# THEN x0# = sx#
+                                IF sx# > x1# THEN x1# = sx#
+                                IF sy# < y0# THEN y0# = sy#
+                                IF sy# > y1# THEN y1# = sy#
+                            ELSE
+                                behind = -1
+                            END IF
+                        NEXT
+                        IF behind THEN
+                            BrNLAdd t
+                        ELSEIF x1# >= brSBX0# AND x0# <= brSBX1# AND y1# >= brSBY0# AND y0# <= brSBY1# THEN
+                            BrNLAdd t
+                        END IF
+                    END IF
+            END SELECT
+        END IF
+    NEXT
+END SUB
+
+' ---------------------------------------------------------------- the pixels a tool reaches
+
+' The pixels the triangles in brNL show (any of each, each once), with where they are on
+' the model: bx*. Faces still wanting a place of their own (a prefab's) are left out
+SUB BrTexSet
+    DIM i AS LONG, t AS LONG, ok
+    bxN = 0: bxGen = bxGen + 1
+    IF UBOUND(bxMk) < UBOUND(picPix) THEN REDIM bxMk(UBOUND(picPix)) AS LONG: REDIM bxAt(UBOUND(picPix)) AS LONG
+    FOR i = 1 TO brNN
+        t = brNL(i): ok = -1
+        IF tTex(t) < 1 THEN ok = 0
+        IF ok THEN IF picW(tTex(t)) = 0 THEN ok = 0
+        IF ok THEN IF BrNeeds(t) THEN ok = 0
+        IF ok THEN BrTexTri t
+    NEXT
+END SUB
+
+SUB BrBxAdd (k, i AS LONG, g AS LONG, x#, y#, z#, t AS LONG, h!)
+    bxN = bxN + 1
+    IF bxN > UBOUND(bxK) THEN
+        REDIM _PRESERVE bxK(bxN * 2 + 4096) AS INTEGER: REDIM _PRESERVE bxI(bxN * 2 + 4096) AS LONG
+        REDIM _PRESERVE bxT(bxN * 2 + 4096) AS LONG: REDIM _PRESERVE bxF(bxN * 2 + 4096) AS LONG
+        REDIM _PRESERVE bxX(bxN * 2 + 4096) AS SINGLE: REDIM _PRESERVE bxY(bxN * 2 + 4096) AS SINGLE
+        REDIM _PRESERVE bxZ(bxN * 2 + 4096) AS SINGLE: REDIM _PRESERVE bxH(bxN * 2 + 4096) AS SINGLE
+    END IF
+    bxK(bxN) = k: bxI(bxN) = i: bxT(bxN) = t: bxF(bxN) = CLNG(tPart(t)) * 65536& + tFace(t)
+    bxX(bxN) = x#: bxY(bxN) = y#: bxZ(bxN) = z#: bxH(bxN) = h!
+    bxMk(g) = bxGen: bxAt(g) = bxN
+END SUB
+
+' Triangle t's pixels into the set: each it covers any of (a picture squashed to a line:
+' the one at its middle)
+SUB BrTexTri (t AS LONG)
+    DIM k, aw AS LONG, ah AS LONG, u0#, v0#, u1#, v1#, u2#, v2#, dn#, ix AS LONG, iy AS LONG, x0 AS LONG, x1 AS LONG, y0 AS LONG, y1 AS LONG
+    DIM w0#, w1#, w2#, ka0#, kb0#, ka1#, kb1#, ka2#, kb2#, tl0#, tl1#, tl2#, xc#, yc#, ox AS LONG, oy AS LONG, g AS LONG, h!
+    DIM x#, y#, z#
+    k = tTex(t): aw = picW(k): ah = picH(k)
+    h! = BrTexelW#(t)
+    u0# = tU(3 * t) * aw: v0# = tW(3 * t) * ah: u1# = tU(3 * t + 1) * aw: v1# = tW(3 * t + 1) * ah: u2# = tU(3 * t + 2) * aw: v2# = tW(3 * t + 2) * ah
+    dn# = (v1# - v2#) * (u0# - u2#) + (u2# - u1#) * (v0# - v2#)
+    IF ABS(dn#) < 1E-6 THEN
+        x# = (tA(t).x + tB(t).x + tC(t).x) / 3: y# = (tA(t).y + tB(t).y + tC(t).y) / 3: z# = (tA(t).z + tB(t).z + tC(t).z) / 3
+        BrTexelAt t, x#, y#, z#, ix, iy: g = picOff(k) + iy * aw + ix
+        IF bxMk(g) <> bxGen THEN BrBxAdd k, iy * aw + ix, g, x#, y#, z#, t, h!
+        EXIT SUB
+    END IF
+    x0 = INT(u0#): x1 = x0
+    IF INT(u1#) < x0 THEN x0 = INT(u1#)
+    IF INT(u2#) < x0 THEN x0 = INT(u2#)
+    IF INT(u1#) > x1 THEN x1 = INT(u1#)
+    IF INT(u2#) > x1 THEN x1 = INT(u2#)
+    y0 = INT(v0#): y1 = y0
+    IF INT(v1#) < y0 THEN y0 = INT(v1#)
+    IF INT(v2#) < y0 THEN y0 = INT(v2#)
+    IF INT(v1#) > y1 THEN y1 = INT(v1#)
+    IF INT(v2#) > y1 THEN y1 = INT(v2#)
+    x0 = x0 - 1: y0 = y0 - 1: x1 = x1 + 1: y1 = y1 + 1
+    IF (x1 - x0 + 1) * (y1 - y0 + 1) > 16 * aw * ah THEN EXIT SUB ' (repeated past all reason)
+    ka0# = (v1# - v2#) / dn#: kb0# = (u2# - u1#) / dn#: ka1# = (v2# - v0#) / dn#: kb1# = (u0# - u2#) / dn#
+    ka2# = -(ka0# + ka1#): kb2# = -(kb0# + kb1#)
+    tl0# = .5 * (ABS(ka0#) + ABS(kb0#)): tl1# = .5 * (ABS(ka1#) + ABS(kb1#)): tl2# = .5 * (ABS(ka2#) + ABS(kb2#))
+    FOR iy = y0 TO y1
+        yc# = iy + .5 - v2#
+        FOR ix = x0 TO x1
+            xc# = ix + .5 - u2#
+            w0# = ka0# * xc# + kb0# * yc#: w1# = ka1# * xc# + kb1# * yc#: w2# = 1 - w0# - w1#
+            IF w0# >= -tl0# AND w1# >= -tl1# AND w2# >= -tl2# THEN
+                ox = ix MOD aw: IF ox < 0 THEN ox = ox + aw
+                oy = iy MOD ah: IF oy < 0 THEN oy = oy + ah
+                g = picOff(k) + oy * aw + ox
+                IF bxMk(g) <> bxGen THEN
+                    BaryClamp w0#, w1#, w2#
+                    x# = w0# * tA(t).x + w1# * tB(t).x + w2# * tC(t).x
+                    y# = w0# * tA(t).y + w1# * tB(t).y + w2# * tC(t).y
+                    z# = w0# * tA(t).z + w1# * tB(t).z + w2# * tC(t).z
+                    BrBxAdd k, oy * aw + ox, g, x#, y#, z#, t, h!
+                END IF
+            END IF
+        NEXT
+    NEXT
+END SUB
+
+FUNCTION BrBxCol~& (s AS LONG)
+    BrBxCol~& = picPix(picOff(bxK(s)) + bxI(s))
+END FUNCTION
+
+' brSel: the set's pixels joined to pixel s0 that have its colour - neighbours on the
+' picture (the same face), and across faces by where they are on the model
+SUB BrFloodSel (s0 AS LONG)
+    DIM want AS _UNSIGNED LONG, hs#, cs#, hn AS LONG, s AS LONG, j AS LONG, sp AS LONG, k, aw AS LONG, ah AS LONG, i AS LONG, x AS LONG, y AS LONG
+    DIM cx AS LONG, cy AS LONG, cz AS LONG, dx, dy, dz, hk AS LONG, lim#, d#, g AS LONG, nb
+    want = BrBxCol~&(s0)
+    FOR s = 1 TO bxN: hs# = hs# + bxH(s): NEXT
+    cs# = 1.6 * hs# / bxN: IF cs# <= 0 THEN cs# = .001
+    hn = 1024
+    DO WHILE hn < bxN * 2: hn = hn * 2: LOOP
+    REDIM hd(hn - 1) AS LONG, nx(bxN) AS LONG, vis(bxN) AS _BYTE, stk(bxN) AS LONG
+    FOR s = 1 TO bxN
+        hk = BrCell&(INT(bxX(s) / cs#), INT(bxY(s) / cs#), INT(bxZ(s) / cs#), hn)
+        nx(s) = hd(hk): hd(hk) = s
+    NEXT
+    IF UBOUND(brSel) < bxN THEN REDIM brSel(bxN) AS LONG
+    brSelN = 0: sp = 1: stk(1) = s0: vis(s0) = 1
+    DO WHILE sp > 0
+        s = stk(sp): sp = sp - 1
+        brSelN = brSelN + 1: brSel(brSelN) = s
+        k = bxK(s): aw = picW(k): ah = picH(k): i = bxI(s): x = i MOD aw: y = i \ aw
+        FOR nb = 0 TO 3 ' (on the picture: its face's own neighbours)
+            j = 0
+            SELECT CASE nb
+                CASE 0: IF x > 0 THEN g = picOff(k) + i - 1: j = -1
+                CASE 1: IF x < aw - 1 THEN g = picOff(k) + i + 1: j = -1
+                CASE 2: IF y > 0 THEN g = picOff(k) + i - aw: j = -1
+                CASE 3: IF y < ah - 1 THEN g = picOff(k) + i + aw: j = -1
+            END SELECT
+            IF j THEN
+                IF bxMk(g) = bxGen THEN
+                    j = bxAt(g)
+                    IF vis(j) = 0 AND bxF(j) = bxF(s) THEN
+                        IF BrBxCol~&(j) = want THEN vis(j) = 1: sp = sp + 1: stk(sp) = j
+                    END IF
+                END IF
+            END IF
+        NEXT
+        cx = INT(bxX(s) / cs#): cy = INT(bxY(s) / cs#): cz = INT(bxZ(s) / cs#) ' (other faces': as near as a pixel and a half)
+        FOR dz = -1 TO 1
+            FOR dy = -1 TO 1
+                FOR dx = -1 TO 1
+                    j = hd(BrCell&(cx + dx, cy + dy, cz + dz, hn))
+                    DO WHILE j > 0
+                        IF vis(j) = 0 AND bxF(j) <> bxF(s) THEN
+                            lim# = bxH(s): IF bxH(j) > lim# THEN lim# = bxH(j)
+                            lim# = lim# * 1.5
+                            d# = (bxX(j) - bxX(s)) ^ 2 + (bxY(j) - bxY(s)) ^ 2 + (bxZ(j) - bxZ(s)) ^ 2
+                            IF d# <= lim# * lim# THEN
+                                IF BrBxCol~&(j) = want THEN vis(j) = 1: sp = sp + 1: stk(sp) = j
+                            END IF
+                        END IF
+                        j = nx(j)
+                    LOOP
+                NEXT
+            NEXT
+        NEXT
+    LOOP
+END SUB
+
+FUNCTION BrCell& (x AS LONG, y AS LONG, z AS LONG, hn AS LONG)
+    DIM h AS _INTEGER64
+    h = (x * 73856093&&) XOR (y * 19349663&&) XOR (z * 83492791&&)
+    BrCell& = h AND (hn - 1)
+END FUNCTION
+
+' REACH at view pixel (lx, ly): its faces made ready, their pixels found (bx*) and the
+' ones the tool changes listed (brSel). 0: nothing there to paint
+FUNCTION BrReachAt (lx, ly)
+    DIM t AS LONG, hit AS V3, ok, hx#, hy#, hz#, ix AS LONG, iy AS LONG, k, g AS LONG, i AS LONG
+    t = PickTri(lx, ly): IF t < 1 OR t > sceneTN THEN EXIT FUNCTION
+    IF BrPaintable(tPart(t)) = 0 THEN brWarn$ = "A hole's walls take no paint - APPLY the hole (A) first": EXIT FUNCTION
+    RayPlane lx, ly, tA(t), tNrm(t), hit, ok: IF ok = 0 THEN EXIT FUNCTION
+    hx# = hit.x: hy# = hit.y: hz# = hit.z
+    brGR = brReach: IF brGR = 0 THEN brGR = 2 ' (COLOUR: looked for over the part)
+    IF brFaceOnly THEN brGR = 1
+    IF BrReady(hx#, hy#, hz#, 0, t) THEN
+        ViewRender
+        t = BrTriAt&(hx#, hy#, hz#)
+        IF t = 0 THEN brGR = 0: EXIT FUNCTION
+    END IF
+    BrGather hx#, hy#, hz#, 0, t: brGR = 0
+    BrTexSet
+    IF bxN = 0 THEN EXIT FUNCTION
+    IF brReach = 0 THEN
+        IF tTex(t) < 1 THEN EXIT FUNCTION
+        IF BrNeeds(t) THEN EXIT FUNCTION
+        k = tTex(t): BrTexelAt t, hx#, hy#, hz#, ix, iy
+        g = picOff(k) + iy * picW(k) + ix
+        IF bxMk(g) <> bxGen THEN EXIT FUNCTION
+        BrFloodSel bxAt(g)
+    ELSE
+        IF UBOUND(brSel) < bxN THEN REDIM brSel(bxN) AS LONG
+        FOR i = 1 TO bxN: brSel(i) = i: NEXT
+        brSelN = bxN
+    END IF
+    BrReachAt = -1
+END FUNCTION
+
+SUB BrBxSet (s AS LONG, c AS _UNSIGNED LONG)
+    DIM k, aw AS LONG
+    k = bxK(s): aw = picW(k)
+    BrSet k, bxI(s) MOD aw, bxI(s) \ aw, c, 0
+END SUB
+
+FUNCTION BrReachName$
+    SELECT CASE brReach
+        CASE 0: BrReachName$ = "colour joined to it"
+        CASE 1: BrReachName$ = "face"
+        CASE 2: BrReachName$ = "part"
+        CASE ELSE: BrReachName$ = "whole model"
+    END SELECT
+END FUNCTION
+
+' ---------------------------------------------------------------- FILL, MAKE, FILTERS
+
+' FILL: the REACH at (lx, ly) the first colour
+SUB BrFillReach (lx, ly)
+    DIM i AS LONG, c AS _UNSIGNED LONG
+    IF BrReachAt(lx, ly) = 0 THEN EXIT SUB
+    c = pntFg OR &HFF000000~&
+    FOR i = 1 TO brSelN: BrBxSet brSel(i), c: NEXT
+    viewDirty = -1: mdlDirty = -1
+END SUB
+
+' The painter's pixel routines pointed at image img& (w x h) - free pntM after
+SUB BrPntBorrow (img&)
+    pntM = _MEMIMAGE(img&): pntW = _WIDTH(img&): pntH = _HEIGHT(img&)
+END SUB
+
+' MAKE: the pattern made from the two colours (as the painter's) laid over the REACH by
+' where each pixel is on the model - each face takes it flat from the side it faces most,
+' so it runs on round a box's corners. Shift: over what's there, by STR
+SUB BrMakeAt (lx, ly)
+    DIM img&, i AS LONG, s AS LONG, n AS V3, a#, b#, h#, tx AS LONG, ty AS LONG, c AS _UNSIGNED LONG, over
+    IF brMakeK < 1 THEN brMakeK = 7
+    IF BrReachAt(lx, ly) = 0 THEN EXIT SUB
+    over = kShift
+    img& = _NEWIMAGE(BR_TILE, BR_TILE, 32): BrPntBorrow img&
+    PntMake brMakeK, 0
+    REDIM tl(BR_TILE * BR_TILE - 1) AS _UNSIGNED LONG
+    FOR i = 0 TO BR_TILE * BR_TILE - 1: tl(i) = PntGet~&(i MOD BR_TILE, i \ BR_TILE): NEXT
+    _MEMFREE pntM: _FREEIMAGE img&
+    FOR i = 1 TO brSelN: h# = h# + bxH(brSel(i)): NEXT
+    h# = h# / brSelN: IF h# <= 0 THEN h# = .01
+    FOR i = 1 TO brSelN
+        s = brSel(i): n = tNrm(bxT(s))
+        IF ABS(n.x) >= ABS(n.y) AND ABS(n.x) >= ABS(n.z) THEN
+            a# = bxZ(s): b# = -bxY(s)
+        ELSEIF ABS(n.y) >= ABS(n.z) THEN
+            a# = bxX(s): b# = bxZ(s)
+        ELSE
+            a# = bxX(s): b# = -bxY(s)
+        END IF
+        tx = INT(a# / h#) MOD BR_TILE: IF tx < 0 THEN tx = tx + BR_TILE
+        ty = INT(b# / h#) MOD BR_TILE: IF ty < 0 THEN ty = ty + BR_TILE
+        c = tl(ty * BR_TILE + tx)
+        IF over THEN c = PntMix~&(BrBxCol~&(s), c, pntFx / 100)
+        BrBxSet s, c OR &HFF000000~&
+    NEXT
+    viewDirty = -1: mdlDirty = -1
+    Msg PntMakeName$(brMakeK) + " on the " + BrReachName$ + IIFS$(over, " over what was there at" + STR$(pntFx) + "%", "") + " - click again: another one. Ctrl+Z: as it was"
+END SUB
+
+' FILTERS: the REACH's pixels changed as the painter's filter changes a picture
+SUB BrFilterAt (lx, ly)
+    DIM img&, i AS LONG, s AS LONG, k, j, m AS _MEM, mi AS _MEM, n AS LONG
+    IF brFiltK < 1 THEN brFiltK = 1
+    IF BrReachAt(lx, ly) = 0 THEN EXIT SUB
+    REDIM done(picN) AS _BYTE
+    FOR i = 1 TO brSelN
+        k = bxK(brSel(i))
+        IF done(k) = 0 THEN
+            done(k) = 1: n = picW(k) * picH(k)
+            img& = _NEWIMAGE(picW(k), picH(k), 32): mi = _MEMIMAGE(img&)
+            m = _MEM(picPix()): _MEMCOPY m, m.OFFSET + picOff(k) * 4, n * 4 TO mi, mi.OFFSET: _MEMFREE m: _MEMFREE mi
+            BrPntBorrow img&
+            PntFilter brFiltK
+            REDIM res(n - 1) AS _UNSIGNED LONG
+            FOR j = 0 TO n - 1: res(j) = PntGet~&(j MOD picW(k), j \ picW(k)): NEXT
+            _MEMFREE pntM: _FREEIMAGE img&
+            FOR j = i TO brSelN
+                s = brSel(j)
+                IF bxK(s) = k THEN BrBxSet s, res(bxI(s))
+            NEXT
+        END IF
+    NEXT
+    viewDirty = -1: mdlDirty = -1
+    Msg PntFilterName$(brFiltK) + " on the " + BrReachName$ + " - Ctrl+Z: as it was"
+END SUB
+
+' ---------------------------------------------------------------- GRADIENT
+
+' A press: the REACH found, each pixel's place on the view kept; fitted to them by the way
+' (V H D R M) until the pointer is dragged - then from the press to the pointer
+SUB BrGradPress (lx, ly)
+    DIM i AS LONG, s AS LONG, sx#, sy#, q#, x0!, y0!, x1!, y1!, mx!, my!
+    IF BrReachAt(lx, ly) = 0 THEN EXIT SUB
+    IF UBOUND(brGX) < brSelN THEN REDIM brGX(brSelN) AS SINGLE: REDIM brGY(brSelN) AS SINGLE
+    x0! = 1E+30: y0! = 1E+30: x1! = -1E+30: y1! = -1E+30
+    FOR i = 1 TO brSelN
+        s = brSel(i)
+        IF BrToScreen(CDBL(bxX(s)), CDBL(bxY(s)), CDBL(bxZ(s)), sx#, sy#, q#) = 0 THEN sx# = lx: sy# = ly
+        brGX(i) = sx#: brGY(i) = sy#
+        IF sx# < x0! THEN x0! = sx#
+        IF sx# > x1! THEN x1! = sx#
+        IF sy# < y0! THEN y0! = sy#
+        IF sy# > y1! THEN y1! = sy#
+    NEXT
+    mx! = (x0! + x1!) / 2: my! = (y0! + y1!) / 2
+    SELECT CASE pntWay$
+        CASE "V": brGSX! = mx!: brGSY! = y0!: brGEX! = mx!: brGEY! = y1!
+        CASE "H": brGSX! = x0!: brGSY! = my!: brGEX! = x1!: brGEY! = my!
+        CASE "D": brGSX! = x0!: brGSY! = y0!: brGEX! = x1!: brGEY! = y1!
+        CASE "R": brGSX! = mx!: brGSY! = my!: brGEX! = x1!: brGEY! = y1!
+        CASE ELSE: brGSX! = mx!: brGSY! = my!: brGEX! = mx!: brGEY! = y1!
+    END SELECT
+    brSh = 2: brSX0 = lx: brSY0 = ly: brGMoved = 0
+    BrGradPaint
+END SUB
+
+' Each frame of the drag
+SUB BrGradDrag (lx, ly)
+    IF brGMoved = 0 THEN
+        IF ABS(lx - brSX0) + ABS(ly - brSY0) < 3 THEN EXIT SUB
+        brGMoved = -1
+    END IF
+    IF lx = brSX1 AND ly = brSY1 THEN EXIT SUB
+    brSX1 = lx: brSY1 = ly
+    brGSX! = brSX0: brGSY! = brSY0: brGEX! = lx: brGEY! = ly
+    BrGradPaint
+END SUB
+
+' The gradient painted on its pixels, as the painter's (PAD / REP / BNC, how many times)
+SUB BrGradPaint
+    DIM i AS LONG, px!, py!, dx!, dy!, l2!, t!, u!, a AS _UNSIGNED LONG, b AS _UNSIGNED LONG
+    a = pntFg: b = pntBg
+    dx! = brGEX! - brGSX!: dy! = brGEY! - brGSY!: l2! = dx! * dx! + dy! * dy!: IF l2! < 1E-6 THEN l2! = 1E-6
+    IF pntGRep < 1 THEN pntGRep = 1
+    FOR i = 1 TO brSelN
+        px! = brGX(i) - brGSX!: py! = brGY(i) - brGSY!
+        IF pntWay$ = "R" THEN
+            t! = SQR((px! * px! + py! * py!) / l2!)
+        ELSE
+            t! = (px! * dx! + py! * dy!) / l2!
+            IF pntWay$ = "M" THEN t! = ABS(t!)
+        END IF
+        IF pntGSpread = 0 THEN
+            IF t! < 0 THEN t! = 0
+            IF t! > 1 THEN t! = 1
+        END IF
+        u! = t! * pntGRep
+        IF pntGSpread = 2 THEN
+            u! = u! - 2 * INT(u! / 2): IF u! > 1 THEN u! = 2 - u!
+        ELSEIF u! <> pntGRep OR pntGSpread <> 0 THEN
+            u! = u! - INT(u!)
+        ELSE
+            u! = 1
+        END IF
+        BrBxSet brSel(i), PntMix~&(a, b, u!) OR &HFF000000~&
+    NEXT
+    viewDirty = -1: mdlDirty = -1
+END SUB
+
+' ---------------------------------------------------------------- LINE, BOX, ELLIPSE
+
+' The drag's box on the view (Shift: square / a line at 45 degrees; Ctrl: from its middle)
+SUB BrShapeBox (x0, y0, x1, y1)
+    DIM dx, dy, m, a
+    x0 = brSX0: y0 = brSY0: x1 = brSX1: y1 = brSY1
+    dx = x1 - x0: dy = y1 - y0
+    IF kShift THEN
+        IF brTool = BR_LINE THEN
+            a = _ATAN2(dy, dx): a = INT(a / (_PI / 4) + .5) * (_PI / 4): m = SQR(dx * dx + dy * dy)
+            x1 = x0 + COS(a) * m: y1 = y0 + SIN(a) * m: EXIT SUB
+        END IF
+        m = ABS(dx): IF ABS(dy) > m THEN m = ABS(dy)
+        x1 = x0 + SGN(dx) * m: y1 = y0 + SGN(dy) * m
+        IF dx = 0 THEN x1 = x0 + m
+        IF dy = 0 THEN y1 = y0 + m
+    END IF
+    IF kCtrl AND brTool <> BR_LINE THEN x0 = 2 * brSX0 - x1: y0 = 2 * brSY0 - y1
+END SUB
+
+' Point k of n round the drag's ellipse
+SUB BrEllPt (k, n, x0, y0, x1, y1, x, y)
+    DIM a
+    a = k / n * 2 * _PI
+    x = (x0 + x1) / 2 + COS(a) * (x1 - x0) / 2: y = (y0 + y1) / 2 + SIN(a) * (y1 - y0) / 2
+END SUB
+
+' TILT: the face pressed on - the plane a box / ellipse lies in, its across and up
+' (as a picture put on it has them). Off, or pressed off the model: drawn on the screen
+SUB BrShapePlane (lx, ly)
+    DIM t AS LONG, hit AS V3, ok, nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+    brPlOn = 0
+    IF brTilt = 0 OR brTool = BR_LINE THEN EXIT SUB
+    t = PickTri(lx, ly): IF t < 1 OR t > sceneTN THEN EXIT SUB
+    RayPlane lx, ly, tA(t), tNrm(t), hit, ok: IF ok = 0 THEN EXIT SUB
+    nx# = tNrm(t).x: ny# = tNrm(t).y: nz# = tNrm(t).z
+    PicAxes nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
+    brPOX# = hit.x: brPOY# = hit.y: brPOZ# = hit.z: brPNX# = nx#: brPNY# = ny#: brPNZ# = nz#
+    brPAX# = rx#: brPAY# = ry#: brPAZ# = rz#: brPBX# = ux#: brPBY# = uy#: brPBZ# = uz#
+    brPA1# = 0: brPB1# = 0: brPlOn = -1
+END SUB
+
+' The box / ellipse being dragged as points on the view (brQX / brQY, brQN of them, round
+' it): on the screen, or (TILT) lying on the face pressed on. Shift: square / round; Ctrl:
+' from the middle
+SUB BrShapePts
+    DIM x0, y0, x1, y1, k, n, a0#, b0#, a1#, b1#, m#, o AS V3, nn AS V3, hit AS V3, ok, a#, b#, x#, y#, z#, sx#, sy#, q#
+    IF brTool = BR_BOX THEN n = 4 ELSE n = 72
+    IF UBOUND(brQX) < n THEN REDIM brQX(n) AS SINGLE: REDIM brQY(n) AS SINGLE
+    brQN = 0
+    IF brPlOn = 0 THEN
+        BrShapeBox x0, y0, x1, y1
+        FOR k = 0 TO n - 1
+            IF brTool = BR_BOX THEN
+                brQX(k) = IIF(k = 0 OR k = 3, x0, x1): brQY(k) = IIF(k < 2, y0, y1)
+            ELSE
+                BrEllPt k, n, x0, y0, x1, y1, brQX(k), brQY(k)
+            END IF
+        NEXT
+        brQN = n: EXIT SUB
+    END IF
+    o.x = brPOX#: o.y = brPOY#: o.z = brPOZ#: nn.x = brPNX#: nn.y = brPNY#: nn.z = brPNZ#
+    RayPlane brSX1, brSY1, o, nn, hit, ok
+    IF ok THEN ' (where the pointer is, on the face's plane: across and up from the press)
+        brPA1# = (hit.x - brPOX#) * brPAX# + (hit.y - brPOY#) * brPAY# + (hit.z - brPOZ#) * brPAZ#
+        brPB1# = (hit.x - brPOX#) * brPBX# + (hit.y - brPOY#) * brPBY# + (hit.z - brPOZ#) * brPBZ#
+    END IF
+    a1# = brPA1#: b1# = brPB1#
+    IF kShift THEN
+        m# = ABS(a1#): IF ABS(b1#) > m# THEN m# = ABS(b1#)
+        a1# = IIF(a1# < 0, -m#, m#): b1# = IIF(b1# < 0, -m#, m#)
+    END IF
+    IF kCtrl THEN a0# = -a1#: b0# = -b1#
+    FOR k = 0 TO n - 1
+        IF brTool = BR_BOX THEN
+            a# = IIF(k = 0 OR k = 3, a0#, a1#): b# = IIF(k < 2, b0#, b1#)
+        ELSE
+            a# = (a0# + a1#) / 2 + COS(k / n * 2 * _PI) * (a1# - a0#) / 2
+            b# = (b0# + b1#) / 2 + SIN(k / n * 2 * _PI) * (b1# - b0#) / 2
+        END IF
+        x# = brPOX# + a# * brPAX# + b# * brPBX#: y# = brPOY# + a# * brPAY# + b# * brPBY#: z# = brPOZ# + a# * brPAZ# + b# * brPBZ#
+        IF BrToScreen(x#, y#, z#, sx#, sy#, q#) = 0 THEN EXIT SUB
+        brQX(k) = sx#: brQY(k) = sy#
+    NEXT
+    brQN = n
+END SUB
+
+' (sx, sy) is inside brQ (it goes round one way, and doesn't fold)
+FUNCTION BrInQ (sx#, sy#)
+    DIM k, j, c#, sg
+    FOR k = 0 TO brQN - 1
+        j = (k + 1) MOD brQN
+        c# = (brQX(j) - brQX(k)) * (sy# - brQY(k)) - (brQY(j) - brQY(k)) * (sx# - brQX(k))
+        IF c# > 1E-9 THEN
+            IF sg < 0 THEN EXIT FUNCTION
+            sg = 1
+        ELSEIF c# < -1E-9 THEN
+            IF sg > 0 THEN EXIT FUNCTION
+            sg = -1
+        END IF
+    NEXT
+    BrInQ = -1
+END FUNCTION
+
+' Let go: the shape painted - its outline with the brush, or filled
+SUB BrShapeDo
+    DIM x0, y0, x1, y1, k, j
+    BrStrokeBegin
+    IF brFaceOnly THEN BrFaceStart brSX0, brSY0 ' (ONE FACE: the face pressed on, not the outline's first point)
+    IF brTool = BR_LINE THEN
+        BrShapeBox x0, y0, x1, y1
+        BrDab x0, y0: BrLine x0, y0, x1, y1
+        brLX = x1: brLY = y1
+    ELSE
+        BrShapePts
+        IF brQN >= 3 THEN
+            IF brFilled THEN
+                BrShapeFill
+            ELSE
+                BrDab brQX(0), brQY(0)
+                FOR k = 1 TO brQN
+                    j = k MOD brQN: BrLine brQX(k - 1), brQY(k - 1), brQX(j), brQY(j)
+                NEXT
+            END IF
+            brLX = brQX(0): brLY = brQY(0)
+        END IF
+    END IF
+    BrStrokeEnd
+    brHas = -1
+END SUB
+
+' A filled box / ellipse: every pixel of the faces the view shows inside it (brQ)
+SUB BrShapeFill
+    DIM i AS LONG, s AS LONG, sx#, sy#, q#, ix AS LONG, iy AS LONG, ok, c AS _UNSIGNED LONG, k
+    DIM t AS LONG, hit AS V3, hx#, hy#, hz#, x0#, y0#, x1#, y1#
+    x0# = 1E+30: y0# = 1E+30: x1# = -1E+30: y1# = -1E+30
+    FOR k = 0 TO brQN - 1
+        IF brQX(k) < x0# THEN x0# = brQX(k)
+        IF brQX(k) > x1# THEN x1# = brQX(k)
+        IF brQY(k) < y0# THEN y0# = brQY(k)
+        IF brQY(k) > y1# THEN y1# = brQY(k)
+    NEXT
+    IF x1# - x0# < 1 OR y1# - y0# < 1 THEN EXIT SUB
+    IF brFaceOnly THEN ' (ONE FACE: the face pressed on)
+        t = PickTri(brSX0, brSY0): IF t < 1 OR t > sceneTN THEN Msg "ONE FACE: start the shape on the face to fill": EXIT SUB
+        IF BrPaintable(tPart(t)) = 0 THEN EXIT SUB
+        RayPlane brSX0, brSY0, tA(t), tNrm(t), hit, ok: IF ok = 0 THEN EXIT SUB
+        hx# = hit.x: hy# = hit.y: hz# = hit.z: brGR = 1
+        IF BrReady(hx#, hy#, hz#, 0, t) THEN
+            ViewRender
+            t = BrTriAt&(hx#, hy#, hz#): IF t = 0 THEN brGR = 0: EXIT SUB
+        END IF
+        BrGather hx#, hy#, hz#, 0, t: brGR = 0
+    ELSE
+        brSBX0# = x0#: brSBY0# = y0#: brSBX1# = x1#: brSBY1# = y1#: brGR = 4
+        IF BrReady(0, 0, 0, 0, 0) THEN ViewRender
+        BrGather 0, 0, 0, 0, 0: brGR = 0
+    END IF
+    BrTexSet
+    c = pntFg OR &HFF000000~&
+    FOR s = 1 TO bxN
+        IF BrToScreen(CDBL(bxX(s)), CDBL(bxY(s)), CDBL(bxZ(s)), sx#, sy#, q#) THEN
+            ok = (sx# >= x0# AND sx# <= x1# AND sy# >= y0# AND sy# <= y1#)
+            IF ok THEN ok = BrInQ(sx#, sy#)
+            IF ok THEN ' (seen there: nothing nearer in front of it)
+                ix = INT(sx#): iy = INT(sy#)
+                IF ix >= 0 AND iy >= 0 AND ix < vW AND iy < vH THEN
+                    IF rZ(iy * vW + ix) > q# * 1.004 + .00001 THEN ok = 0
+                END IF
+            END IF
+            IF ok THEN BrBxSet s, c
+        END IF
+    NEXT
+    viewDirty = -1: mdlDirty = -1
+END SUB
+
+' The drag drawn over the view: the shape, or the gradient's line and ends
+SUB BrShapeOverlay
+    DIM x0, y0, x1, y1, k, j, c AS _UNSIGNED LONG
+    c = _RGBA32(255, 255, 255, 220)
+    IF brSh = 1 THEN
+        IF brTool = BR_LINE THEN
+            BrShapeBox x0, y0, x1, y1
+            LINE (x0 + vX0, y0 + vY0)-(x1 + vX0, y1 + vY0), c
+        ELSE
+            BrShapePts
+            FOR k = 0 TO brQN - 1
+                j = (k + 1) MOD brQN
+                LINE (brQX(k) + vX0, brQY(k) + vY0)-(brQX(j) + vX0, brQY(j) + vY0), c
+            NEXT
+        END IF
+    ELSEIF brSh = 2 THEN
+        LINE (vX0 + brGSX!, vY0 + brGSY!)-(vX0 + brGEX!, vY0 + brGEY!), c
+        LINE (vX0 + brGSX! - 3, vY0 + brGSY! - 3)-STEP(6, 6), pntFg, BF: LINE (vX0 + brGSX! - 3, vY0 + brGSY! - 3)-STEP(6, 6), c, B
+        LINE (vX0 + brGEX! - 3, vY0 + brGEY! - 3)-STEP(6, 6), pntBg, BF: LINE (vX0 + brGEX! - 3, vY0 + brGEY! - 3)-STEP(6, 6), c, B
+    END IF
+END SUB

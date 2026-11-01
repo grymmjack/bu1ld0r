@@ -44,6 +44,8 @@ SUB AppStart
             CASE "--keylog": i = i + 1: argKeyLog$ = COMMAND$(i) ' (each key taken: a line - the key, the numpad's, the view after: tests)
             CASE "--bench": i = i + 1: argBench = VAL(COMMAND$(i)) ' (the model made N times: bench.txt says how long)
             CASE "--neon": i = i + 1: neonDir$ = COMMAND$(i)
+            CASE "--uvdraw": argUv = -1 ' (every part's faces written as a DRAW file, DRAW not run: tests)
+            CASE "--uvback": i = i + 1: argUvBack$ = COMMAND$(i) ' (a .draw read back, as if DRAW saved it: tests)
             CASE ELSE
                 k$ = LCASE$(RIGHT$(a$, 4))
                 IF k$ = ".bld" OR k$ = ".obj" OR k$ = ".svg" THEN argOpen$ = a$
@@ -58,6 +60,11 @@ SUB AppStart
     IF LEN(argOpen$) THEN
         ModelLoad argOpen$ ' (its message says how it went)
         IF argBench > 0 THEN Bench argBench
+        IF LEN(argUvBack$) THEN UvReadBack argUvBack$
+        IF argUv THEN
+            FOR i = 1 TO pN: pSel(i) = -1: NEXT
+            UvExport
+        END IF
     ELSE
         ModelNew
         Msg "Pick a shape on the left (or 1-6), click on the grid to put it down. H: every key"

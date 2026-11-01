@@ -24,7 +24,9 @@ them, so you can change one and export it back.
 The bin starts with a set of prefabs in `starter/`: toggle, button, knob,
 dial, screen, vent, handle, pipes (straight, elbow, T), lamp and antenna.
 
-A face's picture can be painted right here (Ctrl+P): pencil, brush,
+Paint straight onto the model in the 3D view (Shift+P) - with a mouse or
+a graphics tablet: faces with no picture get one made for them, unwrapped
+automatically. A face's picture can also be painted flat (Ctrl+P): pencil, brush,
 shapes, fills, gradients, mirrors, and textures made from two colours
 (brick, wood, noise, plates...). An SVG opens as a model: each filled
 shape made thick, ready to extrude, inset and bevel. Draw your own flat
@@ -312,6 +314,100 @@ drop it. The first row always goes back to the tab's own folder.
 ![TILED: the picture seen with its neighbours, as it repeats on a face](docs/screenshots/paint-tiled.png)
 
 ![Back in the view: the wood picture saved and on the box's face](docs/screenshots/paint-face.png)
+
+### Painting on the model
+
+![Painting on the model: MAKE BRICK over the whole model, a filled ellipse and a brush stroke - the panel's PAINT page on the right](docs/screenshots/paint-model.png)
+
+Shift+P (or PAINT in the top bar) paints straight onto the model in the 3D
+view - a mouse or a graphics tablet. The view still turns (right drag),
+pans (middle drag) and zooms (wheel); the left button paints, and a stroke
+runs on across faces and parts.
+
+1. Pick a tool in the panel (or its key): PENCIL (P, one pixel), BRUSH (B,
+   `[ ]` its size in pixels), ERASE (E, back to what was there when painting
+   began), LINE (L), BOX (R), ELLIPSE (O), FILL (F), GRADIENT (G), PICK (I,
+   or Ctrl+click with any tool). Shift+click draws a line from the last
+   place painted. The colours are the flat painter's.
+   - LINE, BOX and ELLIPSE are dragged on the view and painted onto what's
+     under them, with the brush's size; FILLED (or Shift+R / Shift+O) fills
+     them - every face the view shows inside. Shift makes a square or a
+     circle (a line at 45 degrees); Ctrl, once pressing, draws from the
+     middle.
+   - **ONE FACE** (K): each stroke, shape, fill, gradient, MAKE or filter
+     stays on the face it starts on (a shape: the face you press on), so
+     you can paint right up to an edge without spilling onto the next face.
+   - **TILT** (T): a box or ellipse lies on the face you press on, at that
+     face's angle, instead of square to the screen.
+   - FILL, GRADIENT, MAKE and FILTERS work on a **REACH**: COLOUR (the
+     colour clicked and all of it joined to it - across the part's faces,
+     not one picture), FACE, PART or ALL (the whole model).
+   - GRADIENT: drag across the model from the first colour to the second
+     (a click fits it to the REACH, by V H D R M); PAD / REP / BNC and how
+     many times, as in the painter.
+   - The MAKE page (Tab, or M): MAKE lays one of the painter's 14 patterns
+     - brick, wood, stone, plates... - over the REACH by where each pixel is
+     on the model, so it runs on round a box's corners (click again for
+     another; Shift+click lays it over what's there). FILTERS - blur,
+     emboss, pixelate... - change what's there. Pick one, then click the
+     model.
+2. Paint. A face with no picture gets one as you paint it, in its colour -
+   unwrapped for you, nothing to set up. A face with a picture is painted
+   where its pixels are, so its PNG changes (as the flat painter's does).
+3. **JUST HERE** (the usual): a face sharing its pixels with another face -
+   a crate whose front and back show the same picture, a picture repeated
+   across a face - gets a copy of its own first, pixel for pixel, so the
+   paint stays on the face you paint. **EVERYWHERE** paints the shared
+   pixels where they are: every face showing them changes.
+4. Copies and new pictures go where the model's one picture is
+   see-through, or else into `pictures/paint/MODEL.png` (256 square, as the
+   game's textures). NEW PLACES sets their pixels a cell (AUTO: as the
+   model's pictures already are).
+5. Ctrl+Z / Ctrl+Y undo and redo a stroke (or a fill, shape, MAKE...). Ctrl+S saves the model and
+   every picture painted. Esc (or Shift+P) is done.
+
+A prop that ends up with more than one picture is exported with them
+shrunk together into one texture (a 2 x 2 or 4 x 4 grid), as before - so
+for a game prop, EVERYWHERE keeps it at its one full-size texture.
+
+### Painting the model's pictures in DRAW (UV DRAW)
+
+Painting on the model is one way; the other is the usual one in 3D
+programs: the model's faces laid out flat on one picture (its "UV map": U
+and V are a picture's across and down, as X, Y, Z are the world's) and
+painted in a paint program. bu1ld0r does that with DRAW:
+
+1. Select the parts (one, several, or Ctrl+A for all) and press Ctrl+U
+   (or UV DRAW in the panel).
+2. DRAW opens `pictures/uv/MODEL-PART.draw`. Each **side** - a flat run of
+   faces, like a box's top, or one slice of a cylinder - is its own layer,
+   named by its number and the way it faces (`3 FRONT`, `5 TOP`...).
+   Above them are three guide layers: OUTLINES (each side's edge, in its
+   colour), NUMBERS (each side's number on it) and LEGEND (a column beside
+   the picture: every number, which way it faces, which part).
+3. Paint each side on its own layer, and press Ctrl+S in DRAW. bu1ld0r
+   (watching the file) puts each side layer's pixels back on the model at
+   once. Only a layer's own side is read: paint that spills past its
+   outline, and the guide layers, are left out - so hide them, keep them,
+   paint over them, it doesn't matter.
+
+The faces need pixels of their own first. If they already have them (all
+on one picture, no two faces sharing pixels) the picture is used as it is,
+and other parts' pixels on it show dimmed on a layer called OTHER PARTS
+(not read back). Otherwise every side is given a place in a new picture,
+`pictures/uv/MODEL-PART.png`: pixel for pixel where its picture sits
+evenly on it (a crate's planks stay exactly as they were), else laid out
+flat as big as its pixels are now (a face with no picture: in its colour).
+That's one undo step. The picture is 256 square if they fit, bigger if
+not (up to 2048).
+
+A round part has many sides (a 64-slice cylinder: 66), and each layer is
+the whole picture's size, so past 60 sides - or fewer on a big picture -
+the sides share a layer for each way they face (`FRONT`, `BACK-LEFT`...);
+the numbers and legend still tell them apart. Don't rename the side
+layers or change the canvas size in DRAW: that's how bu1ld0r finds them.
+If DRAW saved the file while bu1ld0r wasn't running, the next UV DRAW of
+those parts reads it back first rather than overwrite it.
 
 ### Materials: glass, neon, metal...
 
@@ -737,7 +833,8 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 
 | Keys | What it does |
 |---|---|
-| EDIT IN DRAW | (E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first. Save it in DRAW (Ctrl+S) and it shows here straight away |
+| EDIT IN DRAW | (E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first; a picture other faces show too (UV DRAW's): the picked faces' pixels copied to a picture of their own first. Save it in DRAW (Ctrl+S) and it shows here straight away |
+| Ctrl+U / UV DRAW | (parts selected; the panel's UV DRAW) all their faces in one DRAW file to paint: a layer for each side (a flat run of faces), numbered, its outline drawn, a legend beside saying which is which. Faces with no picture, or sharing pixels, get pixels of their own first (pictures/uv/). Save in DRAW (Ctrl+S): each side's layer comes back - only its own pixels, never the guides |
 
 </details>
 
@@ -834,6 +931,42 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | CLEAN / RAND | MAKE with only the two colours and its shading; or with random tints (each brick a little different) |
 | SIZE x | how big MAKE's parts come out (bricks, tiles, rings...);  STR: how strongly Shift+MAKE lays it over what's there |
 | FILTERS | BLUR SHARPEN EMBOSS PIXELATE BRIGHTER DARKER CONTRAST POSTERIZE INVERT GREY |
+
+</details>
+
+<details>
+<summary><b>PAINT ON MODEL</b></summary>
+
+#### PAINT STRAIGHT ONTO THE MODEL (Shift+P, or PAINT in the top bar)
+
+| Keys | What it does |
+|---|---|
+| Left button | paint on the faces - a stroke runs on across faces and parts |
+| Right drag / middle drag / wheel | turn round, pan, zoom - as ever |
+| P / B / E | pencil (one pixel), brush ([ ]: its size in pixels), erase (back to as it was when painting began) |
+| L / R / O | LINE, BOX, ELLIPSE: drag on the model - drawn with the brush; Shift+R / Shift+O (or FILLED): filled - what the view shows inside it. Shift: square / round / 45 degrees; Ctrl (after pressing): from the middle |
+| F | FILL: click - the REACH there takes the first colour |
+| G | GRADIENT: drag across the model, first colour to second (a click: fitted to the REACH by V H D R M); PAD REP BNC and x: as in the painter |
+| I | pick a colour (Ctrl+click: with any tool) |
+| K / ONE FACE | each stroke, shape, fill, gradient, MAKE or filter stays on the face it starts on (a shape: the face you press on) - paint up to an edge without spilling over |
+| T / TILT | a box or ellipse lies on the face you press on, at its angle (off: square to the screen) |
+| Shift+click | a line from the last place painted |
+| REACH | for FILL, GRADIENT, MAKE, FILTERS: COLOUR (the colour clicked and all of it joined to it - across the part's faces), FACE, PART, ALL (the whole model) |
+| Tab / M | the MAKE page: MAKE (a pattern from the two colours - brick, wood, stone... - laid over the model so it runs on round corners; click again: another; Shift+click: over what's there by OVER %) and FILTERS (blur, emboss...): pick one, then click the model |
+| X | swap the two colours.  The palette: left / right click (the painter's colours) |
+| Ctrl+Z / Ctrl+Y | undo, redo a stroke.  Esc or Shift+P: done |
+| Ctrl+S | save the model - and the pictures painted |
+
+#### WHERE THE PAINT GOES
+
+| Keys | What it does |
+|---|---|
+| A face with a picture | is painted where its pixels are: the picture's file changes (saved with Ctrl+S), as in the painter |
+| JUST HERE | (the usual) a face sharing its pixels with another (a crate's front and back, a picture repeated) gets a copy of its own first, pixel for pixel: the paint stays on that face |
+| EVERYWHERE | shared pixels are painted where they are: every face showing them changes |
+| A face with no picture | gets one as you paint it, in its colour - nothing to set up |
+| Copies, new places | go where the model's one picture is see-through, else pictures/paint/MODEL.png (256 square, as the game's) |
+| NEW PLACES | their pixels a cell: AUTO is as the model's pictures already are |
 
 </details>
 
@@ -1016,7 +1149,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 - **Bevel** (B, or BEVEL in E's panel, with edges or faces picked; faces: all their edges): a mode, as MOVE IT is for pictures. Each face beside a picked edge moves in from it by WIDTH, and a strip of SEGMENTS faces fills the gap: 1 is a flat chamfer, more are round. Where bevelled edges meet, a corner face fills in. The view shows it as it'll be while you drag the sliders (or turn the wheel over them); WIDTH goes as far as the faces beside the edge allow. Enter or APPLY makes it (one undo step) and leaves the new faces picked; Esc puts the part back as it was. Pictures on the faces stay on them, trimmed. Edges where the faces are flat to each other, or on the model's open rim, aren't bevelled; nor is one folded flat (two faces back to back, as when a face is inset and then pushed in exactly as far as the inset - push in less and its edges have a corner to cut).
 - **Loop cut, split, connect** (E, edges): O (LOOP) puts a ring of new edges round the part across the picked edge, through each four-sided face in turn (until it comes round, or meets a face that isn't four-sided); a mode as BEVEL is: POSITION slides it across those faces (near an edge: a thin face along it), CUTS (1-10) spaces more evenly, Enter or APPLY makes it with its new edges picked, Esc drops it. S (SPLIT) puts a point in the middle of each picked edge, shared by the faces both sides. J (CONNECT) cuts a face in two with a new edge between the middles of two of its picked edges, or between two of its picked corners (in points). Picking two opposite sides of a four-sided face picks all four corners; the clicks say which sides were meant, so the other two aren't counted. Ctrl+click on an edge picks its whole loop: from each end it goes on through the point straight across (only where four edges meet), until it comes round or reaches a point where more or fewer meet; Shift+Ctrl adds the loop to what's picked.
 - **Edge lines in E** are drawn dark on light faces and light on dark ones, judged by how solid TEX shows the faces: with TEX off (or faint) they're all light against the dark backdrop.
-- **Pictures on faces:** the bin's PICTURES tab shows the PNGs in `pictures/` (in folders: + FOLDER makes one). Drag one onto a face, or click it and then click faces (Shift: every face of that part); Esc stops. Shift + wheel over the pictures makes the tiles bigger or smaller (40 to 256 pixels, as wide as the bin allows; `pic_size=` in bu1ld0r.cfg). A picture on a face that a hole cuts stays on what's left of the face. Drop a PNG from your desktop onto the window and it's copied into `pictures/` and put on the face it lands on. In E with faces picked, clicking a picture puts it straight on them. A shape that gets a picture becomes a mesh part. With faces picked in E the panel's PICTURE buttons: FIT (fills each face's box), DEFORM (the picture's corners pinned to the face's corners, so it bends to a slanted or pointed face), MOVE IT or P (by hand: drag a picked face to slide the picture, the wheel zooms it - out, it repeats - R / Shift+R or Shift + wheel turn it 15 degrees, H / V flip it as seen, and the keys show at the view's foot; it snaps to the picture's pixels, Alt: not), ACROSS ALL (one picture over all the picked faces), TURN, FLIP, REPEAT MORE / LESS, the arrows slide it, NO PICTURE. EDIT IN DRAW opens the picked face's picture in DRAW (no picture on it: a new PNG is made first, 64 pixels on its long side, the face's shape and colour, and put on the picked faces); each time DRAW saves it, bu1ld0r shows it. DRAW is `~/git/DRAW/DRAW.run` unless `draw=` in bu1ld0r.cfg says where. A picture changed in DRAW any other way shows when the model is opened again. **Other folders:** the path box under the bin's tabs shows the folder open; click it and type or paste (Ctrl+V) any folder (`~` is home, a PNG's path opens its folder, a `file://` link works too), then Enter. Its PNGs show in the bin (the PICTURES tile goes back to `pictures/`); one you put on a face is copied into `pictures/` first (the same picture already there: that one). The folder is remembered (`pic_outside=` / `pic_dir=` in bu1ld0r.cfg), and a folder dropped on the window opens too. Right-click a picture: EDIT IN DRAW, or OPEN IN KALEIDOTRON (its folder, with it picked); right-click a folder, or the bin's empty space for the one open: OPEN IN KALEIDOTRON (`kaleidotron=` in bu1ld0r.cfg says where it is, else `~/.local/bin/kaleidotron`). The game doesn't repeat textures, so EXPORT cuts a repeated face where the repeats meet.
+- **Pictures on faces:** the bin's PICTURES tab shows the PNGs in `pictures/` (in folders: + FOLDER makes one). Drag one onto a face, or click it and then click faces (Shift: every face of that part); Esc stops. Shift + wheel over the pictures makes the tiles bigger or smaller (40 to 256 pixels, as wide as the bin allows; `pic_size=` in bu1ld0r.cfg). A picture on a face that a hole cuts stays on what's left of the face. Drop a PNG from your desktop onto the window and it's copied into `pictures/` and put on the face it lands on. In E with faces picked, clicking a picture puts it straight on them. A shape that gets a picture becomes a mesh part. With faces picked in E the panel's PICTURE buttons: FIT (fills each face's box), DEFORM (the picture's corners pinned to the face's corners, so it bends to a slanted or pointed face), MOVE IT or P (by hand: drag a picked face to slide the picture, the wheel zooms it - out, it repeats - R / Shift+R or Shift + wheel turn it 15 degrees, H / V flip it as seen, and the keys show at the view's foot; it snaps to the picture's pixels, Alt: not), ACROSS ALL (one picture over all the picked faces), TURN, FLIP, REPEAT MORE / LESS, the arrows slide it, NO PICTURE. EDIT IN DRAW opens the picked face's picture in DRAW (no picture on it: a new PNG is made first, 64 pixels on its long side, the face's shape and colour, and put on the picked faces; a picture other faces show too - UV DRAW's, say - has the picked faces' pixels copied into a picture of their own first, `pictures/MODEL-face.png`, so DRAW shows only them; Ctrl+P's painter does the same); each time DRAW saves it, bu1ld0r shows it. DRAW is `~/git/DRAW/DRAW.run` unless `draw=` in bu1ld0r.cfg says where. A picture changed in DRAW any other way shows when the model is opened again. **Other folders:** the path box under the bin's tabs shows the folder open; click it and type or paste (Ctrl+V) any folder (`~` is home, a PNG's path opens its folder, a `file://` link works too), then Enter. Its PNGs show in the bin (the PICTURES tile goes back to `pictures/`); one you put on a face is copied into `pictures/` first (the same picture already there: that one). The folder is remembered (`pic_outside=` / `pic_dir=` in bu1ld0r.cfg), and a folder dropped on the window opens too. Right-click a picture: EDIT IN DRAW, or OPEN IN KALEIDOTRON (its folder, with it picked); right-click a folder, or the bin's empty space for the one open: OPEN IN KALEIDOTRON (`kaleidotron=` in bu1ld0r.cfg says where it is, else `~/.local/bin/kaleidotron`). The game doesn't repeat textures, so EXPORT cuts a repeated face where the repeats meet.
 - **Moving along one axis** (as Blender): what's selected (parts, or the picked points and faces in E) shows a widget of three arrows, X red, Y green, Z blue: drag one and it moves only that way. Or hold X, Y or Z while dragging. The axis is drawn through it, with a tick at each snap step (where it snaps). The grid shows the three axes through the middle: X red, Z blue, Y green going up.
 - **The grid** (GRID at the top, on at first; the slider beside it sets how bright its lines are, `grid_bright=` 0-100; `grid_walls=` in bu1ld0r.cfg keeps the choice): the floor's grid is also stood up on the two walls behind the model, an eighth of a cell apart, as tall as the model. What's selected (or the shape being put down, or the picked points in E) is shadowed on the floor and both walls as an outline of its box, with a line down to the floor if it's off the ground - so you can see where it is against the grid's lines from any angle.
 - **ALIGN** (the panel, with parts selected or in E): LEFT, CENTRE, RIGHT, TOP, MIDDLE, BOTTOM as you see the model (along the world axis nearest the screen's). Parts: each moved whole (a group as one) to line up with the others; one alone lines up with the rest of the model. In E, picked points are lined up on the line; picked faces move whole, each connected piece of them; one piece alone lines up with its part.
@@ -1056,6 +1189,8 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 - **Wider bin:** drag the edge between the bin and the view (or the parts list, if it's shown) - the pointer shows <->. A wider bin shows more tiles across. It goes no narrower than it starts, and is remembered (`bin_w=` in bu1ld0r.cfg). The panel on the right stays as it is.
 - **More shapes:** DIE (FACES 4, 6, 8, 10, 12, 20 or 30; the wheel steps through those; a d10 is a pentagonal trapezohedron, a d30 a rhombic triacontahedron; each rests on a face, fitted to its box), SPIKE (a pyramid on each of a die's faces: SPIKES, LENGTH), STAR (POINTS, INNER: how far in the points' roots are), GEAR (TEETH, DEPTH), DONUT (SLICES round, HOLE: how big the middle), DIAMOND (SIDES, TOP: the table's width; the point at the bottom), PILL (lying along X: SLICES, ROUND: how round its ends) and ARROW (pointing to the front, -Z: HEAD, how long its head). In `.bld` they're `die`, `star`, `gear`, `donut`, `diamond`, `spike`, `pill`, `arrow`, with their faces / points in the slices column.
 - **Painting a picture** (Ctrl+P with the pointer on a face, or with faces picked in E; PAINT IT in E's panel; PAINT IT in a picture's right-click menu in the bin): the face's picture opens over the whole window. A face with none gets a new PNG in `pictures/` in its colour (64 x 64; from E, 64 on its long side, the picked faces' shape), put on it first. A prefab put down isn't painted where it is: paint it in the prefab (EDIT IT). Left / right button: the two colours (the swatches top right; the palette with either button; TYPE a hex colour; R G B - and + nudge the first, Shift by 1); Ctrl+click picks a colour up with any tool. Tools: PENCIL (P), BRUSH (B, [ ] its size), LINE (L), BOX (R / Shift+R filled), ELLIPSE (O / Shift+O filled) - Shift keeps a line straight or at 45 and a box square -, FILL (F), GRADIENT (G: the first colour to the second over the region FILL would take, Shift+click the whole picture, right click the other way; V H D R M: down, across, slanted, round, out from the middle) and PICK (I). MIRROR L-R / U-D (M / Shift+M), WRAP (W: off one edge, on at the other), TILED (T: seen with its neighbours), GRID (Shift+G). MAKE (14) fills it with a texture made from the two colours, seeded so each click is another, all repeating seamlessly (Shift: half over what's there); FILTERS (10) change what's there. Undo / redo: 40 steps. Ctrl+S saves the PNG and every face with it shows it; Esc asks once if it isn't saved.
+- **Painting on the model** (Shift+P, PAINT in the top bar; UI/BRUSH): a mode in the 3D view. Each pixel under the brush is found through the triangle under the pointer and its corners' spots on the picture; a brush round in pixels reaches every front-facing triangle within its size, so a stroke crosses edges. A plain shape is first turned into a mesh part (as E does). A face with no picture is unwrapped flat (its own axes, as pictures put on faces) and filled with its colour; JUST HERE, a face whose pixels another face's box on the same picture overlaps (wrapping round, a repeat counting) is copied out first - pixel for pixel when its picture sits on it evenly and fits in 256, else laid out flat at the size its pixels are now. A place is a rectangle where the picture is see-through (alpha 0; the copy's own see-through pixels become alpha 1 to keep the room taken), in the model's one picture first, then `pictures/paint/MODEL.png`, `MODEL-2.png`... A prefab put down can't be given new places: its faces with no picture, or (JUST HERE) sharing their pixels, are left alone - UNLINK it first, or paint EVERYWHERE. Undo: 60 strokes, each the pixels it changed (and the model, if faces got new places). Pictures painted are saved with the model (Ctrl+S), and before the flat painter or DRAW opens one. The other tools (UI/BRTOOLS) first gather the faces their REACH takes (or, for a filled BOX / ELLIPSE, the faces facing you under it), make them ready the same way, and list their pixels with each one's place on the model: COLOUR floods that list by the picture's neighbours within a face and, across faces, by pixels within a pixel and a half of each other on the model; a gradient goes by each pixel's place on the view; MAKE takes a 64 x 64 pattern made by the painter's MAKE, laid flat from the side each face faces most, one pattern pixel a picture pixel (their average size); FILTERS run the painter's filter on each picture and keep only the REACH's pixels; a filled shape keeps the pixels inside it on the view that nothing nearer covers. TILT lays a box / ellipse out on the plane of the face pressed on (its across and up as a picture put on it has them) and paints its outline, as seen, as the screen ones are. ONE FACE notes the face a stroke starts on (made ready first) and keeps only that face's triangles in each dab's list; the other tools gather just that face.
+- **UV DRAW** (Ctrl+U, the panel's UV DRAW; OUT/UVMAP): the selected parts' faces are gathered into sides - neighbours across an edge on one plane (facing within about 2 degrees, as far out) - each laid out on one picture with a pixel spare round it. If the faces already share one picture and none overlaps another's pixels (painting on the model's JUST HERE test), that picture is used as it is; otherwise each side gets a place in `pictures/uv/MODEL-PART.png`, packed in rows, tallest first: copied pixel for pixel when its faces are all on one picture that maps onto them as one, evenly (as many pixels a step across as down), else laid flat from the side it faces at the size its pixels are now (no picture: the other sides' size, or the part half filling 256 x 256) and filled through its old spots. The `.draw` is written as DRAW's own file - a PNG of how it looks, with DRAW's layers in a `drAw` chunk (its version 2, which DRAW still opens and saves as its own) - and `MODEL-PART.uv` beside it lists the picture, the side layers' names and which pixel is whose. DRAW's saves (watched twice a second; read once the file has stayed the same for half a second) are read back by those names, any DRAW version up to 30, each layer only where its side is. Layers are the canvas's size, so their number is kept under about 96 MB together (and 60).
 - **The MODELS tab** (the bin's third): each model in `models/` as a picture, made one a frame, the open one lit; click to open (unsaved: the first click warns, the second opens). Saving relists it. Its path box opens any folder: its folders, `.bld` models, `.obj` files (NEON-CASTER's props, pictured by their `NAME_0.png`) and SVGs (remembered: `mdl_outside=`). SAVE still writes `models/NAME.bld`.
 - **Favourite folders:** the star after each tab's path lists that tab's favourites: its own folder first, then yours, then + ADD THIS FOLDER / - TAKE THIS FOLDER OFF for the one open (16 at most). PREFABS' are folders in `prefabs/`. They're kept in bu1ld0r.cfg as `fav_prefabs=`, `fav_pictures=` and `fav_models=` (paths, `|` between). Until a tab's list is changed, it starts with NEON-CASTER's folders (from `neon_dir=`): its sprites, `hd/` and `hd/models/` for PICTURES, `models/` for MODELS, and `starter/` for PREFABS.
 - **SVGs:** OPEN (models/*.svg), a drop on the window, or `--open NAME.svg`. Read: path (M L H V C S Q T A Z, either case), rect (rx / ry), circle, ellipse, polygon, polyline; `transform` (matrix, translate, scale, rotate, skewX / skewY) on them and their groups (g, svg, a); fill as an attribute or in `style`, inherited, `#rgb` / `#rrggbb` / `rgb()` / names, a gradient its stops' average. Left out: defs, clip paths, masks, text, shapes with no fill, hidden ones, ones with a filter (glows, shadows), and ones under half opaque. Each shape's outlines are nested by what's inside what: inside an odd number of others is a hole. Each becomes a mesh part (one group), fitted 1 cell across, standing on the ground, 0.1 thick, read the right way round from the front (-Z); a shape over earlier ones it overlaps stands a fiftieth further out. Points closer than a thousandth of its size are made one. Ctrl+S saves it as `models/NAME.bld`.
@@ -1145,8 +1280,11 @@ loses detail - look at it with T before switching it on for the export.
 ## Command line
 
 ```
-bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N] [--prof] [--spin] [--walk 1|2] [--yaw N]
+bu1ld0r.run [FILE.bld | FILE.obj | FILE.svg] [--open NAME | NAME.svg | neon:PROP] [--drop FILE.png] [--save] [--export] [--neon DIR] [--tidy] [--shot FILE.png] [--quit] [--bench N] [--prof] [--spin] [--walk 1|2] [--yaw N] [--uvdraw] [--uvback FILE.draw]
 ```
+
+`--uvdraw` selects every part and does UV DRAW without starting DRAW;
+`--uvback FILE.draw` reads one back as if DRAW had just saved it (tests).
 
 `--drop FILE.png` acts as if the file were dropped on the window (where
 the pointer is a moment later: tests). `--open neon:crate` opens the game's crate; `--save` saves what was opened

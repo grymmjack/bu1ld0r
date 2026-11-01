@@ -539,7 +539,7 @@ SUB PicEditInDraw
     IF LEN(DrawExe$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
     ref$ = PicOfPicked$(cnt): IF LEN(ref$) = 0 THEN EXIT SUB
     DrawOpen ref$
-    Msg "pictures/" + ref$ + ".png opened in DRAW" + IIFS$(cnt > 0, " (new: on the " + LTRIM$(STR$(cnt)) + " picked face" + IIFS$(cnt = 1, ")", "s)"), "") + " - save it there (Ctrl+S) and it shows here"
+    Msg "pictures/" + ref$ + ".png opened in DRAW" + IIFS$(cnt > 0, IIFS$(picCopied, " (the picked face" + IIFS$(cnt = 1, "'s", "s'") + " own copy: the picture was shared)", " (new: on the " + LTRIM$(STR$(cnt)) + " picked face" + IIFS$(cnt = 1, ")", "s)")), "") + " - save it there (Ctrl+S) and it shows here"
 END SUB
 
 ' The picture of the faces picked in E (the first with one) - none: a new one, as
@@ -547,7 +547,7 @@ END SUB
 FUNCTION PicOfPicked$ (cnt AS LONG)
     DIM id AS LONG, f AS LONG, g AS LONG, ref$, k, x#, y#, z#, nx#, ny#, nz#, rx#, ry#, rz#, ux#, uy#, uz#
     DIM a#, b#, a0#, a1#, b0#, b1#, iw, ih, f0 AS LONG
-    cnt = 0
+    cnt = 0: picCopied = 0
     IF edPart = 0 OR edMode <> ED_FACES THEN Msg "In E, pick faces (2: FACES) first": EXIT FUNCTION
     IF NOT EdNeed THEN EXIT FUNCTION
     id = pMesh(edPart)
@@ -557,6 +557,17 @@ FUNCTION PicOfPicked$ (cnt AS LONG)
             IF mfTex(g) > 0 THEN ref$ = picRef$(mfTex(g)): EXIT FOR
         END IF
     NEXT
+    IF LEN(ref$) THEN ' (shown on faces not picked too - a UV DRAW sheet, a crate's sides: the picked ones' pixels copied to one of their own)
+        k = PicFind(ref$)
+        IF k > 0 THEN
+            IF picW(k) > 0 THEN
+                IF PicSharedOut(k) THEN
+                    ref$ = PicCopyPicked$(k, cnt): picCopied = -1
+                    IF LEN(ref$) = 0 THEN Msg "Couldn't copy the picked faces' pixels to a picture of their own": EXIT FUNCTION
+                END IF
+            END IF
+        END IF
+    END IF
     IF LEN(ref$) = 0 THEN
         EdBegin -1
         FOR f = 1 TO sfN
@@ -591,11 +602,76 @@ FUNCTION PicOfPicked$ (cnt AS LONG)
     PicOfPicked$ = ref$
 END FUNCTION
 
+' Does a face that isn't picked (in E) show picture k?
+FUNCTION PicSharedOut (k)
+    DIM t AS LONG, f AS LONG
+    FOR t = 1 TO holeTN
+        IF tTex(t) = k THEN
+            IF tPart(t) <> edPart THEN PicSharedOut = -1: EXIT FUNCTION
+            f = tFace(t)
+            IF f < 0 OR f > edFN - 1 THEN PicSharedOut = -1: EXIT FUNCTION
+            IF edSelF(f) = 0 THEN PicSharedOut = -1: EXIT FUNCTION
+        END IF
+    NEXT
+END FUNCTION
+
+' The picked faces on picture k given a picture of their own: the box of pixels they show
+' (a pixel spare round; all the way across or down if they repeat that way), copied pixel for
+' pixel into a new one, their spots moved onto it (one undo step). Its ref ("": couldn't); cnt:
+' how many faces
+FUNCTION PicCopyPicked$ (k, cnt AS LONG)
+    DIM f AS LONG, c AS LONG, sw0 AS LONG, sh0 AS LONG, u#, v#, umin#, umax#, vmin#, vmax#, fu, fv
+    DIM ox AS LONG, oy AS LONG, nw AS LONG, nh AS LONG, i AS LONG, j AS LONG, sx AS LONG, sy AS LONG, ref$, nk
+    sw0 = picW(k): sh0 = picH(k)
+    PicSaveRef picRef$(k)
+    EdBegin -1
+    umin# = 1E+30: umax# = -1E+30: vmin# = 1E+30: vmax# = -1E+30
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) = k THEN
+            FOR c = 0 TO sfCN(f) - 1
+                u# = scTU(sfC0(f) + c) * sw0: v# = scTV(sfC0(f) + c) * sh0
+                IF u# < umin# THEN umin# = u#
+                IF u# > umax# THEN umax# = u#
+                IF v# < vmin# THEN vmin# = v#
+                IF v# > vmax# THEN vmax# = v#
+            NEXT
+        END IF
+    NEXT
+    IF umax# < umin# THEN EdCommit: EXIT FUNCTION
+    IF umax# - umin# > sw0 - 2.01 THEN fu = -1: ox = 0: nw = sw0 ELSE ox = INT(umin# + .001) - 1: nw = -INT(-(umax# - .001)) - ox + 1
+    IF vmax# - vmin# > sh0 - 2.01 THEN fv = -1: oy = 0: nh = sh0 ELSE oy = INT(vmin# + .001) - 1: nh = -INT(-(vmax# - .001)) - oy + 1
+    ref$ = PicNewFile$(nw, nh, 0)
+    IF LEN(ref$) = 0 THEN EdCommit: EXIT FUNCTION
+    nk = PicFind(ref$)
+    IF nk <= 0 THEN EdCommit: EXIT FUNCTION
+    IF picW(nk) <> nw OR picH(nk) <> nh THEN EdCommit: EXIT FUNCTION
+    FOR j = 0 TO nh - 1
+        sy = (oy + j) MOD sh0: IF sy < 0 THEN sy = sy + sh0
+        FOR i = 0 TO nw - 1
+            sx = (ox + i) MOD sw0: IF sx < 0 THEN sx = sx + sw0
+            picPix(picOff(nk) + j * nw + i) = picPix(picOff(k) + sy * sw0 + sx)
+        NEXT
+    NEXT
+    PicSave nk
+    FOR f = 1 TO sfN
+        IF sfLive(f) AND wsF(f) AND sfTex(f) = k THEN
+            FOR c = 0 TO sfCN(f) - 1
+                IF fu = 0 THEN scTU(sfC0(f) + c) = (scTU(sfC0(f) + c) * sw0 - ox) / nw
+                IF fv = 0 THEN scTV(sfC0(f) + c) = (scTV(sfC0(f) + c) * sh0 - oy) / nh
+            NEXT
+            sfTex(f) = nk: cnt = cnt + 1
+        END IF
+    NEXT
+    EdCommit
+    PicCopyPicked$ = ref$
+END FUNCTION
+
 ' Picture ref$ opened in DRAW (watched: each save shows here)
 SUB DrawOpen (ref$)
     DIM e$
     e$ = DrawExe$
     IF LEN(e$) = 0 THEN Msg "DRAW not found: put draw=/path/to/DRAW.run in bu1ld0r.cfg": EXIT SUB
+    PicSaveRef ref$ ' (painted on the model: its file brought up to date first)
     PicWatch ref$
     ' (in the background of a shell that ends at once: nothing left over to be waited for)
     SHELL "cd " + ShQ$(LEFT$(e$, _INSTRREV(e$, "/"))) + " && setsid " + ShQ$(e$) + " " + ShQ$(AbsPath$(PicPath$(ref$))) + " >/dev/null 2>&1 </dev/null &"

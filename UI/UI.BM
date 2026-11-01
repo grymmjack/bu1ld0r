@@ -74,8 +74,8 @@ FUNCTION FieldShown (f)
     IF f = F_PNAME THEN FieldShown = (typeField = F_PNAME): EXIT FUNCTION
     IF f = F_PFNAME THEN FieldShown = (typeField = F_PFNAME): EXIT FUNCTION
     IF f = F_PICPATH THEN FieldShown = (binTab = 1 OR binTab = 2): EXIT FUNCTION ' (PICTURES' folder, or MODELS')
+    IF maOn OR brOn THEN EXIT FUNCTION ' (MATERIAL / painting on the model has the panel: its fields aren't there)
     IF f = F_BUDGET THEN FieldShown = (edPart = 0 AND SelCount = 0 AND placeKind = 0): EXIT FUNCTION
-    IF maOn THEN EXIT FUNCTION ' (MATERIAL has the panel)
     IF edPart THEN FieldShown = EdFieldShown(f): EXIT FUNCTION
     p = SelFirst
     IF p = 0 THEN
@@ -242,10 +242,12 @@ SUB PanelBtn (k, x, y, w, h)
         CASE 16: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6: y = 3: w = 64 ' (GUIDES, after it)
         CASE 17: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 70: y = 3: w = 64 ' (INSIDE, after that)
         CASE 18: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 140: y = 3: w = 34 ' (SG: smart guides)
+        CASE 19: SliderRect 3, x, w: x = x + w + 14 + 5 * 42 + 6 + 180: y = 3: w = 52 ' (PAINT: on the model)
         CASE 21: x = PX0 + 46: y = 58: w = 20
         CASE 22: x = PX0 + 134: y = 58: w = 20
         CASE 23: x = PX0 + 158: y = 32: w = 72
-        CASE 24 TO 27, 30: i = k - 24: IF k = 30 THEN i = 4
+        CASE 24 TO 27, 30, 38: i = k - 24: IF k = 30 THEN i = 4
+            IF k = 38 THEN i = 5
             x = PX0 + (i MOD 3) * 78: y = 542 + (i \ 3) * 28: w = 74 ' (EDIT APPLY GROUP / KEEP MATERIAL)
         CASE 28: x = PX0: y = 156: w = 230
         CASE 29: x = PX0: y = 184: w = 230
@@ -256,6 +258,7 @@ END SUB
 
 FUNCTION PanelBtnName$ (k)
     SELECT CASE k
+        CASE 19: PanelBtnName$ = "PAINT"
         CASE 1: PanelBtnName$ = "DUPLICATE"
         CASE 2: PanelBtnName$ = "DELETE"
         CASE 3: PanelBtnName$ = "FRAME"
@@ -269,6 +272,7 @@ FUNCTION PanelBtnName$ (k)
         CASE 26: PanelBtnName$ = "GROUP G"
         CASE 27: PanelBtnName$ = "KEEP K"
         CASE 30: PanelBtnName$ = "MATERIAL"
+        CASE 38: PanelBtnName$ = "UV DRAW"
         CASE 28: PanelBtnName$ = IIFS$(tidyView, "AS BUILT  T", "TIDY VIEW  T")
         CASE 29: PanelBtnName$ = IIFS$(mdlTidy, "EXPORT: TIDIED", "EXPORT: AS BUILT")
         CASE 31 TO 37: PanelBtnName$ = LTRIM$(STR$(dieN(k - 30)))
@@ -289,7 +293,7 @@ FUNCTION PanelBtnOn (k)
                 IF pSel(i) AND (pHole(i) <> 0 OR pKind(i) = K_USE) THEN PanelBtnOn = -1: EXIT FUNCTION
             NEXT
             PanelBtnOn = (SelCount > 1) ' (MERGE)
-        CASE 26, 30: PanelBtnOn = (SelCount > 0)
+        CASE 26, 30, 38: PanelBtnOn = (SelCount > 0)
         CASE 28, 29: PanelBtnOn = (SelCount = 0 AND placeKind = 0)
         CASE 31 TO 37: PanelBtnOn = (PanelDie > 0)
         CASE ELSE: PanelBtnOn = -1
@@ -510,12 +514,13 @@ SUB UiFrame
     IF helpOn THEN HelpFrame: EXIT SUB
     DropFrame
     PicWatchFrame
+    UvWatchFrame
     EdCheck
 
     lx = mX - vX0: ly = mY - vY0
     inView = InRect(mX, mY, vX0, vY0, vW, vH)
     onRef = 0: IF inView THEN onRef = RefAt(mX, mY) ' (REF's controls, in the view's top right)
-    IF mP1 AND inView THEN k = FpBtnAt(mX, mY): IF k THEN FpStart k: EXIT SUB ' (WALK / FLY)
+    IF mP1 AND inView AND brOn = 0 THEN k = FpBtnAt(mX, mY): IF k THEN FpStart k: EXIT SUB ' (WALK / FLY)
     GzUpdate
 
     ' The camera: right drag turns round, middle (or Shift + right) drag pans, the wheel zooms
@@ -620,9 +625,15 @@ SUB UiFrame
             IF InRect(mX, mY, x, y, w, h) THEN BacksToggle
             PanelBtn 18, x, y, w, h
             IF InRect(mX, mY, x, y, w, h) THEN SgToggle
+            PanelBtn 19, x, y, w, h
+            IF InRect(mX, mY, x, y, w, h) THEN BrToggle
             topSlide = SliderAt(mX, mY)
         ELSEIF maOn AND mX < scrW - PANEL_W THEN
             Msg "MATERIAL is open: APPLY (Enter) or CANCEL (Esc) first"
+        ELSEIF brOn AND inView AND onRef = 0 THEN
+            BrPress lx, ly ' (painting on the model)
+        ELSEIF brOn AND NOT inView AND mX < scrW - PANEL_W THEN
+            Msg "Painting on the model: DONE (Esc) first"
         ELSEIF mX < BIN_W THEN
             BinClick
         ELSEIF listOn AND mX < BIN_W + LIST_W THEN
@@ -675,6 +686,7 @@ SUB UiFrame
     END IF
     IF dragOn THEN DragUpdate lx, ly
     IF penOn THEN PenFrame lx, ly
+    IF brOn THEN BrFrame lx, ly
     IF txOn THEN TxFrame lx, ly
     IF refSlide OR refDrag THEN RefFrame lx, ly
     IF edArm AND mB1 AND edDrag = 0 THEN
@@ -709,7 +721,7 @@ SUB UiFrame
 
     ' What's under the pointer gets an outline
     oldHover = hoverPart: hoverPart = 0
-    IF inView AND NOT dragOn AND NOT orbitOn AND NOT panOn AND placeKind = 0 AND edPart = 0 THEN
+    IF inView AND NOT dragOn AND NOT orbitOn AND NOT panOn AND placeKind = 0 AND edPart = 0 AND brOn = 0 THEN
         t = PickTri(lx, ly): IF t > 0 THEN hoverPart = tPart(t)
     END IF
     IF NOT inView THEN hoverPart = ListPartAt(mX, mY) ' (a row of the list: its part outlined in the view)
@@ -777,6 +789,11 @@ SUB UiKey (k&)
     END IF
     IF binMenu AND k& = 27 THEN binMenu = 0: EXIT SUB
     IF LEN(pmRef$) > 0 AND k& = 27 THEN pmRef$ = "": Msg "": EXIT SUB
+    IF brOn THEN
+        IF BrKey(k&) THEN EXIT SUB
+    ELSEIF (k& = 80 OR k& = 112) AND kShift AND NOT kCtrl AND NOT kAlt THEN
+        BrStart: EXIT SUB ' (Shift+P: paint on the model)
+    END IF
     IF maOn AND NOT (kCtrl OR CtrlCode(k&)) THEN
         IF MaKey(k&) THEN EXIT SUB
     END IF
@@ -816,6 +833,8 @@ SUB UiKey (k&)
             BacksToggle
         ELSEIF CtrlIs(k&, "h") THEN
             GuidesToggle
+        ELSEIF CtrlIs(k&, "u") THEN
+            UvExport
         ELSEIF CtrlIs(k&, "c") OR CtrlIs(k&, "x") THEN ' (by what you're on: E's faces - the picture on one; else the parts)
             IF edPart THEN
                 IF CtrlIs(k&, "c") THEN FaceLookCopy
@@ -1009,6 +1028,7 @@ END FUNCTION
 
 SUB TopAction (k)
     IF maOn AND k <= 7 AND k <> 5 THEN MaCancel ' (new, open, save, export...: the material not made first)
+    IF brOn AND (k = 1 OR k = 2 OR k = 6) THEN BrStop ' (new, open, prefab: painting over first)
     SELECT CASE k
         CASE 1
             IF mdlDirty AND mdlAsk <> 1 THEN mdlAsk = 1: Msg "Not saved: NEW again to start over anyway (Ctrl+S saves)": EXIT SUB
@@ -1058,6 +1078,7 @@ END SUB
 SUB PanelClick
     DIM k, x, y, w, h, i, p, c AS _UNSIGNED LONG, b#
     IF maOn THEN MaClick: EXIT SUB
+    IF brOn THEN BrClick: EXIT SUB
     IF edPart THEN EdPanelClick: EXIT SUB
     IF TfClick THEN EXIT SUB
     IF SelCount > 0 THEN IF AlClick(604) THEN EXIT SUB
@@ -1065,7 +1086,7 @@ SUB PanelClick
     IF SelCount > 0 THEN IF SmClick(790) THEN EXIT SUB
     IF SelCount > 0 THEN IF SnClick(880) THEN EXIT SUB
     k = ZeroAt(mX, mY): IF k THEN ZeroDo k: EXIT SUB
-    FOR k = 1 TO 37
+    FOR k = 1 TO 38
         PanelBtn k, x, y, w, h
         IF w > 0 AND InRect(mX, mY, x, y, w, h) AND PanelBtnOn(k) THEN
             SELECT CASE k
@@ -1081,6 +1102,7 @@ SUB PanelClick
                 CASE 25: IF SelHasHole THEN HoleApply ELSE IF SelHasUse THEN UseUnlink ELSE SelMerge
                 CASE 26: GroupToggle
                 CASE 30: MaStart
+                CASE 38: UvExport
                 CASE 27: KeepToggle
                 CASE 1: SelDuplicate
                 CASE 2: SelDelete
@@ -1940,9 +1962,7 @@ SUB UiDraw
     PrAdd 12
     IF fpOn = 0 THEN ' (walking / flying: just the model)
         IF guidesOn THEN _PUTIMAGE (vX0, vY0), ovImg& ' (GUIDES / Ctrl+H off: no outlines, E's lines and picks - the widget and pivot stay)
-        GzDraw
-        SgDraw
-        PivDraw
+        IF brOn = 0 THEN GzDraw: SgDraw: PivDraw ' (painting: no move widget)
         IF edRect THEN LINE (vX0 + edRX0, vY0 + edRY0)-(mX, mY), cHi, B
     END IF
     IF penOn THEN PenDraw
@@ -1950,6 +1970,7 @@ SUB UiDraw
     RefDraw
     FpDraw
     IF edPart THEN IF pvOn AND edMode = ED_FACES AND fpOn = 0 THEN PvTips
+    IF brOn AND fpOn = 0 THEN BrTips: BrCursor
     IF selRect AND (ABS(mX - vX0 - selRX0) > 2 OR ABS(mY - vY0 - selRY0) > 2) THEN LINE (vX0 + selRX0, vY0 + selRY0)-(mX, mY), cHi, B
     LINE (vX0, vY0)-(vX0 + vW - 1, vY0 + vH - 1), cLine, B
     IF TidyOn THEN
@@ -1983,6 +2004,7 @@ SUB UiDraw
     PanelBtn 16, x, y, w, h: Btn x, y, w, h, PanelBtnName$(16), guidesOn
     PanelBtn 17, x, y, w, h: Btn x, y, w, h, PanelBtnName$(17), viewBacks
     PanelBtn 18, x, y, w, h: Btn x, y, w, h, PanelBtnName$(18), sgOn
+    PanelBtn 19, x, y, w, h: Btn x, y, w, h, PanelBtnName$(19), brOn
     t$ = APP_NAME$ + " " + APP_VERSION$
     IF LEN(mdlPf$) THEN t$ = "PREFAB " + mdlPf$ + "   " + t$
     IF mdlDirty THEN t$ = "* not saved   " + t$
@@ -2050,6 +2072,7 @@ SUB PanelDraw
     LINE (x, TOP_H)-(scrW - 1, scrH - BAR_H - 1), cPanel, BF
     LINE (x, TOP_H)-(x, scrH - BAR_H - 1), cLine
     IF maOn THEN MaDraw: EXIT SUB
+    IF brOn THEN BrDraw: EXIT SUB
     IF edPart THEN EdPanelDraw: EXIT SUB
     p = SelFirst: n = SelCount
     IF n = 0 AND placeKind THEN p = P_TPL: n = -1 ' (the shape being put down, set up here first)
@@ -2129,8 +2152,9 @@ SUB PanelDraw
     FOR k = 1 TO 4
         PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), 0
     NEXT
-    FOR k = 24 TO 30
+    FOR k = 24 TO 31
         IF k = 28 THEN k = 30
+        IF k = 31 THEN k = 38
         IF PanelBtnOn(k) THEN PanelBtn k, x, y, w, h: Btn x, y, w, h, PanelBtnName$(k), (k = 27 AND p > 0 AND pKeep(p) <> 0) OR (k = 30 AND p > 0 AND pMat(p) <> 0)
     NEXT
     y = 606
@@ -2455,7 +2479,8 @@ SUB HelpSetup
     HelpAdd "#PAINTING ONE HERE"
     HelpAdd "Ctrl+P  PAINT IT|paint the picture of the face under the pointer (in E: of the picked faces) - no picture on it: a new one, its colour, put on first. The PAINT topic has the keys"
     HelpAdd "#PAINTING ONE IN DRAW"
-    HelpAdd "EDIT IN DRAW|(E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first. Save it in DRAW (Ctrl+S) and it shows here straight away"
+    HelpAdd "EDIT IN DRAW|(E, faces picked) opens the face's picture in DRAW - no picture on it: a new one, the face's shape and colour, put on first; a picture other faces show too (UV DRAW's): the picked faces' pixels copied to a picture of their own first. Save it in DRAW (Ctrl+S) and it shows here straight away"
+    HelpAdd "Ctrl+U  UV DRAW|(parts selected; the panel's UV DRAW) all their faces in one DRAW file to paint: a layer for each side (a flat run of faces), numbered, its outline drawn, a legend beside saying which is which. Faces with no picture, or sharing pixels, get pixels of their own first (pictures/uv/). Save in DRAW (Ctrl+S): each side's layer comes back - only its own pixels, never the guides"
 
     HelpTopic "MATERIAL"
     HelpAdd "#WHAT A FACE IS MADE OF (Q, or MATERIAL)"
@@ -2511,6 +2536,31 @@ SUB HelpSetup
     HelpAdd "CLEAN  RAND|MAKE with only the two colours and its shading; or with random tints (each brick a little different)"
     HelpAdd "SIZE x|how big MAKE's parts come out (bricks, tiles, rings...);  STR: how strongly Shift+MAKE lays it over what's there"
     HelpAdd "FILTERS|BLUR SHARPEN EMBOSS PIXELATE BRIGHTER DARKER CONTRAST POSTERIZE INVERT GREY"
+
+    HelpTopic "PAINT ON MODEL"
+    HelpAdd "#PAINT STRAIGHT ONTO THE MODEL (Shift+P, or PAINT in the top bar)"
+    HelpAdd "Left button|paint on the faces - a stroke runs on across faces and parts"
+    HelpAdd "Right drag  middle drag  wheel|turn round, pan, zoom - as ever"
+    HelpAdd "P  B  E|pencil (one pixel), brush ([ ]: its size in pixels), erase (back to as it was when painting began)"
+    HelpAdd "L  R  O|LINE, BOX, ELLIPSE: drag on the model - drawn with the brush; Shift+R / Shift+O (or FILLED): filled - what the view shows inside it. Shift: square / round / 45 degrees; Ctrl (after pressing): from the middle"
+    HelpAdd "F|FILL: click - the REACH there takes the first colour"
+    HelpAdd "G|GRADIENT: drag across the model, first colour to second (a click: fitted to the REACH by V H D R M); PAD REP BNC and x: as in the painter"
+    HelpAdd "I|pick a colour (Ctrl+click: with any tool)"
+    HelpAdd "K  ONE FACE|each stroke, shape, fill, gradient, MAKE or filter stays on the face it starts on (a shape: the face you press on) - paint up to an edge without spilling over"
+    HelpAdd "T  TILT|a box or ellipse lies on the face you press on, at its angle (off: square to the screen)"
+    HelpAdd "Shift+click|a line from the last place painted"
+    HelpAdd "REACH|for FILL, GRADIENT, MAKE, FILTERS: COLOUR (the colour clicked and all of it joined to it - across the part's faces), FACE, PART, ALL (the whole model)"
+    HelpAdd "Tab  M|the MAKE page: MAKE (a pattern from the two colours - brick, wood, stone... - laid over the model so it runs on round corners; click again: another; Shift+click: over what's there by OVER %) and FILTERS (blur, emboss...): pick one, then click the model"
+    HelpAdd "X|swap the two colours.  The palette: left / right click (the painter's colours)"
+    HelpAdd "Ctrl+Z  Ctrl+Y|undo, redo a stroke.  Esc or Shift+P: done"
+    HelpAdd "Ctrl+S|save the model - and the pictures painted"
+    HelpAdd "#WHERE THE PAINT GOES"
+    HelpAdd "A face with a picture|is painted where its pixels are: the picture's file changes (saved with Ctrl+S), as in the painter"
+    HelpAdd "JUST HERE|(the usual) a face sharing its pixels with another (a crate's front and back, a picture repeated) gets a copy of its own first, pixel for pixel: the paint stays on that face"
+    HelpAdd "EVERYWHERE|shared pixels are painted where they are: every face showing them changes"
+    HelpAdd "A face with no picture|gets one as you paint it, in its colour - nothing to set up"
+    HelpAdd "Copies, new places|go where the model's one picture is see-through, else pictures/paint/MODEL.png (256 square, as the game's)"
+    HelpAdd "NEW PLACES|their pixels a cell: AUTO is as the model's pictures already are"
 
     HelpTopic "PEN, TEXT"
     HelpAdd "#PEN: YOUR OWN FLAT SHAPE"

@@ -87,10 +87,70 @@ part cylinder 0 0.1 0  20 0 0  0.04 0.12 0.04 FF3040 12 0
    slide / NO PICTURE; the export cuts repeats (the game clamps). Still to
    do: tint. Also ALIGN (UI/ALIGN): parts, points, faces, as seen.
 4. **Painting**: brushes straight onto the model, in 3D (every texel within
-   the brush's reach, so strokes cross from part to part), on a layer of
-   their own over the pictures. Export bakes it all into the one texture.
-   Meanwhile (UI/PAINT): a face's picture painted flat, over the whole
-   window (Ctrl+P) - tools, gradients, mirrors, made textures, filters.
+   the brush's reach, so strokes cross from part to part). Export bakes
+   it all into the one texture. Meanwhile (UI/PAINT): a face's picture
+   painted flat, over the whole window (Ctrl+P) - tools, gradients,
+   mirrors, made textures, filters.
+
+   **Paint on the model** (next, before symmetry and c0nstruct0r - Rick,
+   2026-11-01; a graphics tablet works as the mouse). A new way, beside
+   the old ones: Ctrl+P, MOVE IT, pictures on faces and the edit tools
+   all stay as they are.
+   a. A mode (as MOVE IT / BEVEL): the view stays the 3D view, orbit /
+      pan / zoom as ever (wheel, middle / right drag), the left button
+      paints. A strip of tools and colours over the view; Esc leaves.
+   b. Painting writes the face's own picture (`picPix`), so it shows at
+      once and everything after it - save, export, the flat painter,
+      DRAW - sees it. No second layer: the pictures are the paint.
+   c. The heavy lifting: a face with no picture (a plain colour) gets
+      one when first painted - the part's faces unwrapped automatically
+      into a picture of the model's own (`pictures/paint/MODEL.png`):
+      each flat run of faces (as PLANES) laid out flat at one pixel size,
+      packed, filled with the faces' colours, so it looks the same until
+      painted. The pixel size: as the model's other pictures, else a
+      setting (pixels per cell).
+   d. A face with a picture is painted where its pixels are (the file
+      changes, as in the flat painter). A face that shares its pixels
+      with another (one picture region on two faces, a repeat): JUST
+      HERE (default) copies those pixels into its own region first -
+      pixel for pixel when its picture sits on it evenly, else laid out
+      flat at the pixel size it shows - so the paint stays where it's
+      put; EVERYWHERE paints the shared picture (every face using it
+      changes). Copies go where the model's one picture is see-through,
+      else into `pictures/paint/MODEL.png`. Done 2026-11-01 (UI/BRUSH).
+   e. The brush: in texels, hard pixel edges (pixel art), round or
+      square. Each screen pixel under it is looked up through `rId` (its
+      triangle) and the triangle's corners (its spot in the picture), so
+      a stroke crosses faces and parts; zoomed out (a screen pixel
+      bigger than a texel) it samples finer so no texels are skipped.
+      Only what's seen is painted (the near side).
+   f. Tools: PENCIL (one texel), BRUSH (size), ERASE (back to what the
+      picture was when painting started, or the face colour), PICK (the
+      texel's colour, Alt+click), FILL (the texels of one colour joined
+      on the clicked face's region), LINE (Shift+click from the last
+      point). Colours: the painter's palette and picker.
+   g. Undo: one step a stroke (the pictures it touched, as the painter's
+      `PntSnap$`, and the model if a face got a new region). Saved with
+      the model (Ctrl+S saves the touched pictures too, as the painter's
+      SAVE does).
+   g2. Done 2026-11-01: the painter's other tools on the model (Rick: "paint
+      like ON THE MODEL not individual picture"): LINE / BOX / ELLIPSE drawn
+      on the view, FILL / GRADIENT / MAKE / FILTERS over a REACH (the colour
+      joined - across faces -, the face, the part, all), MAKE's patterns
+      laid by where pixels are on the model (UI/BRTOOLS). Not carried over:
+      MIRROR (stage 11's symmetry instead), WRAP / TILED / GRID (the model
+      shows that), SELECT.
+   g3. Done 2026-11-01: UV DRAW (Ctrl+U; OUT/UVMAP) - the selected parts'
+      faces as one layered DRAW file (Rick: "the entire objects texture
+      atlas in one file ... with layers made for each of the objects
+      PLANES/faces, and a legend ... as well as numbers on them"): a layer
+      a side (a flat run of faces; too many: a layer a way of facing),
+      OUTLINES / NUMBERS / LEGEND as guides; DRAW's saves read back, each
+      side layer's own pixels only. Later, perhaps: a round thing's facets
+      unwrapped as one strip (now each facet is its own side).
+   h. Later: pressure (QB64 doesn't read a tablet's - only its pointer),
+      painting through to hidden faces, the painter's gradients and
+      MAKE textures as brushes, symmetry (stage 11).
 5. **Prefabs** (done, 0.4.0): what's left after stage 2 - unlink a use (its parts into
    the model as parts, as a group: turns combined into one Z-X-Y set, or a
    mesh part when a scale can't be one part's), a use's tint, renaming or
@@ -197,6 +257,18 @@ reloading a model when its files change - done 2026-10-31 (`[things]`
 `x, y, prop, NAME[, HP]`, the pane's MODEL < >, console `prop X Y NAME` /
 `reload`, PropWatch). Still to do: the game opening bu1ld0r (as it opens
 DRAW).
+
+11. **Symmetry** (after painting on the model - Rick, 2026-11-01): as
+    DRAW's symmetry, but for operations. Define a mirror line or plane
+    (vertical, horizontal, diagonal) or N pie slices round an axis
+    through the middle; every operation done on one side - a part put
+    down, moved, turned, sized; in E points / edges / faces moved,
+    extruded, inset, bevelled; paint strokes - is done on the others in
+    kind, live. Start at 0 and both sides match exactly (the barrel's
+    struts through the reinforcement spheres: done once, not spun round
+    by hand for each).
+
+12. **c0nstruct0r**: see C0NSTRUCT0R.md.
 
 ## Testing
 

@@ -20,7 +20,7 @@ picture tools; PAINT: the painter; PEN: the pen; TEXT: the text tool;
 REF: reference pictures; ALIGN: align parts / points / faces as seen; GIZMO: the
 move widget's arrows and X/Y/Z held - a drag kept to one axis (`AxisAt#`);
 EDIT: a part's faces, edges (`ED_EDGES`: picked as their two points in edSelV - `EdPtMode` is points or edges) and points; BEVEL: B in E, a mode; LOOP: O in E, the same mode), OUT (EXPORT: OBJ + NEON-CASTER; TIDY:
-the export's mesh tidied). As NEON-CASTER: `.BI`
+the export's mesh tidied; UVMAP: UV DRAW, faces as a layered .draw). As NEON-CASTER: `.BI`
 declarations, `.BM` routines, no GOSUB/GOTO, DIM every local.
 
 ## Gotchas met so far
@@ -239,7 +239,9 @@ Favourites (UI/BIN, the star `BinStarRect`, menu `binMenuKind` 3, rows in
 
 The painter (UI/PAINT, `pntOn`) takes the whole window: UiFrame / UiKey /
 UiDraw hand over at their top. Ctrl+P (`PntFromPointer`): E's picked
-faces -> `PicOfPicked$` (shared with EDIT IN DRAW), else the face under
+faces -> `PicOfPicked$` (shared with EDIT IN DRAW; a picture shown off
+the picked faces too - `PicSharedOut` - is copied to their own first,
+`PicCopyPicked$`: their pixel box + 1 pad, spots remapped), else the face under
 the pointer's tTex, else `PicNewFile$` + PicPutAt. Pixels through a
 `_MEM` (`pntM`); undo is whole pictures as strings (`PntSnap$`); shapes
 redraw over `pntBack$` while dragging. Save: `_SAVEIMAGE`, then picW = 0
@@ -393,6 +395,71 @@ three view-filling ones). Controls `RefBtn` 1-6 at the view's top right
 .bld: `ref K OP SHOWN A B W PATH` (`RefLines` in ModelWrite, `RefFromText`
 in ModelLoad, ModelNew clears; not in undo or prefabs). Drops on REF:
 DropTake; a PICTURES tile let go on it: UiFrame's mR1.
+
+## Painting on the model (UI/BRUSH)
+
+Shift+P / top bar PanelBtn 19 (`brOn`; the tools past the brush in UI/BRTOOLS): UiKey gives BrKey the keys first, mP1 in the
+view goes to `BrPress`, BrFrame continues the stroke, PanelDraw / PanelClick hand over
+(BrDraw / BrClick, `BrRect` ids). A dab (`BrDab`): RayPlane on the triangle under the
+pointer, `BrNear` lists front-facing triangles within the brush's world reach (texel
+size `BrTexelW#`), `BrPaintTri` paints texels by clamped barycentrics. Before painting,
+`BrReady` makes the faces reached paintable: shapes -> mesh parts, then per face
+`BrUnwrap` when `BrNeeds` (no picture; JUST HERE and `BrShareScan` says another face's
+box on that picture overlaps it, wrap-aware, keyed `CLNG(p)*65536&+tFace` - meshKey$
+cached). BrUnwrap: exact copy (even mapping, fits 256: `pd` a pixel's pad) else flat
+by PicAxes at the face's own pixel size (`1/sqrt(lu*lv)`; no picture: `BrDens#`).
+`BrPlace`: the model's one picture first (`brMain`, BrMainPic in BrStart), then
+`pictures/paint/MODEL[-N].png` (`BrAtlasNew`); `BrFreeAt` a summed-area table of
+alpha <> 0 (a copy's alpha-0 pixels become 1). `picDirty` + `PicSave`/`PicSaveDirty`
+(ModelWrite) / `PicSaveRef` (before the painter and DRAW open one). Undo per stroke
+(`brU$`: "M" = the model changed too, UndoStep with it; then 14 bytes a pixel).
+ERASE goes back to `brOrig$(k)` (the picture at BrStart).
+UI/BRTOOLS: LINE / BOX / ELLIPSE (`brSh` 1, let go: `BrShapeDo` - outline by BrLine
+dabs, FILLED `BrShapeFill`: `brGR` 4 gathers facing triangles under the box, pixels kept
+inside on the view and not behind rZ), FILL / GRADIENT (`brSh` 2, `BrGradPaint` by each
+pixel's view place `brGX/brGY`) / MAKE / FILTERS over `brReach` (`BrReachAt`: `brGR` =
+reach for BrReady + `BrGather`, then `BrTexSet` lists pixels `bx*` with world places -
+`bxMk`/`bxAt` per picPix, stamp `bxGen`; COLOUR: `BrFloodSel`, picture neighbours within
+a face (`bxF`), across faces a spatial hash, 1.5 pixels). MAKE / FILTERS borrow the
+painter's routines on a scratch image (`BrPntBorrow`: pntM / pntW / pntH; pntOn is 0).
+Panel ids: BrRect (two pages, `brPage`; tools 1-9 = `BrBtnTool`). ONE FACE (`brFaceOnly`, K, id 39):
+`brFK` the stroke's face (part x 65536 + tFace), set by its first dab after BrReady, reset
+in BrStrokeBegin; BrGather mode 0 keeps only it; BrReachAt / BrShapeFill gather mode 1;
+a shape's face is the press point's (`BrFaceStart` in BrShapeDo - an ellipse's first dab is
+its right edge). TILT (`brTilt`, T, id 46): `BrShapePlane` at the press (PicAxes of the
+face), `BrShapePts` gives the outline on the view (brQX/brQY) either way; fill tests `BrInQ`. Tested on the crate: a dab
+leaves the copied front pixel-identical.
+
+## UV DRAW (OUT/UVMAP)
+
+Ctrl+U / panel button 38 (`UvExport`): the selected parts' faces as one
+layered `.draw`. `UvSides`: per part EmLoad + EmEdgeMap, faces joined by
+union-find (`UvRoot&`) across edges on one plane (`UvSamePlane`) into sides
+(`uvS()` AS UVSIDE; faces in `uq*`, `uqNx` chains a side's); `UvSideGeo`
+its axes (PicAxes), box, `d0` (pixels a cell now) and `ex` (pixel for
+pixel: every face on one picture, every corner where the first triangle's
+mapping puts it within .75 px, lu/lv < 1.6). `UvKeepK`: one picture, none
+shared (BrShareScan) -> used as is; else `UvSizes` / `UvPackAll&` (rows,
+256..2048, shrinking .75 a try) / `UvTarget` (uv/MODEL-PART[-N], a copy
+`*uvsnap` if the selection already shows it) / `UvRelay` (`UvFillSide`:
+copy, or fan triangles rasterized through old spots, the rest by BFS;
+EmWrite, uqF renumbered by sfMap). `UvWrite`: numbers, layers (a side each,
+else by way of facing, `capL` keeps them under ~96 MB), `uvOwn` (each
+picture pixel's layer: places, or face boxes + 8-neighbour pixel), guides
+drawn on images (`UvText`, `_FONT 8`). `UvDrawFile`: DRAW's v2 layout
+(name 16, shown, opacity, z, blend, lock, pixels BGRA; then 5 tool ints:
+no trailing state to fake), `_SAVEIMAGE` a temp .png + the drAw chunk
+(`_DEFLATE$`, `_CRC32`); the `.uv` sidecar ("BUV1", the .draw's `UvSig$` at
+5 - size + last 16 bytes -, ref, sizes, names, uvOwn deflated).
+`UvReadBack` parses DRAW's layer records by version (64-byte names from
+28, fields from 2/7/24/25/27; refuses > 30) and copies each named side
+layer where uvOwn says. `UvWatchFrame` (with PicWatchFrame) reads a change
+once it's held for a tick; `UvSyncFirst` reads an unread save before
+overwriting. Test: `--uvdraw` (all parts, no DRAW), `--uvback F`; DRAW
+itself can check a file headless: `DRAW.run IN.draw --export OUT.draw` on
+:99 with HOME / XDG_* pointed at a scratch dir (keeps Rick's recent files
+and config untouched). `PX0` is a CONST (the panel), `pos` / `data` / `any`
+reserved: not names.
 
 ## Pictures (textures)
 

@@ -52,6 +52,7 @@ END FUNCTION
 SUB PntOpen (ref$)
     DIM img&
     IF pntOn THEN PntClose
+    PicSaveRef ref$ ' (painted on the model: its file brought up to date first)
     img& = _LOADIMAGE(PicPath$(ref$), 32)
     IF img& >= -1 THEN Msg "Can't read " + PicPath$(ref$): EXIT SUB
     IF pntSize = 0 THEN ' (the first time: as NEON-CASTER's)

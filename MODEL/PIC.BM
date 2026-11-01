@@ -18,6 +18,7 @@ FUNCTION PicFind (ref$)
         picN = picN + 1: k = picN: picRef$(k) = ref$: picW(k) = 0: picH(k) = 0: picOff(k) = 0
     END IF
     IF picW(k) > 0 THEN PicFind = k: EXIT FUNCTION
+    picDirty(k) = 0
     IF _FILEEXISTS(PicDir$ + ref$ + ".png") THEN
         img& = _LOADIMAGE(PicDir$ + ref$ + ".png", 32)
         IF img& < -1 THEN
@@ -58,7 +59,7 @@ SUB PicReloadAll
     FOR k = 1 TO picN
         IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
         pcThumb&(k) = 0
-        picW(k) = 0: picH(k) = 0: picOff(k) = 0
+        picW(k) = 0: picH(k) = 0: picOff(k) = 0: picDirty(k) = 0
         IF _FILEEXISTS(PicDir$ + picRef$(k) + ".png") THEN
             img& = _LOADIMAGE(PicDir$ + picRef$(k) + ".png", 32)
             IF img& < -1 THEN
@@ -69,5 +70,42 @@ SUB PicReloadAll
                 _FREEIMAGE img&
             END IF
         END IF
+    NEXT
+END SUB
+
+' Picture k written to its file as it's shown (painted on the model)
+SUB PicSave (k)
+    DIM img&, m AS _MEM, a AS _MEM, f$, i, d$
+    IF k < 1 OR k > picN THEN EXIT SUB
+    IF picW(k) = 0 THEN EXIT SUB
+    f$ = PicDir$ + picRef$(k) + ".png"
+    i = _INSTRREV(f$, "/"): d$ = LEFT$(f$, i - 1)
+    IF NOT _DIREXISTS(d$) THEN MKDIR d$
+    img& = _NEWIMAGE(picW(k), picH(k), 32)
+    m = _MEMIMAGE(img&): a = _MEM(picPix())
+    _MEMCOPY a, a.OFFSET + picOff(k) * 4, picW(k) * picH(k) * 4 TO m, m.OFFSET
+    _MEMFREE m: _MEMFREE a
+    _SAVEIMAGE f$, img&: _FREEIMAGE img&
+    picDirty(k) = 0
+    IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
+    pcThumb&(k) = 0
+    FOR i = 1 TO pwN ' (watched for DRAW: this save isn't news)
+        IF pwRef$(i) = picRef$(k) THEN pwSig$(i) = PicFileSig$(picRef$(k))
+    NEXT
+END SUB
+
+' Every picture painted on the model since it was read, saved
+SUB PicSaveDirty
+    DIM k
+    FOR k = 1 TO picN
+        IF picDirty(k) THEN PicSave k
+    NEXT
+END SUB
+
+' Picture ref$ saved first if it's been painted on the model (before another program, or the painter, reads its file)
+SUB PicSaveRef (ref$)
+    DIM k
+    FOR k = 1 TO picN
+        IF picRef$(k) = ref$ AND picDirty(k) <> 0 THEN PicSave k
     NEXT
 END SUB

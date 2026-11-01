@@ -145,6 +145,7 @@ SUB ModelWrite (f$)
     NEXT
     RefLines fh ' (its reference pictures)
     CLOSE #fh
+    PicSaveDirty ' (pictures painted on the model)
 END SUB
 
 ' part KIND  x y z  turns  sizes  RRGGBB  slices  amount; or a prefab: use NAME  x y z  turns  scales

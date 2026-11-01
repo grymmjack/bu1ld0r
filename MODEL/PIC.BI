@@ -11,3 +11,4 @@ CONST MAX_PIC = 256
 DIM SHARED picN, picRef$(MAX_PIC), picW(MAX_PIC) AS LONG, picH(MAX_PIC) AS LONG, picOff(MAX_PIC) AS LONG
 REDIM SHARED picPix(0) AS _UNSIGNED LONG
 DIM SHARED picTop AS LONG
+DIM SHARED picDirty(MAX_PIC) ' (painted on the model since it was read: saved with the model - PicSaveDirty)
