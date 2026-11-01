@@ -550,6 +550,7 @@ SUB FxStart
     PlaceStop
     IF typeField THEN FieldCommit
     fxOn = -1: fxHot = 1
+    IF fxClaudeAt = 0 THEN fxCExe$ = FxClaudeExe$: fxClaudeAt = -1
     FxCheck
     Msg "FIX THIS: the report card's checks on what EXPORT makes. SHOW selects the parts, a fix button makes one (Ctrl+Z: back), LEAVE keeps one out. Esc: done"
 END SUB
@@ -561,6 +562,7 @@ END SUB
 ' Each frame (before the view's drawn): a change checked again once it's settled
 SUB FxFrame
     DIM s$, t#
+    IF fxRun THEN FxRunPoll
     IF NOT fxOn THEN EXIT SUB
     IF edPart OR maOn OR brOn OR pntOn OR bvOn OR penOn OR txOn OR fpOn THEN fxOn = 0: EXIT SUB
     IF mB1 THEN EXIT SUB ' (a drag going on)
@@ -583,7 +585,8 @@ FUNCTION FxRowY (k)
     FxRowY = 106 + (k - 1) * 48
 END FUNCTION
 
-' Row k's buttons: 1 SHOW, 2 its fix (SYMMETRY: KEEP L), 3 KEEP R, 4 LEAVE; 5 CHECK AGAIN, 6 DONE
+' Row k's buttons: 1 SHOW, 2 its fix (SYMMETRY: KEEP L), 3 KEEP R, 4 LEAVE; 5 CHECK AGAIN, 6 DONE;
+' 7 - 9 Claude's PICTURES, DETAIL, REBUILD
 SUB FxBtnR (k, b, x, y, w, h)
     y = FxRowY(k) + 18: h = 22
     SELECT CASE b
@@ -591,8 +594,9 @@ SUB FxBtnR (k, b, x, y, w, h)
         CASE 2: x = PX0 + 56: w = 106: IF k = 4 THEN w = 52
         CASE 3: x = PX0 + 112: w = 50
         CASE 4: x = PX0 + 166: w = 64
-        CASE 5: x = PX0: y = FxRowY(FX_N + 1) + 6: w = 112
-        CASE 6: x = PX0 + 118: y = FxRowY(FX_N + 1) + 6: w = 112
+        CASE 5: x = PX0: y = FxRowY(FX_N + 1) + 78: w = 112
+        CASE 6: x = PX0 + 118: y = FxRowY(FX_N + 1) + 78: w = 112
+        CASE 7 TO 9: x = PX0 + (b - 7) * 78: y = FxRowY(FX_N + 1) + 46: w = 74 ' (Claude: PICTURES DETAIL REBUILD)
     END SELECT
 END SUB
 
@@ -662,9 +666,33 @@ SUB FxDraw
             END IF
         NEXT
     NEXT
+    y = FxRowY(FX_N + 1)
+    Txt PX0, y, "ASK CLAUDE", IIFC~&(fxRun, cHi, cText)
+    IF fxRun THEN
+        Txt PX0 + 88, y, fxRunKind$, cHi
+        Txt PX0, y + 20, "working: it has the model", cText
+        Txt PX0, y + 36, "Esc stops it (a backup is", cDim
+        Txt PX0, y + 52, "in c0nstruct0r/backup/)", cDim
+    ELSEIF LEN(fxCExe$) = 0 THEN
+        Txt PX0, y + 20, "needs Claude Code (claude)", cDim
+        Txt PX0, y + 36, "and tools/c0nstruct0r/", cDim
+    ELSE
+        FieldDraw F_FIXASK
+        IF typeField <> F_FIXASK AND LEN(fxAsk$) = 0 THEN Txt PX0 + 4, y + 21, "What should I fix?", cDim
+        FOR b = 7 TO 9
+            FxBtnR 0, b, x, y, w, h: Btn x, y, w, h, FxClaudeName$(b - 6), 0
+        NEXT
+    END IF
     FxBtnR 0, 5, x, y, w, h: Btn x, y, w, h, "CHECK AGAIN", 0
     FxBtnR 0, 6, x, y, w, h: Btn x, y, w, h, "DONE  Esc", 0
-    y = FxRowY(FX_N + 1) + 42
+    y = FxRowY(FX_N + 1) + 108
+    IF LEN(fxSum$) AND fxRun = 0 AND fxHot = 0 THEN ' (what Claude said it did)
+        Txt PX0, y, "CLAUDE SAID", cHi
+        FOR i = 1 TO 12
+            IF y + i * 16 + 16 < scrH - BAR_H THEN Txt PX0, y + i * 16, FxWrap$(fxSum$, 28, i), cDim
+        NEXT
+        EXIT SUB
+    END IF
     IF fxHot < 1 OR fxHot > FX_N THEN EXIT SUB
     Txt PX0, y, FxName$(fxHot), cHi
     FOR i = 1 TO 6: Txt PX0, y + i * 16, FxHelp$(fxHot, i), cDim: NEXT
@@ -688,6 +716,12 @@ END SUB
 SUB FxClick
     DIM k, b, x, y, w, h
     FxBtnR 0, 5, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN FxCheck: Msg "Checked: score" + STR$(INT(fxScore + .5)): EXIT SUB
+    IF LEN(fxCExe$) > 0 AND fxRun = 0 THEN
+        FOR b = 7 TO 9
+            FxBtnR 0, b, x, y, w, h
+            IF InRect(mX, mY, x, y, w, h) THEN FxClaude b - 6: EXIT SUB
+        NEXT
+    END IF
     FxBtnR 0, 6, x, y, w, h: IF InRect(mX, mY, x, y, w, h) THEN FxStop: EXIT SUB
     FOR k = 1 TO FX_N
         FOR b = 1 TO 4
@@ -1098,4 +1132,138 @@ FUNCTION FxHalfMesh& (p, id AS LONG, side, m#)
     NEXT
     fxNewId = EmWrite&
     FxHalfMesh& = -1
+END FUNCTION
+
+' ---------------------------------------------------------------- Claude on a fix
+
+FUNCTION FxClaudeName$ (k)
+    SELECT CASE k
+        CASE 1: FxClaudeName$ = "PICTURES"
+        CASE 2: FxClaudeName$ = "DETAIL"
+        CASE 3: FxClaudeName$ = "REBUILD"
+    END SELECT
+END FUNCTION
+
+' Claude Code's program, where the c0nstruct0r MCP server is beside bu1ld0r ("": not here)
+FUNCTION FxClaudeExe$
+    DIM h$, c$
+    IF NOT _FILEEXISTS(appDir$ + "tools/c0nstruct0r/mcp_server.py") THEN EXIT FUNCTION
+    IF NOT _FILEEXISTS(appDir$ + ".mcp.json") THEN EXIT FUNCTION
+    h$ = ENVIRON$("HOME")
+    IF LEN(h$) THEN
+        c$ = h$ + "/.local/bin/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$: EXIT FUNCTION
+        c$ = h$ + "/.claude/local/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$: EXIT FUNCTION
+    END IF
+    c$ = "/usr/local/bin/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$: EXIT FUNCTION
+    c$ = "/usr/bin/claude": IF _FILEEXISTS(c$) THEN FxClaudeExe$ = c$
+END FUNCTION
+
+' YYYY-MM-DD-HHMMSS
+FUNCTION FxStamp$
+    DIM d$, t$
+    d$ = DATE$: t$ = TIME$
+    FxStamp$ = MID$(d$, 7, 4) + "-" + LEFT$(d$, 2) + "-" + MID$(d$, 4, 2) + "-" + LEFT$(t$, 2) + MID$(t$, 4, 2) + MID$(t$, 7, 2)
+END FUNCTION
+
+' Claude sent on fix k (1 PICTURES, 2 DETAIL, 3 REBUILD): the port opened, a backup saved, the
+' prompt written, `claude -p` started in the background with the c0nstruct0r tools alone
+SUB FxClaude (k)
+    DIM k$, what$, d$, b$, t$, nl$, sel$, n, i, fh
+    IF fxRun THEN Msg "Claude is on it already (Esc stops it)": EXIT SUB
+    IF LEN(fxCExe$) = 0 THEN Msg "ASK CLAUDE needs Claude Code (claude) and tools/c0nstruct0r/ beside bu1ld0r": EXIT SUB
+    IF typeField THEN FieldCommit
+    k$ = FxClaudeName$(k)
+    SELECT CASE k
+        CASE 1: what$ = "re-map the faces whose pictures are smeared, the wrong pixel size or repeated (SMEAR, PIXEL SIZE, REPEATS): from the prop's painting if there is one (pictures/c0nstruct0r/, or the painting tool), else from the pictures the faces have - one picture for the whole model, plain colours where nothing fits"
+        CASE 2: what$ = "give flat slabs the detail the painting (or the pictures on them) shows: insets, extrusions, bevels - shapes, not more pictures - and map the new faces"
+        CASE 3: what$ = "rebuild it as the method does: deliberate low-poly shapes, symmetric where it should be, no gaps, every face mapped"
+    END SELECT
+    IF rcHostH = 0 THEN RcStart 0
+    IF rcHostH = 0 THEN EXIT SUB
+    d$ = appDir$ + "c0nstruct0r/"
+    IF NOT _DIREXISTS(d$) THEN MKDIR d$
+    IF NOT _DIREXISTS(d$ + "backup") THEN MKDIR d$ + "backup"
+    b$ = d$ + "backup/" + mdlName$ + "-" + FxStamp$ + ".bld"
+    ModelWrite b$
+    FOR i = 1 TO pN
+        IF pSel(i) THEN sel$ = sel$ + " " + LTRIM$(STR$(i)): n = n + 1
+    NEXT
+    nl$ = CHR$(10)
+    t$ = "/c0nstruct0r fix " + k$ + nl$ + nl$
+    t$ = t$ + "FIX THIS in bu1ld0r sent you. The model open there is " + mdlName$ + " (bu1ld0r's port is open; its folder is " + appDir$ + ")." + nl$
+    t$ = t$ + "The fix: " + k$ + " - " + what$ + "." + nl$
+    t$ = t$ + IIFS$(n > 0, "Work on the selected parts only (numbers:" + sel$ + ").", "Work on the whole model.") + nl$
+    t$ = t$ + IIFS$(LEN(fxAsk$) > 0, "Rick says: " + fxAsk$, "Rick added nothing: the usual.") + nl$
+    t$ = t$ + "FIX THIS found: " + FxStatus$ + nl$
+    t$ = t$ + "A backup is saved at " + b$ + "." + nl$
+    t$ = t$ + "take the model, work through the bu1ld0r tool on the model that's open (no new, open, save or export), check with fix, give it back, and end with two short lines saying what you changed." + nl$
+    fh = FREEFILE: OPEN d$ + "fix-prompt.txt" FOR OUTPUT AS #fh: PRINT #fh, t$;: CLOSE #fh
+    IF _FILEEXISTS(d$ + "fix-done.txt") THEN KILL d$ + "fix-done.txt"
+    t$ = "#!/bin/sh" + nl$ + "cd " + ShQ$(appDir$) + nl$
+    t$ = t$ + "export C0NSTRUCT0R_DIR=" + ShQ$(appDir$) + nl$
+    t$ = t$ + ShQ$(fxCExe$) + " -p --mcp-config " + ShQ$(appDir$ + ".mcp.json") + " --strict-mcp-config --allowedTools mcp__c0nstruct0r < c0nstruct0r/fix-prompt.txt > c0nstruct0r/fix-out.txt 2>&1 &" + nl$
+    t$ = t$ + "echo $! > c0nstruct0r/fix-pid.txt" + nl$ + "wait $!" + nl$ + "echo $? > c0nstruct0r/fix-done.txt" + nl$
+    fh = FREEFILE: OPEN d$ + "fix-run.sh" FOR OUTPUT AS #fh: PRINT #fh, t$;: CLOSE #fh
+    SHELL "setsid sh " + ShQ$(d$ + "fix-run.sh") + " >/dev/null 2>&1 </dev/null &"
+    fxRun = -1: fxRunKind$ = k$: fxBefore = fxScore: fxPollT# = TIMER(.001): fxSum$ = ""
+    RcLog "-- FIX THIS: Claude sent on " + k$ + IIFS$(LEN(fxAsk$) > 0, " (" + fxAsk$ + ")", "")
+    Msg "Claude is on it: " + k$ + " - it takes the model when it starts (a backup: " + Tilde$(b$) + "). Esc stops it"
+END SUB
+
+' Each second while Claude works: done yet? Then the score before and after, and what it said
+SUB FxRunPoll
+    DIM t#, d$, o$, i AS LONG, j AS LONG, l$, sum$, n
+    t# = TIMER(.001)
+    IF t# >= fxPollT# AND t# - fxPollT# < 1 THEN EXIT SUB
+    fxPollT# = t#
+    d$ = appDir$ + "c0nstruct0r/"
+    IF NOT _FILEEXISTS(d$ + "fix-done.txt") THEN EXIT SUB
+    fxRun = 0
+    IF _FILEEXISTS(d$ + "fix-out.txt") THEN o$ = _READFILE$(d$ + "fix-out.txt")
+    ' (its last words: the summary - the last two lines with something on them)
+    i = LEN(o$)
+    DO WHILE i > 0 AND n < 2
+        j = _INSTRREV(i, o$, CHR$(10))
+        l$ = LTRIM$(RTRIM$(MID$(o$, j + 1, i - j)))
+        IF RIGHT$(l$, 1) = CHR$(13) THEN l$ = LEFT$(l$, LEN(l$) - 1)
+        IF LEN(l$) THEN sum$ = l$ + IIFS$(LEN(sum$) > 0, " ", "") + sum$: n = n + 1
+        i = j - 1
+    LOOP
+    fxSum$ = sum$: fxHot = 0
+    IF rcLock THEN rcLock = 0
+    FxCheck
+    Msg "Claude's " + fxRunKind$ + ": score" + STR$(INT(fxBefore + .5)) + " ->" + STR$(INT(fxScore + .5)) + IIFS$(LEN(sum$) > 0, " - " + LEFT$(sum$, 160), "") + " (Ctrl+Z steps back)"
+    RcLog "-- FIX THIS: Claude done, score" + STR$(INT(fxBefore + .5)) + " ->" + STR$(INT(fxScore + .5))
+END SUB
+
+' Esc while Claude works: it's ended (its process killed; the poll then finishes up)
+SUB FxClaudeStop
+    DIM p$
+    p$ = appDir$ + "c0nstruct0r/fix-pid.txt"
+    IF _FILEEXISTS(p$) THEN
+        p$ = LTRIM$(RTRIM$(_READFILE$(p$)))
+        p$ = LEFT$(p$, INSTR(p$ + CHR$(10), CHR$(10)) - 1)
+        IF VAL(p$) > 1 THEN SHELL "kill " + LTRIM$(STR$(VAL(p$))) + " >/dev/null 2>&1"
+    END IF
+    Msg "You have the model: Claude stopped (the backup is in c0nstruct0r/backup/)"
+END SUB
+
+' Line ln of t$ broken at spaces into lines w letters wide (a longer word cut)
+FUNCTION FxWrap$ (t$, w, ln)
+    DIM p AS LONG, n, e AS LONG, q AS LONG
+    p = 1
+    DO WHILE p <= LEN(t$)
+        DO WHILE MID$(t$, p, 1) = " ": p = p + 1: LOOP
+        IF p > LEN(t$) THEN EXIT DO
+        n = n + 1
+        IF LEN(t$) - p + 1 <= w THEN
+            e = LEN(t$) + 1
+        ELSE
+            e = p + w: q = e
+            DO WHILE q > p AND MID$(t$, q, 1) <> " ": q = q - 1: LOOP
+            IF q > p THEN e = q
+        END IF
+        IF n = ln THEN FxWrap$ = RTRIM$(MID$(t$, p, e - p)): EXIT FUNCTION
+        p = e
+    LOOP
 END FUNCTION

@@ -30,6 +30,7 @@ SUB FieldRect (f, x, y, w, h)
         CASE F_COL: y = 282: x = PX0 + 100: w = 90
         CASE F_NAME: y = 3: x = 56: w = 200: h = 22
         CASE F_BUDGET: y = 128: x = PX0 + 100
+        CASE F_FIXASK: x = PX0: y = FxRowY(FX_N + 1) + 18: w = 230: h = 22 ' (FIX THIS: words for Claude)
         CASE F_DIR, F_PFNAME: BinBtn x, y, w, h
         CASE F_PICPATH: x = 6: y = BinTabY + 19: w = BIN_W - 38: h = 20 ' (the star after it: BinStarRect)
         CASE F_PNAME ' (in its row of the parts list)
@@ -59,11 +60,13 @@ FUNCTION FieldAt (x, y)
     IF InRect(x, y, fx, fy, fw, fh) AND typeField = F_PFNAME THEN FieldAt = F_PFNAME
     FieldRect F_PICPATH, fx, fy, fw, fh
     IF InRect(x, y, fx, fy, fw, fh) AND (binTab = 1 OR binTab = 2) THEN FieldAt = F_PICPATH
+    FieldRect F_FIXASK, fx, fy, fw, fh
+    IF InRect(x, y, fx, fy, fw, fh) AND FieldShown(F_FIXASK) THEN FieldAt = F_FIXASK
 END FUNCTION
 
 ' A field of words (a name, a path), not a number: no wheel, no middle-click reset, Tab doesn't go on
 FUNCTION FieldWords (f)
-    FieldWords = (f = F_NAME OR f = F_DIR OR f = F_PNAME OR f = F_PFNAME OR f = F_PICPATH)
+    FieldWords = (f = F_NAME OR f = F_DIR OR f = F_PNAME OR f = F_PFNAME OR f = F_PICPATH OR f = F_FIXASK)
 END FUNCTION
 
 ' A field there to type in: a part's only when parts are selected; slices and amount only for shapes that have them
@@ -74,6 +77,7 @@ FUNCTION FieldShown (f)
     IF f = F_PNAME THEN FieldShown = (typeField = F_PNAME): EXIT FUNCTION
     IF f = F_PFNAME THEN FieldShown = (typeField = F_PFNAME): EXIT FUNCTION
     IF f = F_PICPATH THEN FieldShown = (binTab = 1 OR binTab = 2): EXIT FUNCTION ' (PICTURES' folder, or MODELS')
+    IF f = F_FIXASK THEN FieldShown = (fxOn <> 0 AND LEN(fxCExe$) > 0 AND fxRun = 0 AND edPart = 0): EXIT FUNCTION
     IF maOn OR brOn OR fxOn THEN EXIT FUNCTION ' (MATERIAL / painting on the model / FIX THIS has the panel: its fields aren't there)
     IF f = F_BUDGET THEN FieldShown = (edPart = 0 AND SelCount = 0 AND placeKind = 0): EXIT FUNCTION
     IF edPart THEN FieldShown = EdFieldShown(f): EXIT FUNCTION
@@ -1192,6 +1196,7 @@ FUNCTION FieldValue$ (f)
     IF f = F_PFNAME THEN FieldValue$ = binMenuRef$: EXIT FUNCTION
     IF f = F_PICPATH THEN FieldValue$ = IIFS$(binTab = 2, MdlFolderShown$, PicFolderShown$): EXIT FUNCTION
     IF f = F_BUDGET THEN FieldValue$ = LTRIM$(STR$(mdlBudget)): EXIT FUNCTION
+    IF f = F_FIXASK THEN FieldValue$ = fxAsk$: EXIT FUNCTION
     IF edPart THEN FieldValue$ = EdFieldValue$(f): EXIT FUNCTION
     p = SelFirst
     IF p = 0 THEN
@@ -1233,6 +1238,7 @@ SUB FieldApply (f, v$)
         EXIT SUB
     END IF
     IF f = F_BUDGET THEN BudgetSet VAL(v$), -1: EXIT SUB
+    IF f = F_FIXASK THEN fxAsk$ = LTRIM$(RTRIM$(v$)): EXIT SUB
     IF edPart THEN EdFieldApply f, v$: EXIT SUB
     IF f = F_DIR AND binTab = 1 THEN ' (a new folder in pictures/, opened)
         v$ = SafeName$(v$)
@@ -2659,6 +2665,7 @@ SUB HelpSetup
     HelpAdd "MAKE PLAIN  SQUARE UP|smeared faces their pixels' colour; faces a little off made true (turns snapped, a shape made a mesh; round things' facets left)"
     HelpAdd "KEEP L  KEEP R|the left (or right) half, as the front's seen, mirrored over the other; parts across the middle stay"
     HelpAdd "TIDY  LEAVE|the export cut down to the budget; LEAVE: it's meant so - out of the score, saved with the model. A fix works on the parts picked, or all of them"
+    HelpAdd "ASK CLAUDE|(Claude Code installed, tools/c0nstruct0r/ beside bu1ld0r) PICTURES / DETAIL / REBUILD: Claude works on the model through the port - type what you want first, if anything. A backup is saved first (c0nstruct0r/backup/); every step is an undo; Esc stops it. The score before and after, and what it says it did, show in the panel"
     HelpAdd "#c0nstruct0r (bu1ld0r started with --port, or port= in bu1ld0r.cfg)"
     HelpAdd "c0nstruct0r|a program on this computer drives bu1ld0r through a port: a strip over the view's foot says what it's doing. While it has the model, no key, click or wheel does anything but Esc. Every change it makes is one undo step"
     HelpAdd "Esc|(c0nstruct0r has the model) take it back: c0nstruct0r stops"

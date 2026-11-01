@@ -82,6 +82,32 @@ top=RECT|COLOUR)`. Measure on a 16-pixel grid of the painting (`painting NAME gr
 8. **Clean up**: the hidden test copy and Xvfb `:98` (`pkill -f '^/tmp/claude-1000/bu1ld0r-test/app/bu1ld0r.run'`,
    `pkill -f '^Xvfb :98'`) - only those.
 
+## Fixing: `/c0nstruct0r fix KIND` (sent by FIX THIS)
+
+bu1ld0r's FIX THIS panel starts you with `claude -p` when Rick presses PICTURES, DETAIL or
+REBUILD: the prompt says the fix, the parts (selected ones, or the whole model), Rick's own
+words (they come first) and the findings. It's **Rick's model, already open** in bu1ld0r, on
+his screen - not a prop to start from nothing:
+
+- `take` first. Never `new`, `open`, `save` or `export` (a backup's made; Rick saves). Each
+  change is an undo step he can step back through.
+- `fix` gives the findings (`fix show smear` / `size` / `asym`... selects the parts carrying
+  one: `inspect status` lists them); `inspect parts` / `faces` the rest. Keep to the parts
+  you were given.
+- The painting: `painting NAME` if the model is a prop (`c0-NAME`, or NAME a game prop's),
+  else work from the pictures its faces already have (`inspect faces`: `pic`).
+- **PICTURES**: the faces SMEAR / PIXEL SIZE / REPEATS flag mapped again - `edit P`, pick them,
+  `picture REF view YAW RECT own` / `top RECT own` from a patch the face's shape and about
+  the model's usual pixel size (FIX THIS's px/cell), one picture for all; a plain colour
+  where the painting has nothing for it. `done`, `fix` again.
+- **DETAIL**: the method's step 4 on flat slabs (inset + extrude, bevels) where the painting
+  shows panels, screens, vents; map the new faces.
+- **REBUILD**: the method from step 2 for the parts given (`del` them, `add` new ones in
+  place), the rest left as they are.
+- Esc on Rick's side ends you (your process is stopped): don't fight it.
+- End: `fix` for the score, `give`, then two short lines - what you changed and the score
+  before / after. bu1ld0r shows them in the panel.
+
 ## First rebuild: alarmpc (2026-11-01)
 
 Five parts, 72 triangles, score 25 against the game's 64 (smear 45% -> 0%, asymmetry 19% -> 3%).

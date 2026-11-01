@@ -176,8 +176,25 @@ in the .bld as `fixleave asym ...`). What changed from the table above:
   right | tidy | show W | leave W]` answers with every number
   (`ok score 25 smear 0 size 44.6 ...`).
 
-Next: the Claude half (PICTURES, DETAIL, REBUILD; the "What should I fix?"
-box; `ask`).
+**Built (2026-11-01): the Claude half.** ASK CLAUDE in the panel (shown
+where `claude` and `tools/c0nstruct0r/` + `.mcp.json` are beside bu1ld0r):
+the "What should I fix?" field (`F_FIXASK`), PICTURES / DETAIL / REBUILD.
+`FxClaude` opens the port if it's shut, writes the model to
+`c0nstruct0r/backup/NAME-DATE.bld`, the prompt to `c0nstruct0r/fix-prompt.txt`
+(`/c0nstruct0r fix KIND`, the parts, Rick's words, the findings) and runs
+`c0nstruct0r/fix-run.sh`: `claude -p --mcp-config .mcp.json
+--strict-mcp-config --allowedTools mcp__c0nstruct0r` (no Bash, no file
+edits: bu1ld0r through the port only), its output in `fix-out.txt`, its pid
+in `fix-pid.txt`, its exit code in `fix-done.txt` - polled each second
+(`FxRunPoll`): the score before -> after and its last two lines in the
+panel. Esc kills it (`FxClaudeStop`). The skill's "Fixing" section is what
+it follows. First runs (hidden): a no-change plumbing test, then c0-console
+PICTURES 25 -> 3 in ~4 minutes (the cabinet sides re-mapped from a cabinet
+patch at the front's pixel size; beacon and antenna plain colours); Esc
+mid-run stopped it at once.
+
+Still to come: `ask` (Claude asking Rick a question with buttons, the one
+click allowed through the lock).
 
 ## The port's commands (stage 2)
 

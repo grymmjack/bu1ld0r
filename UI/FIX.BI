@@ -25,3 +25,7 @@ DIM SHARED fxG(1, 63, 63) AS _BYTE, fxGW(1), fxGH(1), fxGA(1) AS SINGLE ' (the o
 DIM SHARED fxQX(25) AS DOUBLE, fxQY(25) AS DOUBLE, fxQZ(25) AS DOUBLE, fxQN ' (the 26 nice ways: square and 45)
 DIM SHARED fxNewId AS LONG, fxRoundN AS LONG ' (FxSquareMesh&: the mesh made, faces left as round things' facets)
 DIM SHARED mdlLeave$ ' (the findings left as they are, words between spaces: " smear asym ")
+' Claude on a fix (PICTURES, DETAIL, REBUILD): `claude -p` in the background with the
+' c0nstruct0r MCP server alone, driving this bu1ld0r through its port (opened for it)
+CONST F_FIXASK = 26 ' (the panel's "What should I fix?" - Rick's words for Claude)
+DIM SHARED fxAsk$, fxRun, fxRunKind$, fxBefore AS SINGLE, fxPollT#, fxCExe$, fxClaudeAt, fxSum$

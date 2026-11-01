@@ -578,6 +578,16 @@ the game's own props score 40-90):
   2x2, shrunk) and pictures repeated across a face (EXPORT cuts those
   faces up): shown, not scored.
 
+**ASK CLAUDE** (where Claude Code is installed and `tools/c0nstruct0r/` is
+beside bu1ld0r): PICTURES (re-map the smeared and wrong-size faces from the
+painting), DETAIL (insets, extrusions, bevels where the painting shows them)
+or REBUILD start Claude Code in the background on the open model - type what
+you want in "What should I fix?" first, if anything. bu1ld0r saves a backup
+(`c0nstruct0r/backup/`), opens its port, and Claude works through it with the
+c0nstruct0r tools only, while you watch (only Esc works meanwhile: it stops
+Claude). Then the panel shows the score before and after and what Claude says
+it did; every step it took is an undo step. The c0-console's PICTURES: 25 -> 3.
+
 SHOW selects the parts carrying a finding. LEAVE says one is meant as it is:
 it's left out of the score and saved with the model. A fix works on the
 selected parts, or on everything when nothing is selected, and is one undo
@@ -1157,6 +1167,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 | MAKE PLAIN / SQUARE UP | smeared faces their pixels' colour; faces a little off made true (turns snapped, a shape made a mesh; round things' facets left) |
 | KEEP L / KEEP R | the left (or right) half, as the front's seen, mirrored over the other; parts across the middle stay |
 | TIDY / LEAVE | the export cut down to the budget; LEAVE: it's meant so - out of the score, saved with the model. A fix works on the parts picked, or all of them |
+| ASK CLAUDE | (Claude Code installed, tools/c0nstruct0r/ beside bu1ld0r) PICTURES / DETAIL / REBUILD: Claude works on the model through the port - type what you want first, if anything. A backup is saved first (c0nstruct0r/backup/); every step is an undo; Esc stops it. The score before and after, and what it says it did, show in the panel |
 
 #### c0nstruct0r (bu1ld0r started with --port, or port= in bu1ld0r.cfg)
 

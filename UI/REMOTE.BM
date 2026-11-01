@@ -164,6 +164,7 @@ END FUNCTION
 ' Esc while it has the model: Rick's again, and it can't go on till F9
 SUB RcEsc
     rcLock = 0: rcStopped = -1: ovDirty = -1
+    IF fxRun THEN FxClaudeStop ' (FIX THIS's Claude: ended)
     Msg "You have the model: c0nstruct0r stopped (F9 lets it go on)"
     RcLog "-- Esc: stopped"
 END SUB

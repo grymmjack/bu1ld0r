@@ -603,7 +603,10 @@ end (after hover picking: it remakes the triangles), .25 s after `FxSigNow$` (Mo
 pfGen) settles. Fixes: `FxMakePlain`, `FxSquareUp` (`FxSnapA`, `FxSquareMesh&`), `FxKeep`
 (`PartMirror&` in MODEL/BAKE - the port's `mirror` too - and `FxHalfMesh&`: faces clipped
 at the middle, spots carried, the half and its mirror welded, EmMerge / EmTJoin& /
-EmStraighten&), `FxTidy`. LEAVE: `mdlLeave$` (" smear asym "), `fixleave` in the .bld
+EmStraighten&), `FxTidy`. ASK CLAUDE (`FxClaude`, `F_FIXASK` = `fxAsk$`, `fxCExe$`
+the claude found): backup, prompt and `fix-run.sh` in c0nstruct0r/, `claude -p` limited
+to mcp__c0nstruct0r; `FxRunPoll` (in FxFrame, even with the panel shut) waits for
+`fix-done.txt`; RcEsc kills it (`FxClaudeStop`, `fix-pid.txt`). LEAVE: `mdlLeave$` (" smear asym "), `fixleave` in the .bld
 (`FxLines` / `FxFromText`, not in ModelText$). Port: `fix ...` (`RcFix`).
 
 ## c0nstruct0r
