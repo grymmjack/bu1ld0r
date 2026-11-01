@@ -1,0 +1,77 @@
+# c0nstruct0r: terminal, rebuilt from hd/terminal.png (0.55 tall; subject 256x256 at +0+0)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/terminal.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/terminal.png)
+take
+pace 400
+say terminal: a beige terminal: a screen unit on a keyboard unit that juts out in front
+new force
+add box 0.0 0.0 0.0 0.55 0.2063 0.4 col=D8A870 name=keyboard-unit
+say its keys, raised
+edit 1
+pick facing 0 0 -1
+inset 0.1
+scale 0.5773 0.5787 1
+move 0.072 0.0129 0
+extrude 0.01
+done
+add box 0.0 0.2063 0.05 0.5414 0.3437 0.3 col=D8A870 name=screen-unit
+say the screen, set in
+edit 2
+pick facing 0 0 -1
+inset 0.1
+scale 0.9965 0.3681 1
+move 0.0 0.0505 0
+extrude -0.02
+done
+say pictures: the fronts from the painting; sides from its beige panels; tops and backs plain
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/terminal view 0 0 0 256 256
+pick facing 0 0 1 45
+colour C89860
+pick facing 1 0 0
+picture c0nstruct0r/terminal view 90 0 165 60 250 own
+pick facing -1 0 0
+picture c0nstruct0r/terminal view 270 60 165 0 250 own
+pick facing 0 1 0 30
+colour D8A870
+pick facing 0 -1 0 30
+colour 8A6A40
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/terminal view 0 0 0 256 256
+pick facing 0 0 1 45
+colour C89860
+pick facing 1 0 0
+picture c0nstruct0r/terminal view 90 0 90 60 150 own
+pick facing -1 0 0
+picture c0nstruct0r/terminal view 270 60 90 0 150 own
+pick facing 0 1 0 30
+colour D8A870
+pick facing 0 -1 0 30
+colour 8A6A40
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot terminal0 clean
+view 45 0
+shot terminal1 clean
+view 90 0
+shot terminal2 clean
+view 135 0
+shot terminal3 clean
+view 180 0
+shot terminal4 clean
+view 225 0
+shot terminal5 clean
+view 270 0
+shot terminal6 clean
+view 315 0
+shot terminal7 clean
+view 25 18
+save c0-terminal
+export
+give

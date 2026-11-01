@@ -264,6 +264,22 @@ bu1ld0r's `export/` only. SCORE: higher is worse.
 | lamp | 5 | 224 | 32 | 58 | base disc, pole, socket, bulb, drum shade - one axis; each round part from its own patch inside its outline |
 | cryopod | 2 | 72 | 6 | 56 | the pod (front inset and pushed in 0.26: the hollow), the sleeper standing in it; the pod's outside its own blue |
 | tank | 6 | 168 | 27 | 54 | drum, neck and lid, four feet; tops orange (the painting's) |
+| crate | 2 | 24 | 0 | 54 | box and lid band, each face its own patch inside the rounded outline; the lid top its planks |
+| locker | 3 | 84 | 15 | 54 | three lockers, vents pressed in; the ends a slice of a door |
+| vending | 8 | 100 | 5 | 53 | body (snack window set in), cap, keypad, four feet; sides pink / silver as its edge |
+| bookshelf | 5 | 76 | 4 | 52 | frame cut in deep (books on the back wall), four boards in front of them |
+| safe | 1 | 28 | 2 | 52 | body, the inside cut in 0.14 (ring and drawer on its back wall) |
+| terminal | 2 | 56 | 23 | 42 | keyboard unit (keys raised), screen unit set back (screen set in) |
+| terminal-broken | 2 | 40 | 15 | 50 | monitor (screen set in), keyboard lying in front |
+| console | 5 | 160 | 25 | 43 | cabinet, deck, beacon on a post with an antenna |
+| rack | 5 | 76 | 3 | 42 | frame cut in deep (the lights inside), four feet |
+
+From crate on, the steps come from `tools/c0nstruct0r/props/recipes.py`
+(`python3 tools/c0nstruct0r/props/recipes.py [NAME]` writes NAME.txt) on
+`tools/c0nstruct0r/stepgen.py`: parts as pixel boxes of the painting,
+`recess` (inset, shrink and move to a pixel box, push in or out), `pics`
+(front as seen or a patch, back mirrored / a colour, sides and top a patch
+or a colour).
 
 Learned on the way:
 - `own` (the part's box, not the model's) for sides and tops: each part's

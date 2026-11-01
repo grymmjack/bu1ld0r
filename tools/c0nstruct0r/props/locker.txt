@@ -1,0 +1,103 @@
+# c0nstruct0r: locker, rebuilt from hd/locker.png (0.9 tall; subject 227x236 at +16+20)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/locker.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/locker.png)
+take
+pace 400
+say locker: three lockers in a row - blue, grey, blue - vents at the top
+new force
+say locker 1: blue
+add box 0.2784 0.0229 0.0 0.3013 0.8771 0.4 col=1E5A8A name=locker-1
+say its vents, pressed in
+edit 1
+pick facing 0 0 -1
+inset 0.1
+scale 0.7173 0.2029 1
+move 0.0 0.3051 0
+extrude -0.015
+done
+say locker 2: grey
+add box -0.0038 0.0229 0.0 0.2631 0.8771 0.4 col=8A929A name=locker-2
+say its vents, pressed in
+edit 2
+pick facing 0 0 -1
+inset 0.1
+scale 0.6602 0.2029 1
+move 0.0 0.3051 0
+extrude -0.015
+done
+say locker 3: blue
+add box -0.2803 0.0229 0.0 0.2898 0.8771 0.4 col=1E5A8A name=locker-3
+say its vents, pressed in
+edit 3
+pick facing 0 0 -1
+inset 0.1
+scale 0.7018 0.2029 1
+move 0.0 0.3051 0
+extrude -0.015
+done
+say pictures: each front its own column of the painting; the ends a slice of its door; tops and backs plain
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/locker view 0 19 22 94 249 own
+pick facing 0 0 1 45
+colour 1A2A3A
+pick facing 1 0 0
+picture c0nstruct0r/locker view 90 20 100 60 245 own
+pick facing -1 0 0
+picture c0nstruct0r/locker view 270 60 100 20 245 own
+pick facing 0 1 0 30
+colour 2A3A4A
+pick facing 0 -1 0 30
+colour 1A2A3A
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/locker view 0 98 22 163 249 own
+pick facing 0 0 1 45
+colour 1A2A3A
+pick facing 1 0 0
+picture c0nstruct0r/locker view 90 20 100 60 245 own
+pick facing -1 0 0
+picture c0nstruct0r/locker view 270 60 100 20 245 own
+pick facing 0 1 0 30
+colour 2A3A4A
+pick facing 0 -1 0 30
+colour 1A2A3A
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/locker view 0 167 22 239 249 own
+pick facing 0 0 1 45
+colour 1A2A3A
+pick facing 1 0 0
+picture c0nstruct0r/locker view 90 20 100 60 245 own
+pick facing -1 0 0
+picture c0nstruct0r/locker view 270 60 100 20 245 own
+pick facing 0 1 0 30
+colour 2A3A4A
+pick facing 0 -1 0 30
+colour 1A2A3A
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot locker0 clean
+view 45 0
+shot locker1 clean
+view 90 0
+shot locker2 clean
+view 135 0
+shot locker3 clean
+view 180 0
+shot locker4 clean
+view 225 0
+shot locker5 clean
+view 270 0
+shot locker6 clean
+view 315 0
+shot locker7 clean
+view 25 18
+save c0-locker
+export
+give

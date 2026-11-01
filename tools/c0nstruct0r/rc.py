@@ -31,7 +31,10 @@ class Bu1ld0r:
         except (OSError, ValueError):
             raise SystemExit(f'no {path}: start bu1ld0r with --port')
         for _ in range(20):  # (one connection at a time: the last may still be closing)
-            self.sock = socket.create_connection(('127.0.0.1', int(port)), timeout=timeout)
+            try:
+                self.sock = socket.create_connection(('127.0.0.1', int(port)), timeout=timeout)
+            except ConnectionRefusedError:
+                raise SystemExit(f'nothing on port {port}: bu1ld0r has closed ({path} is left over) - start it with --port')
             self.buf = b''
             try:
                 r = self.cmd('hello ' + token)

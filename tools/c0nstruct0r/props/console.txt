@@ -1,0 +1,83 @@
+# c0nstruct0r: console, rebuilt from hd/console.png (0.5 tall; subject 206x196 at +25+60)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/console.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/console.png)
+take
+pace 400
+say console: a console: a grey cabinet, a deck of screens and buttons over it, a red beacon on a post
+new force
+add box 0.0013 0.0 0.0 0.4668 0.2117 0.32 col=4A525C name=cabinet
+add box 0.0064 0.2117 0.0 0.5026 0.1531 0.36 col=5A6470 name=deck
+say the beacon: a post, a red light, a thin antenna
+add cylinder -0.2194 0.3648 0.0 0.0408 0.0076 0.0408 seg=10 col=3A3E44 name=beacon-base
+add sphere -0.2194 0.3673 0.0 0.0459 0.0562 0.0459 seg=10 col=E82A2A name=beacon
+add cylinder -0.2194 0.4235 0.0 0.0077 0.0765 0.0077 seg=6 col=C8D0D8 name=antenna
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/console view 0 25 60 231 256
+pick facing 0 0 1 45
+colour 3A4048
+pick facing 1 0 0
+picture c0nstruct0r/console view 90 40 180 100 250 own
+pick facing -1 0 0
+picture c0nstruct0r/console view 270 100 180 40 250 own
+pick facing 0 1 0 30
+colour 4A525C
+pick facing 0 -1 0 30
+colour 2A2E34
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/console view 0 25 60 231 256
+pick facing 0 0 1 45
+colour 4A525C
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 5A6470
+pick facing 0 1 0 30
+colour 6A7480
+pick facing 0 -1 0 30
+colour 3A4048
+done
+edit 3
+pick facing 0 0 -1 90
+picture c0nstruct0r/console view 0 206 110 222 113 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/console view 180 222 110 206 113 own
+pick facing 0 1 0 30
+colour 3A3E44
+done
+edit 4
+pick facing 0 0 -1 90
+picture c0nstruct0r/console view 0 207 92 221 110 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/console view 180 221 92 207 110 own
+done
+edit 5
+pick facing 0 0 -1 90
+picture c0nstruct0r/console view 0 213 62 215 88 own
+pick facing 0 0 1 89.9
+picture c0nstruct0r/console view 180 215 62 213 88 own
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot console0 clean
+view 45 0
+shot console1 clean
+view 90 0
+shot console2 clean
+view 135 0
+shot console3 clean
+view 180 0
+shot console4 clean
+view 225 0
+shot console5 clean
+view 270 0
+shot console6 clean
+view 315 0
+shot console7 clean
+view 25 18
+save c0-console
+export
+give

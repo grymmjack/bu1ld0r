@@ -1,0 +1,122 @@
+# c0nstruct0r: vending, rebuilt from hd/vending.png (0.8 tall; subject 118x236 at +67+8)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/vending.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/vending.png)
+take
+pace 400
+say vending: a vending machine: a silver body with a pink side, a cyan cap, a window of snacks, a slot, a keypad, four feet
+new force
+add box 0.0271 0.0407 0.0 0.3186 0.6 0.35 col=B8C0C8 name=body
+say the snack window, set in
+edit 1
+pick facing 0 0 -1
+inset 0.1
+scale 0.6856 0.6277 1
+move 0.0136 0.1136 0
+extrude -0.03
+done
+add box 0.0237 0.6339 0.0 0.3458 0.1593 0.37 col=3AD8E0 name=cap
+say four feet
+add box 0.1424 0.0034 -0.13 0.0271 0.0441 0.04 col=3AD8E0 name=foot-0
+add box 0.1424 0.0034 0.13 0.0271 0.0441 0.04 col=3AD8E0 name=foot-1
+add box -0.1153 0.0034 -0.13 0.0271 0.0441 0.04 col=3AD8E0 name=foot-2
+add box -0.1153 0.0034 0.13 0.0271 0.0441 0.04 col=3AD8E0 name=foot-3
+say the keypad on its right side
+add box -0.1492 0.3695 -0.08 0.0339 0.1525 0.05 col=8A929A name=keypad
+say pictures: the front from the painting; the sides pink and silver as its right edge shows
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 67 8 185 244
+pick facing 0 0 1 45
+colour 8A929A
+pick facing 1 0 0
+pick add facing -1 0 0
+colour E85AA0
+pick facing 0 1 0 30
+colour B8C0C8
+pick facing 0 -1 0 30
+colour 3A3E44
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 67 8 185 244
+pick facing 0 0 1 45
+colour E85AA0
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3AD8E0
+pick facing 0 1 0 30
+colour 3AD8E0
+pick facing 0 -1 0 30
+colour 3AD8E0
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 67 8 185 244
+pick facing 0 0 1 45
+colour 3AD8E0
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3AD8E0
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 67 8 185 244
+pick facing 0 0 1 45
+colour 3AD8E0
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3AD8E0
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 67 8 185 244
+pick facing 0 0 1 45
+colour 3AD8E0
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3AD8E0
+done
+edit 6
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 67 8 185 244
+pick facing 0 0 1 45
+colour 3AD8E0
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3AD8E0
+done
+edit 7
+pick facing 0 0 -1 45
+picture c0nstruct0r/vending view 0 175 90 185 135 own
+pick facing 0 0 1 45
+colour 8A929A
+pick facing 1 0 0
+picture c0nstruct0r/vending view 90 175 90 185 135 own
+pick facing -1 0 0
+picture c0nstruct0r/vending view 270 185 90 175 135 own
+pick facing 0 1 0 30
+colour 8A929A
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot vending0 clean
+view 45 0
+shot vending1 clean
+view 90 0
+shot vending2 clean
+view 135 0
+shot vending3 clean
+view 180 0
+shot vending4 clean
+view 225 0
+shot vending5 clean
+view 270 0
+shot vending6 clean
+view 315 0
+shot vending7 clean
+view 25 18
+save c0-vending
+export
+give

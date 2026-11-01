@@ -1,0 +1,92 @@
+# c0nstruct0r: rack, rebuilt from hd/rack.png (0.9 tall; subject 128x233 at +64+11)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/rack.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/rack.png)
+take
+pace 400
+say rack: a server rack: a grey frame, a vent and an orange bar on top, glowing lights inside, four feet
+new force
+add box -0.0019 0.0734 0.0 0.4751 0.8189 0.45 col=6A7078 name=rack
+say its open front: cut in deep, the lights on the back wall
+edit 1
+pick facing 0 0 -1
+inset 0.05
+scale 0.9071 0.7448 1
+move 0.0019 -0.0734 0
+extrude -0.3
+done
+add box 0.2009 0.0039 -0.19 0.0541 0.0772 0.05 col=2A2E34 name=foot-0
+add box 0.2009 0.0039 0.19 0.0541 0.0772 0.05 col=2A2E34 name=foot-1
+add box -0.1815 0.0039 -0.19 0.0541 0.0772 0.05 col=2A2E34 name=foot-2
+add box -0.1815 0.0039 0.19 0.0541 0.0772 0.05 col=2A2E34 name=foot-3
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/rack view 0 64 11 192 244
+pick facing 0 0 1 45
+colour 4A5058
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 6A7078
+pick facing 0 1 0 30
+colour 5A6068
+pick facing 0 -1 0 30
+colour 3A3E44
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/rack view 0 64 11 192 244
+pick facing 0 0 1 45
+colour 2A2E34
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2E34
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/rack view 0 64 11 192 244
+pick facing 0 0 1 45
+colour 2A2E34
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2E34
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/rack view 0 64 11 192 244
+pick facing 0 0 1 45
+colour 2A2E34
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2E34
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/rack view 0 64 11 192 244
+pick facing 0 0 1 45
+colour 2A2E34
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2E34
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot rack0 clean
+view 45 0
+shot rack1 clean
+view 90 0
+shot rack2 clean
+view 135 0
+shot rack3 clean
+view 180 0
+shot rack4 clean
+view 225 0
+shot rack5 clean
+view 270 0
+shot rack6 clean
+view 315 0
+shot rack7 clean
+view 25 18
+save c0-rack
+export
+give

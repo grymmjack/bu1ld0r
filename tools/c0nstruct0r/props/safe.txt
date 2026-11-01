@@ -1,0 +1,52 @@
+# c0nstruct0r: safe, rebuilt from hd/safe.png (0.55 tall; subject 204x224 at +26+32)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/safe.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/safe.png)
+take
+pace 400
+say safe: a safe, its door open: a thick dark frame, a glowing ring and a drawer inside
+new force
+add box -0.0061 0.0 0.0 0.5083 0.5475 0.45 col=2A2E34 name=body
+say the inside: the front cut in, the ring and drawer on its back wall
+edit 1
+pick facing 0 0 -1
+inset 0.05
+scale 0.8136 0.8308 1
+move -0.0012 -0.0012 0
+extrude -0.14
+done
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/safe view 0 26 32 230 256
+pick facing 0 0 1 45
+colour 1E2228
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2E34
+pick facing 0 1 0 30
+colour 3A4048
+pick facing 0 -1 0 30
+colour 1E2228
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot safe0 clean
+view 45 0
+shot safe1 clean
+view 90 0
+shot safe2 clean
+view 135 0
+shot safe3 clean
+view 180 0
+shot safe4 clean
+view 225 0
+shot safe5 clean
+view 270 0
+shot safe6 clean
+view 315 0
+shot safe7 clean
+view 25 18
+save c0-safe
+export
+give

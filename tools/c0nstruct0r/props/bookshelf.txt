@@ -1,0 +1,102 @@
+# c0nstruct0r: bookshelf, rebuilt from hd/bookshelf.png (0.95 tall; subject 204x203 at +26+53)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/bookshelf.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/bookshelf.png)
+take
+pace 400
+say bookshelf: a bookshelf: a dark frame, five rows of books, glowing bits among them
+new force
+add box -0.0023 0.0 0.0 0.95 0.95 0.32 col=2A2A30 name=frame
+say the shelves: the front cut in deep, the books on the back wall
+edit 1
+pick facing 0 0 -1
+inset 0.05
+scale 0.9749 0.9541 1
+move 0.0023 -0.007 0
+extrude -0.25
+done
+say four boards across it, in front of the books
+add box 0.0 0.716 -0.025 0.8798 0.0187 0.25 col=3A3A44 name=board-1
+add box 0.0 0.5241 -0.025 0.8798 0.0188 0.25 col=3A3A44 name=board-2
+add box 0.0 0.3603 -0.025 0.8798 0.0188 0.25 col=3A3A44 name=board-3
+add box 0.0 0.1966 -0.025 0.8798 0.0187 0.25 col=3A3A44 name=board-4
+say pictures: the front and the books from the painting; the frame outside plain dark
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/bookshelf view 0 26 53 230 256
+pick facing 0 0 1 45
+colour 1E1E24
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2A30
+pick facing 0 1 0 30
+colour 3A3240
+pick facing 0 -1 0 30
+colour 1E1E24
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/bookshelf view 0 26 53 230 256
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3A44
+pick facing 0 1 0 30
+colour 4A4A54
+pick facing 0 -1 0 30
+colour 2A2A30
+done
+edit 3
+pick facing 0 0 -1 45
+picture c0nstruct0r/bookshelf view 0 26 53 230 256
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3A44
+pick facing 0 1 0 30
+colour 4A4A54
+pick facing 0 -1 0 30
+colour 2A2A30
+done
+edit 4
+pick facing 0 0 -1 45
+picture c0nstruct0r/bookshelf view 0 26 53 230 256
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3A44
+pick facing 0 1 0 30
+colour 4A4A54
+pick facing 0 -1 0 30
+colour 2A2A30
+done
+edit 5
+pick facing 0 0 -1 45
+picture c0nstruct0r/bookshelf view 0 26 53 230 256
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 3A3A44
+pick facing 0 1 0 30
+colour 4A4A54
+pick facing 0 -1 0 30
+colour 2A2A30
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot bookshelf0 clean
+view 45 0
+shot bookshelf1 clean
+view 90 0
+shot bookshelf2 clean
+view 135 0
+shot bookshelf3 clean
+view 180 0
+shot bookshelf4 clean
+view 225 0
+shot bookshelf5 clean
+view 270 0
+shot bookshelf6 clean
+view 315 0
+shot bookshelf7 clean
+view 25 18
+save c0-bookshelf
+export
+give

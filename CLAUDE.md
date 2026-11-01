@@ -603,7 +603,8 @@ server (`tools/c0nstruct0r/mcp_server.py`, stdlib, `.mcp.json`; `--dir` /
 `$C0NSTRUCT0R_DIR` for a test copy): bu1ld0r / look (eight: the game's views
 in a sheet) / inspect / painting / check. The method is the skill
 `/c0nstruct0r` (.claude/skills/c0nstruct0r); a prop's steps are kept in
-`tools/c0nstruct0r/props/NAME.txt`, its painting in pictures/c0nstruct0r/.
+`tools/c0nstruct0r/props/NAME.txt` (written by `props/recipes.py` on `stepgen.py`),
+its painting in pictures/c0nstruct0r/, the model in models/c0-NAME.bld.
 `picture ... view YAW RECT` / `top RECT` map one picture over the model's box:
 one picture, no `tile` - export packs several 2x2 (shrunk) and cuts repeats.
 

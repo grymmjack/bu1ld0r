@@ -1,0 +1,58 @@
+# c0nstruct0r: crate, rebuilt from hd/crate.png (0.42 tall; subject 244x214 at +4+18)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/crate.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/crate.png)
+take
+pace 400
+say crate: a wooden crate, strapped, its lid a band of its own
+new force
+say the box, 0.38 deep; the lid a touch bigger, so its edge shows
+add box 0.0039 0.0118 0.0 0.4475 0.208 0.38 col=8A5A30 name=body
+add box 0.0039 0.2198 0.0 0.4671 0.2022 0.4 col=A8743C name=lid
+say pictures: each from its own patch of the painting, inside the rounded outline; the lid top its planks
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/crate view 0 14 122 234 224 own
+pick facing 0 0 1 45
+picture c0nstruct0r/crate view 180 234 122 14 224 own
+pick facing 1 0 0
+picture c0nstruct0r/crate view 90 14 130 120 222 own
+pick facing -1 0 0
+picture c0nstruct0r/crate view 270 120 130 14 222 own
+pick facing 0 -1 0 30
+colour 4A3018
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/crate view 0 12 24 236 118 own
+pick facing 0 0 1 45
+picture c0nstruct0r/crate view 180 236 24 12 118 own
+pick facing 1 0 0
+picture c0nstruct0r/crate view 90 12 24 120 110 own
+pick facing -1 0 0
+picture c0nstruct0r/crate view 270 120 24 12 110 own
+pick facing 0 1 0 30
+picture c0nstruct0r/crate top 12 24 236 100 own
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot crate0 clean
+view 45 0
+shot crate1 clean
+view 90 0
+shot crate2 clean
+view 135 0
+shot crate3 clean
+view 180 0
+shot crate4 clean
+view 225 0
+shot crate5 clean
+view 270 0
+shot crate6 clean
+view 315 0
+shot crate7 clean
+view 25 18
+save c0-crate
+export
+give

@@ -36,6 +36,16 @@ Without the MCP tools, the same works from the shell: `python3 tools/c0nstruct0r
   Never kill bu1ld0r by name (Rick's own may be running); he closes the window himself.
 - Esc on his side stops it ("err stopped"): stop sending, ask what he wants. F9 gives it back.
 
+## Writing the steps
+
+`tools/c0nstruct0r/stepgen.py` writes a step file from painting measurements, and
+`tools/c0nstruct0r/props/recipes.py` holds a recipe per prop (add one there, then
+`python3 tools/c0nstruct0r/props/recipes.py NAME`): `s.add(kind, px0, py0, px1, py1, d=..)`
+(a part filling that pixel box - x 0 is the subject's middle, y 0 its foot),
+`s.recess(p, px0, py0, px1, py1, depth)` (the front cut in there; a negative depth
+raises it), `s.pics(p, front=RECT|None, back=True|COLOUR|RECT, side=RECT|COLOUR,
+top=RECT|COLOUR)`. Measure on a 16-pixel grid of the painting (`painting NAME grid=16`).
+
 ## The method
 
 1. **Read.** `painting NAME grid=32`: the subject box (W x H + left + top) gives the scale -

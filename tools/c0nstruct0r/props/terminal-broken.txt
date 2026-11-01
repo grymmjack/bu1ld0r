@@ -1,0 +1,65 @@
+# c0nstruct0r: terminal-broken, rebuilt from hd/terminal-broken.png (0.55 tall; subject 217x208 at +19+48)
+# run: python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/terminal-broken.txt  (bu1ld0r started with --port; needs pictures/c0nstruct0r/terminal-broken.png)
+take
+pace 400
+say terminal-broken: a broken old monitor, a keyboard in front of it
+new force
+add box -0.0159 0.0 0.04 0.4151 0.5447 0.3 col=1E1A1E name=monitor
+say the screen, set into its bezel
+edit 1
+pick facing 0 0 -1
+inset 0.1
+scale 0.6865 0.507 1
+move -0.0132 0.0608 0
+extrude -0.02
+done
+say the keyboard: thin, lying in front
+add box -0.0806 0.0 -0.17 0.4125 0.0238 0.12 col=2A2A2E name=keyboard
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/terminal-broken view 0 19 48 236 256
+pick facing 0 0 1 45
+colour 141014
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 1E1A1E
+pick facing 0 1 0 30
+colour 2A242A
+pick facing 0 -1 0 30
+colour 141014
+done
+edit 2
+pick facing 0 0 -1 45
+picture c0nstruct0r/terminal-broken view 0 85 232 236 240 own
+pick facing 0 0 1 45
+colour 2A2A2E
+pick facing 1 0 0
+pick add facing -1 0 0
+colour 2A2A2E
+pick facing 0 1 0 30
+picture c0nstruct0r/terminal-broken top 85 205 230 240 own
+done
+sel none
+say done - the eight views the game makes
+view 0 0
+look all
+view 0 0
+shot terminal-broken0 clean
+view 45 0
+shot terminal-broken1 clean
+view 90 0
+shot terminal-broken2 clean
+view 135 0
+shot terminal-broken3 clean
+view 180 0
+shot terminal-broken4 clean
+view 225 0
+shot terminal-broken5 clean
+view 270 0
+shot terminal-broken6 clean
+view 315 0
+shot terminal-broken7 clean
+view 25 18
+save c0-terminal-broken
+export
+give
