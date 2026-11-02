@@ -609,7 +609,8 @@ to mcp__c0nstruct0r; `FxRunPoll` (in FxFrame, even with the panel shut) waits fo
 `fix-done.txt`; RcEsc kills it (`FxClaudeStop`, `fix-pid.txt`, marks `fix-stop.txt`).
 fix-run.sh runs claude under `systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0`
 when there is one (2026-11-01 a run's machine ran out of RAM - 62 GB + swap - and froze;
-replaying the run's port commands kept bu1ld0r at 290 MB, so the culprit wasn't found):
+replaying the run's port commands kept bu1ld0r at 290 MB - it was pixelmon's pixel-art clean
+running beside it, since fixed there; the cap stays as insurance):
 over the cap it's killed and fix-out.txt says so; `fix-mem.txt` logs the six biggest
 processes every 5 s. Kernel log: `sudo journalctl -k -b -1`. LEAVE: `mdlLeave$` (" smear asym "), `fixleave` in the .bld
 (`FxLines` / `FxFromText`, not in ModelText$). Port: `fix ...` (`RcFix`).
