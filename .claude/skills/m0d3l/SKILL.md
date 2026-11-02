@@ -7,8 +7,10 @@ description: Build a NEW low-poly model in bu1ld0r from an idea (not a rebuild o
 
 c0nstruct0r's other half. `/c0nstruct0r NAME` rebuilds a game prop from its painting;
 `/m0d3l THING` makes something new: no painting to copy, so the shape is designed and the
-textures come from pixelmon. First one: `c0-barrel` (2026-11-01) - 10 parts, 608 triangles,
-score 17 against the game's barrel's 41. Its sources are `tools/c0nstruct0r/m0d3l/barrel/`
+textures come from pixelmon. First ones: `c0-barrel` (2026-11-01) - 10 parts, 608 triangles,
+score 17 against the game's barrel's 41; `c0-crate` (Raiders-style shipping crate) - 10
+boxes, 120 triangles, score 0 in bu1ld0r, 5 exported, against the game's crate's 54
+(`tools/c0nstruct0r/m0d3l/crate/`: `shape.txt`, `atlas.py`, `texture.txt`). Its sources are `tools/c0nstruct0r/m0d3l/barrel/`
 (the renders, `atlas.py`, `shape.txt`, `texture.txt`): copy that folder's way of working.
 
 ## How Rick wants it run
@@ -56,8 +58,9 @@ score 17 against the game's barrel's 41. Its sources are `tools/c0nstruct0r/m0d3
      view of a round red painted barrel lid ... plain black background").
    - The AI lays long things along the picture's long side: render portrait for things that
      run up and down.
-   - Rick's tips: juggernautXL with heun + karras has served him well (`--base
-     juggernautXL... --sampler heun --scheduler karras`); look through pixelmon-gui's presets
+   - **Use juggernautXL with heun + karras** (Rick's tip, and it showed: the crate's pine came
+     out clean and real with `--base juggernautXL_v9.safetensors --sampler heun --scheduler
+     karras`, where the default checkpoint's wood was muddled or fried); look through pixelmon-gui's presets
      (`~/pixelmon-gallery/gui-presets/`, `~/pixelmon/presets/`) for a baseline; depth lock
      (`--depth IMG`, the Lab) holds a render to a shape - e.g. a depth picture of the part,
      or a drawn pattern - when structure has to come from the AI.
@@ -66,12 +69,30 @@ score 17 against the game's barrel's 41. Its sources are `tools/c0nstruct0r/m0d3
      --seed S --server rtx --no-open --output-to DIR --create-dirs --name NAME`
      (~10 s a picture on rtx). Look at a contact sheet (`/usr/bin/python3` has PIL + numpy;
      brew's python3 doesn't) and pick.
-4. **One picture** (`atlas.py`, written to `pictures/c0nstruct0r/c0-NAME.png`): the export
-   keeps one picture pixel for pixel; several get packed 2x2 and shrunk. Every region at
-   the same pixels a cell (~300): a round part's region is (its perimeter in cells x 300)
-   wide - 16 columns, one per face - by (height x 300). Draw seams / rivets at the column
-   edges; give each column its own slice of the material and a slight brightness change, so
-   neighbouring faces read as separate pieces.
+4. **One square picture, laid out at 256, drawn at 512** (`atlas.py K`, written to
+   `pictures/c0nstruct0r/c0-NAME.png`). The game's model textures are 256 x 256 in `hd/models`
+   and 64 x 64 in `models/` (retro); the export writes both from bu1ld0r's picture
+   (`WriteTex ... 256` / `64`). (The 512s in the game are HD *wall* pictures, not models.) So lay
+   the regions out on a 256 x 256 square (~200 pixels a cell for a prop this size) and draw it
+   at K = 2 - every coordinate x K, from the full-size renders: bu1ld0r shows the 512 sharp,
+   the export halves it exactly. Spots are 0..1 of the picture, so the same mapping fits K = 1
+   and K = 2. A non-square picture is squeezed (the barrel's 512 x 256). One picture also
+   because several get packed 2x2 and shrunk. Every region at the same pixels a cell: a round
+   part's region is (its perimeter in cells x px a cell) wide - 16 columns, one per face - by
+   (height x px a cell). Draw seams / rivets at the column edges; give each column its own
+   slice of the material and a slight brightness change, so neighbouring faces read as
+   separate pieces.
+   - **Grain follows the piece.** A thin strip takes boards running along its own length: the
+     crate's lips round the body (band tops / undersides) got a "frame" region - boards along
+     each side, the end ones turned to run along z. The lid's boards there (all along x) ran
+     across the end lips and read as chopped chunks (Rick spotted it).
+   - **Don't AI-upscale a picture you can redraw.** pixelmon's `--upscale --upscale-to 2x`
+     (Real-ESRGAN, 2 s) sharpened the wood but scrambled the small stencils into squiggles.
+     Redraw from the sources at K = 2; upscale only what has no bigger source.
+   - bu1ld0r reloads a picture whose file changed by itself (every 2 s, and the port's
+     `picture` checks first), so re-running atlas.py shows on screen with no re-open. (Before
+     2026-11-01 it didn't: a picture rewritten at a new size kept its old size in memory and
+     the mapping came out halved - `open NAME force` reloaded it.)
 5. **Map face by face** - `tools/c0nstruct0r/m0d3l.py wrap`:
    `inspect faces` (part P; save the reply to a file) -> `m0d3l.py wrap faces.json REF X0 Y0
    W H N --box X0 X1 Z0 Z1 Y0 Y1` -> `pick F` / `picture REF view YAW RECT own` lines: each
@@ -79,7 +100,12 @@ score 17 against the game's barrel's 41. Its sources are `tools/c0nstruct0r/m0d3
    same size (four `view 0/90/180/270` quarters squash the pixels near each quarter's edge
    and don't meet). `--box` is the part's own box. Tops: `pick facing 0 1 0` ->
    `top RECT own`, RECT = the round picture's middle +- its radius in px x (box half-width /
-   the top's radius). Faces with nothing to show (bottoms, recess walls, caps): `colour`.
+   the top's radius).
+   **Nothing untextured** (Rick's rule): every face gets a picture - bottoms, undersides,
+   thin lips and cleat sides, recess walls, caps, even faces hidden against another part. A
+   plain colour face shows as a flat patch the moment a camera finds it. Done means `fix`
+   says `plain 0 colour 0`, and a look from below (`look pitch=-25`) and up close shows wood
+   (or metal...) everywhere.
 6. **Materials** - bu1ld0r has them (Q / MATERIAL; the port has no command yet): `save`,
    add `m=SEE:GLOW:SHINE:ROUGH:METAL:BUMP:COAT:SHEEN` (percent) to each `part` line of
    `models/c0-NAME.bld`, `open c0-NAME force`. Barrel: wood `m=0:0:20:73:0:47:20:0`
@@ -95,6 +121,19 @@ score 17 against the game's barrel's 41. Its sources are `tools/c0nstruct0r/m0d3
 8. **Keep**: the folder `tools/c0nstruct0r/m0d3l/NAME/` (renders used, atlas.py,
    shape.txt, texture.txt, the faces JSON the mapping came from) - the model can be made
    again from it.
+
+## Boxes (the crate)
+
+A box's sides need no wrap: `edit P`, `pick facing 0 0 -1` -> `picture REF view 0 RECT own`,
+`0 0 1` -> `view 180`, `1 0 0` -> `view 90`, `-1 0 0` -> `view 270`, `0 1 0` -> `top RECT own` -
+RECT a region exactly the face's size in pixels, so each face takes its whole patch with no
+stretch (the crate: score 0). Words and arrows (stencils, labels) are drawn by code into the
+face's region - PIL at 4x then shrunk, ink a little uneven; the DIN Bold Condensed font is
+`~/.local/share/fonts/d/DINNeuzeitGroteskStd_BdCond.otf`. A part that would cover them
+(the crate's middle cleat over TOP SECRET) goes: `del P`, and the parts after it renumber.
+A whole box as a band (a top band the full footprint) gives the top face itself - a body top
+under it would sit in the same place and flicker. One material for the whole model keeps the
+export to one picture.
 
 ## Worked numbers: the barrel
 

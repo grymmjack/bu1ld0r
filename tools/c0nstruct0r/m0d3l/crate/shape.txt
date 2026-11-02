@@ -1,0 +1,19 @@
+# c0-crate's shape (bu1ld0r port steps): ten boxes, 120 triangles. Then: texture.txt (after
+# atlas.py), materials (every part m=0:0:7:87:0:40:0:0 - pine: a little shine, rough, BUMP from the
+# grain - added to the .bld's part lines, then open c0-crate force), save c0-crate, export.
+take
+new force
+pace 1400
+say A crate: a body, two bands round it, four corner posts, three lid cleats - all boxes.
+add box 0 0.045 0 0.58 0.33 0.40 col=C8A878 name=body
+add box 0 0 0 0.612 0.045 0.432 col=A88858 name=band-bottom
+add box 0 0.375 0 0.612 0.045 0.432 col=A88858 name=band-top
+say Posts sit on the corners, half in the body: no gaps.
+add box 0.2835 0.045 -0.1935 0.045 0.33 0.045 col=A88858 name=post-a
+add box -0.2835 0.045 -0.1935 0.045 0.33 0.045 col=A88858 name=post-b
+add box 0.2835 0.045 0.1935 0.045 0.33 0.045 col=A88858 name=post-c
+add box -0.2835 0.045 0.1935 0.045 0.33 0.045 col=A88858 name=post-d
+say Lid cleats across the top band, front to back.
+add box 0.2835 0.42 0 0.045 0.016 0.432 col=7A5C3A name=lid-a
+add box 0 0.42 0 0.045 0.016 0.432 col=7A5C3A name=lid-b
+add box -0.2835 0.42 0 0.045 0.016 0.432 col=7A5C3A name=lid-c

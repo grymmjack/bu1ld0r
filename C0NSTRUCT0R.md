@@ -378,6 +378,7 @@ sources in `tools/c0nstruct0r/m0d3l/NAME/`.
 | Model | Parts | Triangles | Score | Notes |
 |---|---|---|---|---|
 | c0-barrel | 10 | 608 | 17 (the game's barrel 41) | bulging drum (extrude + scale bands), four iron hoops, sunk lid, bung, side canister; pixelmon wood / lid / iron; wood, iron, metal materials |
+| c0-crate | 10 | 120 | 0 in bu1ld0r, 5 exported (the game's crate 54) | Raiders-style shipping crate: body, two bands, four posts, three lid cleats - all boxes; pixelmon pine (juggernautXL, heun, karras), stencils drawn in code, 512 picture laid out at 256; one pine material |
 
 ## Decisions (Rick, 2026-11-01)
 

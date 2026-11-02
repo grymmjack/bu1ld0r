@@ -1,0 +1,148 @@
+# c0-crate mapping (bu1ld0r port steps), on pictures/c0nstruct0r/c0-crate.png - regions at
+# 256 x 256 (atlas.py K = 1); the picture itself is K = 2 (512): spots are 0..1, so either fits.
+pace 3500
+say The picture is now 256x256: the game's own texture size. Re-mapping every face.
+pace 120
+edit 1
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 0 0 116 66 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 120 0 236 66 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 0 70 80 136 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 84 70 164 136 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 0 160 116 240 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 0 160 116 240 own
+done
+edit 2
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 0 247 122 256 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 0 247 122 256 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 124 247 210 256 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 124 247 210 256 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 126 160 248 246 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 126 160 248 246 own
+done
+edit 3
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 0 247 122 256 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 0 247 122 256 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 124 247 210 256 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 124 247 210 256 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 0 160 122 246 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 126 160 248 246 own
+done
+edit 4
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 168 70 177 136 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 168 70 177 136 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 168 70 177 136 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 168 70 177 136 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+done
+edit 5
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 168 70 177 136 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 168 70 177 136 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 168 70 177 136 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 168 70 177 136 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+done
+edit 6
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 168 70 177 136 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 168 70 177 136 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 168 70 177 136 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 168 70 177 136 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+done
+edit 7
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 168 70 177 136 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 168 70 177 136 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 168 70 177 136 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 168 70 177 136 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 194 70 203 79 own
+done
+edit 8
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 181 70 190 156 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 181 70 190 156 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 0 247 86 250.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 0 247 86 250.2 own
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 0 247 9 250.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 0 247 9 250.2 own
+done
+edit 9
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 181 70 190 156 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 181 70 190 156 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 0 247 86 250.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 0 247 86 250.2 own
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 0 247 9 250.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 0 247 9 250.2 own
+done
+edit 10
+pick facing 0 1 0
+picture c0nstruct0r/c0-crate top 181 70 190 156 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-crate top 181 70 190 156 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-crate view 90 0 247 86 250.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-crate view 270 0 247 86 250.2 own
+pick facing 0 0 -1
+picture c0nstruct0r/c0-crate view 0 0 247 9 250.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-crate view 180 0 247 9 250.2 own
+done
+pace 3500
+say End lips now take boards running along them (grain along z), not the lid's boards.
+pace 1400
