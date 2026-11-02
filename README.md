@@ -563,6 +563,8 @@ see-through behind the model so you can build over it from any angle.
 
 ### FIX THIS: the report card in the program
 
+![FIX THIS on the game's bench: SCORE 84, its sides smeared, SYMMETRY shown - the outline from the front, lit where it doesn't match its mirror](docs/screenshots/fix.png)
+
 F2 (or FIX in the top bar) checks the model as EXPORT would write it, the
 same way c0nstruct0r's report card (`tools/c0nstruct0r/report.py`) grades
 the game's props, and lists what it finds with a SCORE (0: nothing found;
@@ -581,11 +583,15 @@ the game's own props score 40-90):
   other: parts on the other side go, this side's are mirrored, and a part
   across the middle that's off its own mirror is cut there and made of its
   kept half twice.
+
+  ![The same bench after MAKE PLAIN and KEEP R: SCORE 0, a toolbox each side](docs/screenshots/fix-after.png)
 - **TRIANGLES** - against 1000. TIDY turns EXPORT:
   TIDIED on, at that budget.
 - **PICTURES** and **REPEATS** - more than one picture (EXPORT packs them
   2x2, shrunk) and pictures repeated across a face (EXPORT cuts those
   faces up): shown, not scored.
+
+![ASK CLAUDE: what to fix, in your own words, then PICTURES, DETAIL or REBUILD](docs/screenshots/fix-ask.png)
 
 **ASK CLAUDE** (where Claude Code is installed and `tools/c0nstruct0r/` is
 beside bu1ld0r): PICTURES (re-map the smeared and wrong-size faces from the
@@ -627,6 +633,8 @@ view's pictures, the game's paintings and the report card as tools), and
 - Every change it makes is one undo step (Ctrl+Z works as usual
   afterwards), and it waits a moment after each so you can follow it.
 - It only exports to `export/`, never the game's folder.
+  ![c0nstruct0r has the model: its strip says what it's doing, and it asks a question with a button per answer](docs/screenshots/c0nstruct0r.png)
+
 - It can **ask** you something: a question over the strip with a button
   per answer (yes / no, or up to four choices). Click one and it goes on
   with your answer; Esc stops it instead.
