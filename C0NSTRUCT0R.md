@@ -368,6 +368,17 @@ Learned on the way:
   reaches the bottom row was packed 2x2 and its pixels halved
   (`ExMarkUsed`, fixed).
 
+## New models (m0d3l)
+
+`/m0d3l THING` (.claude/skills/m0d3l) makes a prop that doesn't exist yet: shape designed,
+textures painted by pixelmon (materials) with structure drawn by code into one picture, mapped
+face by face (`tools/c0nstruct0r/m0d3l.py wrap`), materials, live on Rick's screen. Each model's
+sources in `tools/c0nstruct0r/m0d3l/NAME/`.
+
+| Model | Parts | Triangles | Score | Notes |
+|---|---|---|---|---|
+| c0-barrel | 10 | 608 | 17 (the game's barrel 41) | bulging drum (extrude + scale bands), four iron hoops, sunk lid, bung, side canister; pixelmon wood / lid / iron; wood, iron, metal materials |
+
 ## Decisions (Rick, 2026-11-01)
 
 - **Approval**: it builds straight from its written plan, shown in the

@@ -1,0 +1,46 @@
+take
+pace 1400
+say m0d3l: a new barrel, built from nothing - watch the strip for what each step does and why
+new force
+say 1. the drum: a cylinder with 16 sides. Low poly means few, deliberate faces - 16 is round enough for a prop this size
+add cylinder 0 0.17 0 0.344 0.11 0.344 seg=16 col=B8402C name=drum
+look all
+view 25 15
+say 2. E turns the shape into a mesh: faces, edges and points we can change one by one
+edit 1
+say 3. pick the top face (the one facing up, 0 1 0) ...
+pick facing 0 1 0
+say ... extrude pulls it up 0.10, making a new ring of side faces ...
+extrude 0.10
+say ... and scale shrinks the top to 93% across: the wall now leans in. That lean is the barrel's bulge
+scale 0.930 1 0.930
+say again, shorter and narrower: the top of the barrel
+extrude 0.07
+scale 0.906 1 0.906
+say 4. the same at the bottom (facing down, 0 -1 0): a barrel bulges in the middle and is narrower at both ends
+pick facing 0 -1 0
+extrude 0.10
+scale 0.930 1 0.930
+extrude 0.07
+scale 0.906 1 0.906
+say 5. the lid: inset puts a smaller copy of the top face inside it (a rim round the edge) ...
+pick facing 0 1 0
+inset 0.12
+say ... and a negative extrude pushes that inner face down 0.012: the lid sits sunk inside the rim
+extrude -0.012
+done
+say 6. iron hoops: thin cylinders a little wider than the barrel where they sit, so they stand proud of the wood
+add cylinder 0 0.059 0 0.332 0.022 0.332 seg=16 col=3A3634 name=hoop-a
+add cylinder 0 0.159 0 0.356 0.022 0.356 seg=16 col=3A3634 name=hoop-b
+add cylinder 0 0.269 0 0.356 0.022 0.356 seg=16 col=3A3634 name=hoop-c
+add cylinder 0 0.369 0 0.332 0.022 0.332 seg=16 col=3A3634 name=hoop-d
+say 7. a bung on the lid - the plug you fill a barrel through. 8 sides is plenty for something this small
+add cylinder 0.07 0.438 -0.03 0.04 0.022 0.04 seg=8 col=5A5450 name=bung
+say 8. a canister clipped to the side, as the game's barrels have: a small cylinder, a cap, two brackets into the barrel
+add cylinder -0.207 0.19 0 0.05 0.13 0.05 seg=8 col=4A4644 name=canister
+add cylinder -0.207 0.32 0 0.034 0.016 0.034 seg=8 col=2A2624 name=cap
+add box -0.19 0.215 0 0.036 0.014 0.022 col=2A2624 name=bracket-a
+add box -0.19 0.285 0 0.036 0.014 0.022 col=2A2624 name=bracket-b
+sel none
+look all
+view 30 20
