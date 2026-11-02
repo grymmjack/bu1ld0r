@@ -268,7 +268,8 @@ DRAW).
     struts through the reinforcement spheres: done once, not spun round
     by hand for each).
 
-12. **c0nstruct0r**: see C0NSTRUCT0R.md.
+12. **c0nstruct0r** (0.9.0): the port, the MCP server and skill, FIX THIS and
+    its ASK CLAUDE - see C0NSTRUCT0R.md and docs/c0nstruct0r.html.
 
 ## Testing
 

@@ -5,7 +5,7 @@
 ' them, and the messages along the bottom.
 '
 CONST APP_NAME$ = "bu1ld0r"
-CONST APP_VERSION$ = "0.8.0"
+CONST APP_VERSION$ = "0.9.0"
 CONST MIN_SW = 800, MIN_SH = 700 ' (the smallest our screen is laid out at)
 CONST BIN_MIN = 200, PANEL_MIN = 250 ' (the bin, down the left, and the panel, down the right: at their narrowest)
 DIM SHARED BIN_W, PANEL_W ' (the bin as wide as it's dragged: bin_w= in bu1ld0r.cfg; the panel stays PANEL_MIN)

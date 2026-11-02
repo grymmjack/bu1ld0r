@@ -42,7 +42,16 @@ Blender: see-through, glowing, shiny or rough, metal, bumpy, a glossy
 coat, a velvet sheen. They show in the view as you set them, and
 NEON-CASTER draws them in the game.
 
-Coming next (see [PLAN.md](PLAN.md)): painting straight onto the model, in 3D.
+FIX THIS (F2) checks the model the way the game will show it - pictures
+smeared into streaks, pixels the wrong size, faces a little off square, a
+lopsided outline, too many triangles - gives it a score, and fixes what it
+can in a click. With Claude Code installed, ASK CLAUDE goes further:
+c0nstruct0r, Claude driving bu1ld0r while you watch, maps pictures again,
+adds detail or rebuilds parts from the painting. See the
+[c0nstruct0r manual](docs/c0nstruct0r.html).
+
+Coming next (see [PLAN.md](PLAN.md)): symmetry - every operation done on
+one side done on the other, live.
 
 ## Build
 
