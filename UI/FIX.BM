@@ -1198,10 +1198,19 @@ SUB FxClaude (k)
     t$ = t$ + "take the model, work through the bu1ld0r tool on the model that's open (no new, open, save or export), check with fix, give it back, and end with two short lines saying what you changed." + nl$
     fh = FREEFILE: OPEN d$ + "fix-prompt.txt" FOR OUTPUT AS #fh: PRINT #fh, t$;: CLOSE #fh
     IF _FILEEXISTS(d$ + "fix-done.txt") THEN KILL d$ + "fix-done.txt"
+    IF _FILEEXISTS(d$ + "fix-stop.txt") THEN KILL d$ + "fix-stop.txt" ' (Esc's mark: a stop that wasn't the memory cap)
     t$ = "#!/bin/sh" + nl$ + "cd " + ShQ$(appDir$) + nl$
     t$ = t$ + "export C0NSTRUCT0R_DIR=" + ShQ$(appDir$) + nl$
-    t$ = t$ + ShQ$(fxCExe$) + " -p --mcp-config " + ShQ$(appDir$ + ".mcp.json") + " --strict-mcp-config --allowedTools mcp__c0nstruct0r < c0nstruct0r/fix-prompt.txt > c0nstruct0r/fix-out.txt 2>&1 &" + nl$
-    t$ = t$ + "echo $! > c0nstruct0r/fix-pid.txt" + nl$ + "wait $!" + nl$ + "echo $? > c0nstruct0r/fix-done.txt" + nl$
+    ' (a Linux with systemd: Claude kept under 8 GB - a run once ran the machine out of memory and
+    ' froze it; over that it's stopped instead. fix-mem.txt: the biggest processes every 5 s)
+    t$ = t$ + "cap=" + nl$
+    t$ = t$ + "if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope -q true >/dev/null 2>&1; then cap='systemd-run --user --scope -q -p MemoryMax=8G -p MemorySwapMax=0'; fi" + nl$
+    t$ = t$ + "$cap " + ShQ$(fxCExe$) + " -p --mcp-config " + ShQ$(appDir$ + ".mcp.json") + " --strict-mcp-config --allowedTools mcp__c0nstruct0r < c0nstruct0r/fix-prompt.txt > c0nstruct0r/fix-out.txt 2>&1 &" + nl$
+    t$ = t$ + "p=$!" + nl$ + "echo $p > c0nstruct0r/fix-pid.txt" + nl$
+    t$ = t$ + "(while kill -0 $p 2>/dev/null; do date +%T; grep -E 'MemAvailable|SwapFree' /proc/meminfo 2>/dev/null; ps -eo rss=,pid=,comm= | sort -rn | head -6; sleep 5; done) > c0nstruct0r/fix-mem.txt 2>&1 &" + nl$
+    t$ = t$ + "wait $p" + nl$ + "r=$?" + nl$
+    t$ = t$ + "[ $r -gt 128 ] && [ ! -f c0nstruct0r/fix-stop.txt ] && echo 'ASK CLAUDE stopped: Claude went over 8 GB of memory (c0nstruct0r/fix-mem.txt)' >> c0nstruct0r/fix-out.txt" + nl$
+    t$ = t$ + "echo $r > c0nstruct0r/fix-done.txt" + nl$
     fh = FREEFILE: OPEN d$ + "fix-run.sh" FOR OUTPUT AS #fh: PRINT #fh, t$;: CLOSE #fh
     SHELL "setsid sh " + ShQ$(d$ + "fix-run.sh") + " >/dev/null 2>&1 </dev/null &"
     fxRun = -1: fxRunKind$ = k$: fxBefore = fxScore: fxPollT# = TIMER(.001): fxSum$ = ""
@@ -1237,9 +1246,10 @@ END SUB
 
 ' Esc while Claude works: it's ended (its process killed; the poll then finishes up)
 SUB FxClaudeStop
-    DIM p$
+    DIM p$, fh
     p$ = appDir$ + "c0nstruct0r/fix-pid.txt"
     IF _FILEEXISTS(p$) THEN
+        fh = FREEFILE: OPEN appDir$ + "c0nstruct0r/fix-stop.txt" FOR OUTPUT AS #fh: CLOSE #fh
         p$ = LTRIM$(RTRIM$(_READFILE$(p$)))
         p$ = LEFT$(p$, INSTR(p$ + CHR$(10), CHR$(10)) - 1)
         IF VAL(p$) > 1 THEN SHELL "kill " + LTRIM$(STR$(VAL(p$))) + " >/dev/null 2>&1"
