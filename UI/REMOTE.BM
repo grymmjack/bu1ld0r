@@ -10,7 +10,7 @@
 SUB RcStart (want)
     DIM p, i, h AS LONG, fh, t$
     IF rcHostH THEN EXIT SUB
-    p = want: IF p <= 0 OR p > 65525 THEN p = RC_PORT0
+    p = want: IF p < 1024 OR p > 65525 THEN p = RC_PORT0 ' (port=1 in the cfg: just on)
     FOR i = 0 TO 9
         h = _OPENHOST("TCP/IP:" + LTRIM$(STR$(p + i)))
         IF h THEN rcPort = p + i: EXIT FOR

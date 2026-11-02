@@ -22,8 +22,7 @@ written to the game. Plain Python, no numpy. Per prop:
   ASYM    how far the prop is from mirror-symmetric left to right: its
           outline from the front and from above, against its own mirror
           image (% of the outline that doesn't match; the worse of the two)
-  TRIS    triangles, against the budget: 1000 for big props, 200 for small
-          ones (pickups: models.py's height 0.3 or less, or pickup-*)
+  TRIS    triangles, against the budget: 1000 (any prop - small ones too)
   COLOUR  % of the surface that's plain colour (bu1ld0r's colour squares):
           shown, not scored
   PLAIN   % of the textured surface stretched over pixels of one colour
@@ -43,7 +42,7 @@ import subprocess
 import sys
 
 GAME = os.environ.get('NEON_CASTER_DIR') or os.path.expanduser('~/git/neon-caster/neon-caster')  # (the game's folder: hd/, models/)
-BIG, SMALL = 1000, 200
+BUDGET = 1000  # (every prop: Rick, 2026-11-01 - small ones had 200)
 STRETCH = 3.0   # (pixels this much longer one way than the other: smeared)
 SIZE_OFF = 1.5  # (pixels this much bigger or smaller than usual: off size)
 ANG_LO, ANG_HI = 0.75, 8.0
@@ -377,9 +376,7 @@ def grade(path, name, props, shapes):
     texd = area_tex - smear - flat
     offsz = sum(a for d, a in dens if d > pxc * SIZE_OFF or d * SIZE_OFF < pxc) if pxc else 0.0
 
-    h = props.get(name)
-    small = (h is not None and h <= 0.3) or name.startswith('pickup-')
-    budget = SMALL if small else BIG
+    budget = BUDGET
     shp = shapes.get(name)
     kind = made or '?'
     if made == 'models.py' and shp:

@@ -79,7 +79,7 @@ top=RECT|COLOUR)`. Measure on a 16-pixel grid of the painting (`painting NAME gr
      `picture` fail: only pick ways the part has.
 6. **Check.** `look eight=true` against the painting; `fix` (the port command: the same report
    card inside bu1ld0r, no export needed - `ok score 25 smear 0 size 44.6 ...`); `export`; `check NAME`. Better than the
-   game's score, within budget (1000 big / 200 small - C0NSTRUCT0R.md), every view sensible.
+   game's score, within budget (1000 triangles, any prop), every view sensible.
    Fix and run again (`new force` starts over: the step file is the model's source).
 7. **Keep.** `save c0-NAME` (models/), `export` (export/ only). Into the game only when Rick
    says - then a scratch copy first (CLAUDE.md: never `--neon` the real game folder in a test).

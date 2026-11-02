@@ -30,7 +30,7 @@ SUB FieldRect (f, x, y, w, h)
         CASE F_COL: y = 282: x = PX0 + 100: w = 90
         CASE F_NAME: y = 3: x = 56: w = 200: h = 22
         CASE F_BUDGET: y = 128: x = PX0 + 100
-        CASE F_FIXASK: x = PX0: y = FxRowY(FX_N + 1) + 18: w = 230: h = 22 ' (FIX THIS: words for Claude)
+        CASE F_FIXASK: x = PX0: y = FxRowY(FX_N + 1) + 18: w = 230: h = FX_ASKL * 16 + 8 ' (FIX THIS: words for Claude, wrapped)
         CASE F_DIR, F_PFNAME: BinBtn x, y, w, h
         CASE F_PICPATH: x = 6: y = BinTabY + 19: w = BIN_W - 38: h = 20 ' (the star after it: BinStarRect)
         CASE F_PNAME ' (in its row of the parts list)
@@ -569,7 +569,7 @@ SUB UiFrame
     IF NOT mB2 THEN orbitOn = 0
     IF NOT mB2 AND NOT mB3 THEN panOn = 0
     IF typeDrag THEN ' (letters picked by dragging over them)
-        IF mB1 AND typeField > 0 THEN typeCur = TypePosAt(mX) ELSE typeDrag = 0
+        IF mB1 AND typeField > 0 THEN typeCur = TypePosAt(mX, mY) ELSE typeDrag = 0
     END IF
     IF topSlide THEN ' (a slider dragged)
         SliderRect topSlide, x, w
@@ -617,7 +617,7 @@ SUB UiFrame
         IF typeField AND f <> typeField THEN FieldCommit
         IF f > 0 THEN ' (the cursor where it's clicked - Shift: picked from where it was; a double click: all of it)
             IF f <> typeField THEN TypeStart f, FieldValue$(f), 0
-            k = TypePosAt(mX)
+            k = TypePosAt(mX, mY)
             IF typeClickF = f AND TIMER(.001) - typeClickT# < .35 AND TIMER(.001) >= typeClickT# THEN
                 typeAnc = 0: typeCur = LEN(typeBuf$): typeClickF = 0
             ELSE
@@ -1334,7 +1334,7 @@ END SUB
 ' Typing: Enter keeps it, Esc doesn't, Tab goes on to the next. Left / Right / Home / End move
 ' the cursor (Shift: picking letters, Ctrl: a word at a time), Ctrl+A / C / X / V as anywhere
 SUB TypeKey (k&)
-    DIM f, a, b
+    DIM f, a, b, wx, wy, ww, wh
     IF CtrlIs(k&, "a") THEN typeAnc = 0: typeCur = LEN(typeBuf$): EXIT SUB
     IF CtrlIs(k&, "v") THEN TypePaste: EXIT SUB
     IF CtrlIs(k&, "c") OR CtrlIs(k&, "x") THEN
@@ -1361,6 +1361,22 @@ SUB TypeKey (k&)
                 typeCur = Clamp(typeCur + IIF(k& = 19200, -1, 1), 0, LEN(typeBuf$))
             END IF
             IF NOT kShift THEN typeAnc = typeCur
+            EXIT SUB
+        CASE 18432, 20480 ' (Up, Down: a line in a wrapped field)
+            IF FieldWrap(typeField) THEN
+                FieldRect typeField, wx, wy, ww, wh
+                TypeWrap typeBuf$, (ww - 8) \ 8
+                a = TypeLineOf(typeCur): b = typeCur - twS(a)
+                a = a + IIF(k& = 18432, -1, 1)
+                IF a < 0 THEN
+                    typeCur = 0
+                ELSEIF a >= twN THEN
+                    typeCur = LEN(typeBuf$)
+                ELSE
+                    typeCur = twS(a) + _MIN(b, twL(a) - IIF(a < twN - 1, 1, 0))
+                END IF
+                IF NOT kShift THEN typeAnc = typeCur
+            END IF
             EXIT SUB
         CASE 18176, 20224 ' (Home, End)
             IF k& = 18176 THEN typeCur = 0 ELSE typeCur = LEN(typeBuf$)
@@ -1441,16 +1457,97 @@ FUNCTION TypeWord (p, dir)
 END FUNCTION
 
 ' The letter gap nearest screen x in the field being typed in
-FUNCTION TypePosAt (x)
-    DIM fx, fy, fw, fh
+FUNCTION TypePosAt (x, y)
+    DIM fx, fy, fw, fh, l, c
     FieldRect typeField, fx, fy, fw, fh
+    IF FieldWrap(typeField) THEN ' (a wrapped field: the line, then the gap in it)
+        TypeWrap typeBuf$, (fw - 8) \ 8
+        l = Clamp(twTop + (y - fy - 4) \ 16, 0, twN - 1)
+        c = Clamp(INT((x - fx - 4 + 4) / 8), 0, twL(l))
+        IF l < twN - 1 AND c >= twL(l) THEN c = twL(l) - 1 ' (the end of a wrapped line is the next one's start)
+        TypePosAt = Clamp(twS(l) + c, 0, LEN(typeBuf$))
+        EXIT FUNCTION
+    END IF
     TypePosAt = Clamp(typeScroll + INT((x - fx - 4 + 4) / 8), 0, LEN(typeBuf$))
 END FUNCTION
+
+' Is field f a box of lines (wrapped) rather than one line?
+FUNCTION FieldWrap (f)
+    FieldWrap = (f = F_FIXASK)
+END FUNCTION
+
+' t$ in lines of up to cols letters, broken after a space where it can be: twS / twL / twN
+SUB TypeWrap (t$, cols)
+    DIM i, n, j, cut
+    twN = 0: i = 1: n = LEN(t$)
+    IF cols < 1 THEN cols = 1
+    DO
+        IF twN >= 400 THEN EXIT DO
+        IF n - i + 1 <= cols THEN twS(twN) = i - 1: twL(twN) = n - i + 1: twN = twN + 1: EXIT DO
+        cut = 0
+        FOR j = i + cols TO i + 1 STEP -1 ' (the last space that fits - it stays on this line)
+            IF MID$(t$, j, 1) = " " AND j - i + 1 <= cols + 1 THEN cut = j: EXIT FOR
+        NEXT
+        IF cut = 0 OR cut - i + 1 > cols + 1 THEN cut = i + cols - 1 ' (a space may hang past the edge)
+        twS(twN) = i - 1: twL(twN) = cut - i + 1: twN = twN + 1
+        i = cut + 1
+    LOOP
+    IF twN = 0 THEN twS(0) = 0: twL(0) = 0: twN = 1
+END SUB
+
+' The line the gap c is on
+FUNCTION TypeLineOf (c)
+    DIM l
+    FOR l = twN - 1 TO 1 STEP -1
+        IF c >= twS(l) THEN EXIT FOR
+    NEXT
+    IF l < 0 THEN l = 0
+    TypeLineOf = l
+END FUNCTION
+
+' A wrapped field (FIX THIS's words for Claude): lines, the cursor and what's picked across them
+SUB FieldDrawWrap (f, x, y, w, h)
+    DIM c AS _UNSIGNED LONG, cols, rows, t$, l, a, b, s, e, cl, i
+    c = _RGB32(16, 14, 28): IF InRect(mX, mY, x, y, w, h) THEN c = _RGB32(30, 28, 50)
+    LINE (x, y)-(x + w - 1, y + h - 1), c, BF
+    LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(typeField = f, cHi, cLine), B
+    cols = (w - 8) \ 8: rows = (h - 8) \ 16
+    IF typeField = f THEN t$ = typeBuf$ ELSE t$ = FieldValue$(f)
+    TypeWrap t$, cols
+    IF typeField = f THEN
+        typeCur = Clamp(typeCur, 0, LEN(t$)): typeAnc = Clamp(typeAnc, 0, LEN(t$))
+        cl = TypeLineOf(typeCur)
+        IF cl < twTop THEN twTop = cl
+        IF cl > twTop + rows - 1 THEN twTop = cl - rows + 1
+        IF twTop > twN - rows THEN twTop = twN - rows
+        IF twTop < 0 THEN twTop = 0
+        a = typeAnc: b = typeCur: IF a > b THEN SWAP a, b
+    ELSE
+        twTop = 0: a = 0: b = 0
+    END IF
+    FOR i = 0 TO rows - 1
+        l = twTop + i: IF l >= twN THEN EXIT FOR
+        s = twS(l): e = s + twL(l)
+        IF b > a AND b > s AND a < e THEN ' (what's picked on this line)
+            LINE (x + 4 + 8 * (_MAX(a, s) - s), y + 4 + 16 * i)-(x + 3 + 8 * (_MIN(b, e) - s), y + 19 + 16 * i), _RGB32(70, 50, 130), BF
+        END IF
+        Txt x + 4, y + 4 + 16 * i, MID$(t$, s + 1, twL(l)), cText
+    NEXT
+    IF twN > rows THEN ' (more than shows: a thin bar says where)
+        i = (h - 6) * rows \ twN: l = 3 + (h - 6 - i) * twTop \ _MAX(1, twN - rows)
+        LINE (x + w - 3, y + l)-STEP(1, i), cDim, BF
+    END IF
+    IF typeField = f AND ((TIMER * 2) MOD 2 = 0 OR typeDrag) THEN
+        cl = TypeLineOf(typeCur)
+        IF cl >= twTop AND cl < twTop + rows THEN LINE (x + 4 + 8 * (typeCur - twS(cl)), y + 4 + 16 * (cl - twTop))-STEP(0, 15), cHi
+    END IF
+END SUB
 
 ' How long the field being typed in can be
 FUNCTION TypeCap
     SELECT CASE typeField
         CASE F_PICPATH: TypeCap = 400
+        CASE F_FIXASK: TypeCap = 1000 ' (FIX THIS: Rick's words for Claude)
         CASE F_PFNAME: TypeCap = 60
         CASE ELSE: TypeCap = 24
     END SELECT
@@ -2069,6 +2166,7 @@ SUB FieldDraw (f)
     DIM x, y, w, h, t$, c AS _UNSIGNED LONG, vis, a, b
     FieldRect f, x, y, w, h
     IF NOT FieldShown(f) THEN EXIT SUB
+    IF FieldWrap(f) THEN FieldDrawWrap f, x, y, w, h: EXIT SUB
     c = _RGB32(16, 14, 28): IF InRect(mX, mY, x, y, w, h) THEN c = _RGB32(30, 28, 50)
     LINE (x, y)-(x + w - 1, y + h - 1), c, BF
     LINE (x, y)-(x + w - 1, y + h - 1), IIFC~&(typeField = f, cHi, cLine), B
@@ -2663,7 +2761,7 @@ SUB HelpSetup
     HelpAdd "Ctrl+E  EXPORT|export/NAME.obj - and NEON-CASTER's models/ when neon_dir= is set in bu1ld0r.cfg"
     HelpAdd "TIDIED|(the panel, nothing selected) exported with fewer faces, down to its BUDGET; T: see it so"
     HelpAdd "#FIX THIS (F2, or FIX in the top bar)"
-    HelpAdd "F2  FIX|the report card's checks on what EXPORT makes: SMEAR (pictures pulled into streaks), PIXEL SIZE, ANGLES (faces a little off square or 45), SYMMETRY (the outline against its mirror image), TRIANGLES (against 1000, or 200 for a small thing), PICTURES and REPEATS (what EXPORT shrinks or cuts). The SCORE: 0 is nothing found. Checked again after each change"
+    HelpAdd "F2  FIX|the report card's checks on what EXPORT makes: SMEAR (pictures pulled into streaks), PIXEL SIZE, ANGLES (faces a little off square or 45), SYMMETRY (the outline against its mirror image), TRIANGLES (against 1000), PICTURES and REPEATS (what EXPORT shrinks or cuts). The SCORE: 0 is nothing found. Checked again after each change"
     HelpAdd "SHOW|selects the parts carrying it"
     HelpAdd "MAKE PLAIN  SQUARE UP|smeared faces their pixels' colour; faces a little off made true (turns snapped, a shape made a mesh; round things' facets left)"
     HelpAdd "KEEP L  KEEP R|the left (or right) half, as the front's seen, mirrored over the other; parts across the middle stay"

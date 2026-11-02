@@ -572,7 +572,7 @@ the game's own props score 40-90):
   other: parts on the other side go, this side's are mirrored, and a part
   across the middle that's off its own mirror is cut there and made of its
   kept half twice.
-- **TRIANGLES** - against 1000 (200 for a small thing). TIDY turns EXPORT:
+- **TRIANGLES** - against 1000. TIDY turns EXPORT:
   TIDIED on, at that budget.
 - **PICTURES** and **REPEATS** - more than one picture (EXPORT packs them
   2x2, shrunk) and pictures repeated across a face (EXPORT cuts those
@@ -594,6 +594,8 @@ selected parts, or on everything when nothing is selected, and is one undo
 step. The panel checks again a moment after each change.
 
 ### Letting c0nstruct0r drive it
+
+The manual: [docs/c0nstruct0r.html](docs/c0nstruct0r.html) (open it in a browser).
 
 c0nstruct0r (`C0NSTRUCT0R.md`, still being built) is Claude rebuilding
 NEON-CASTER's props in bu1ld0r while you watch. Started with `--port`
@@ -1170,7 +1172,7 @@ Sizes are in NEON-CASTER cells: 1 is a wall's width. The model's foot is the mid
 
 | Keys | What it does |
 |---|---|
-| F2 / FIX | the report card's checks on what EXPORT makes: SMEAR (pictures pulled into streaks), PIXEL SIZE, ANGLES (faces a little off square or 45), SYMMETRY (the outline against its mirror image), TRIANGLES (against 1000, or 200 for a small thing), PICTURES and REPEATS (what EXPORT shrinks or cuts). The SCORE: 0 is nothing found. Checked again after each change |
+| F2 / FIX | the report card's checks on what EXPORT makes: SMEAR (pictures pulled into streaks), PIXEL SIZE, ANGLES (faces a little off square or 45), SYMMETRY (the outline against its mirror image), TRIANGLES (against 1000), PICTURES and REPEATS (what EXPORT shrinks or cuts). The SCORE: 0 is nothing found. Checked again after each change |
 | SHOW | selects the parts carrying it |
 | MAKE PLAIN / SQUARE UP | smeared faces their pixels' colour; faces a little off made true (turns snapped, a shape made a mesh; round things' facets left) |
 | KEEP L / KEEP R | the left (or right) half, as the front's seen, mirrored over the other; parts across the middle stay |

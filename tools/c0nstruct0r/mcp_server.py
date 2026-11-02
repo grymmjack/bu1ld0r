@@ -171,8 +171,7 @@ def t_painting(a):
         lines.append(f'the game\'s height: {props[name]} cells (models.py PROPS)')
     if name in shapes:
         lines.append(f'models.py builds it: {shapes[name]!r}')
-    big = 'small' if (props.get(name, 1) <= 0.3 or name.startswith('pickup-')) else 'big'
-    lines.append(f'budget: {report.SMALL if big == "small" else report.BIG} triangles ({big})')
+    lines.append(f'budget: {report.BUDGET} triangles')
     if a.get('grid') and magick('-version') is not None:
         sheet = os.path.join(dst_dir, name + '-grid.png')
         w, h = (int(v) for v in size.split('x'))
@@ -203,7 +202,7 @@ def t_check(a):
     if os.path.exists(gp):
         r2 = subprocess.run([sys.executable, os.path.join(HERE, 'report.py'), game], capture_output=True, text=True)
         out += '\nthe game\'s own:\n' + r2.stdout
-    out += '\n(SCORE: higher is worse. The budget is the game\'s name\'s: an export under another name counts as big.)'
+    out += '\n(SCORE: higher is worse.)'
     return text(out)
 
 

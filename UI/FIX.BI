@@ -29,3 +29,6 @@ DIM SHARED mdlLeave$ ' (the findings left as they are, words between spaces: " s
 ' c0nstruct0r MCP server alone, driving this bu1ld0r through its port (opened for it)
 CONST F_FIXASK = 26 ' (the panel's "What should I fix?" - Rick's words for Claude)
 DIM SHARED fxAsk$, fxRun, fxRunKind$, fxBefore AS SINGLE, fxPollT#, fxCExe$, fxClaudeAt, fxSum$
+CONST FX_ASKL = 5 ' (the box's lines: it wraps)
+CONST FX_ASKX = 66 ' (how much lower the buttons under it sit for that: (FX_ASKL - 1) x 16 + 2)
+DIM SHARED twS(400) AS LONG, twL(400) AS LONG, twN, twTop ' (a wrapped field's lines: start (from 0), length; how many; the top one shown)

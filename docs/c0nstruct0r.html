@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- c0nstruct0r manual: open in a browser. The same page is published as an artifact. -->
+<title>c0nstruct0r Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a workshop manual - a sticky contents rail on wide screens, one reading column, command blocks as port transcripts */
+:root {
+  --bg: #f3f5f8;
+  --paper: #ffffff;
+  --ink: #1b2330;
+  --muted: #566173;
+  --line: #d6dce6;
+  --accent: #0b7d8c;      /* the port: cyan-teal */
+  --accent-soft: #e0f1f3;
+  --warn: #b5541c;        /* Esc, stop, never */
+  --warn-soft: #f8e9df;
+  --strip: #16202c;       /* bu1ld0r's strip */
+  --strip-ink: #d9f3f6;
+  --code-bg: #eef1f5;
+  --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161d; --paper: #18202a; --ink: #e3e8ef; --muted: #9aa6b6; --line: #2c3746;
+    --accent: #4cc3d1; --accent-soft: #15333a; --warn: #f0925a; --warn-soft: #3a2418;
+    --strip: #0a0f14; --strip-ink: #bfeef3; --code-bg: #0f151c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161d; --paper: #18202a; --ink: #e3e8ef; --muted: #9aa6b6; --line: #2c3746;
+  --accent: #4cc3d1; --accent-soft: #15333a; --warn: #f0925a; --warn-soft: #3a2418;
+  --strip: #0a0f14; --strip-ink: #bfeef3; --code-bg: #0f151c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, kbd, pre { font-family: var(--mono); font-size: .88em; }
+code { background: var(--code-bg); padding: .08em .35em; border-radius: 3px; overflow-wrap: anywhere; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 .4em; background: var(--paper); white-space: nowrap; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+header.top { max-width: 1120px; margin: 0 auto; padding-block: 48px 32px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+.eyebrow { font-family: var(--mono); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(2.2rem, 6vw, 3.6rem); line-height: 1.05; margin: .2em 0 .3em; letter-spacing: .01em; text-wrap: balance; }
+h1 .zero { color: var(--accent); }
+.lede { font-size: 1.15rem; max-width: 62ch; color: var(--muted); margin: 0; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: .9rem; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; counter-reset: s; }
+nav.toc li { counter-increment: s; }
+nav.toc a { display: block; padding: 4px 10px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; }
+nav.toc a::before { content: counter(s) "  "; font-family: var(--mono); font-size: .8em; color: var(--accent); }
+nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+main { min-width: 0; }
+section { margin-bottom: 56px; scroll-margin-top: 24px; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.75rem; margin: 0 0 .5em; text-wrap: balance; display: flex; gap: .5em; align-items: baseline; }
+h2 .n { font-family: var(--mono); font-size: .9rem; color: var(--accent); font-weight: 500; }
+h3 { font-family: var(--display); font-weight: 600; font-size: 1.2rem; margin: 1.6em 0 .4em; }
+p, li { max-width: 68ch; }
+ul, ol { padding-left: 1.3em; }
+li + li { margin-top: .3em; }
+.note { border: 1px solid var(--line); background: var(--paper); border-radius: 6px; padding: 14px 18px; margin: 18px 0; max-width: 72ch; }
+.note.warn { border-color: var(--warn); background: var(--warn-soft); }
+.note.warn strong:first-child { color: var(--warn); }
+.note p { margin: .3em 0; }
+.flow { display: flex; align-items: stretch; gap: 0; margin: 24px 0; overflow-x: auto; }
+.node { flex: 1 1 0; min-width: 150px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+.node b { display: block; font-family: var(--display); font-size: 1rem; }
+.node small { display: block; color: var(--muted); font-size: .82rem; line-height: 1.4; margin-top: 4px; }
+.node code { font-size: .78rem; }
+.node.hub { border-color: var(--accent); }
+.arrow { flex: 0 0 44px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--accent); font-family: var(--mono); font-size: .7rem; text-align: center; line-height: 1.2; }
+.arrow::before { content: "→"; font-size: 1.4rem; line-height: 1; }
+.ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.way { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.way .tag { font-family: var(--mono); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.way h3 { margin: 0; }
+.way p { margin: 0; font-size: .93rem; }
+.tbl { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--mono); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; }
+td:first-child code { white-space: nowrap; }
+.who { font-family: var(--mono); font-size: .75rem; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.who.alone { background: var(--accent-soft); color: var(--accent); }
+.who.claude { background: var(--warn-soft); color: var(--warn); }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; margin: 14px 0; }
+pre .c { color: var(--muted); }
+pre .r { color: var(--accent); }
+pre .e { color: var(--warn); }
+.copy { position: relative; }
+.copy button { position: absolute; top: 8px; right: 8px; font-family: var(--mono); font-size: .72rem; border: 1px solid var(--line); background: var(--paper); color: var(--muted); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.copy button:hover { color: var(--ink); }
+.view { background: linear-gradient(180deg, #2a3443, #1d2530); border-radius: 6px; padding: 18px; margin: 18px 0; max-width: 640px; position: relative; color: #e8eef5; font-family: var(--mono); font-size: .82rem; }
+.view .scene { height: 90px; display: flex; align-items: flex-end; justify-content: center; gap: 6px; margin-bottom: 12px; }
+.view .scene i { display: block; background: #6a7480; border: 1px solid #9aa6b6; }
+.ask { background: #0e1620; border: 1px solid #4cc3d1; border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; }
+.ask p { margin: 0 0 8px; color: #e8eef5; max-width: none; }
+.ask .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.ask .btns span { border: 1px solid #4cc3d1; color: #bfeef3; padding: 2px 12px; border-radius: 3px; }
+.ask .btns span:first-child { background: #1d4a52; }
+.stripbar { background: var(--strip); color: var(--strip-ink); border-radius: 4px; padding: 8px 12px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
+.stripbar .k { color: #f0925a; }
+.cap { font-size: .82rem; color: var(--muted); margin-top: -8px; }
+.steps { counter-reset: st; list-style: none; padding: 0; }
+.steps > li { counter-increment: st; position: relative; padding-left: 2.4em; margin-top: .9em; }
+.steps > li::before { content: counter(st); position: absolute; left: 0; top: 0; width: 1.7em; height: 1.7em; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: .8rem; display: grid; place-items: center; }
+.files { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; font-size: .92rem; margin: 14px 0; }
+.files code { white-space: nowrap; }
+footer { max-width: 1120px; margin: 0 auto; border-top: 1px solid var(--line); padding-top: 20px; color: var(--muted); font-size: .85rem; }
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  nav.toc { position: static; margin-bottom: 32px; }
+  nav.toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ways { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 620px) {
+  .flow { flex-direction: column; overflow: visible; }
+  .node { min-width: 0; }
+  .arrow { flex-basis: auto; padding: 4px 0; }
+  .arrow::before { content: "↓"; }
+  .files { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .files dd { margin: 0 0 10px; }
+  td:first-child, td:first-child code { white-space: normal; }
+}
+dd { margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<header class="top">
+  <div class="eyebrow">bu1ld0r · tools/c0nstruct0r</div>
+  <h1>c<span class="zero">0</span>nstruct<span class="zero">0</span>r</h1>
+  <p class="lede">Claude Code drives bu1ld0r while you watch. It rebuilds a model with real shapes, maps its pictures so every face shows pixels at the same size, checks the result against a report card, and stops the moment you press <kbd>Esc</kbd>.</p>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#what">What it is</a></li>
+      <li><a href="#need">What you need</a></li>
+      <li><a href="#fix">FIX THIS (F2)</a></li>
+      <li><a href="#session">A Claude Code session</a></li>
+      <li><a href="#watch">While it works</a></li>
+      <li><a href="#card">The report card</a></li>
+      <li><a href="#hand">Driving it yourself</a></li>
+      <li><a href="#commands">Port commands</a></li>
+      <li><a href="#tools">MCP tools</a></li>
+      <li><a href="#files">Files it writes</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="what">
+      <h2><span class="n">01</span> What it is</h2>
+      <p>c0nstruct0r was built to rebuild NEON-CASTER's props. Most of them are paintings pushed out into slabs, so their sides and tops show one row of pixels smeared across them. c0nstruct0r builds them again from boxes, wedges and cylinders, with insets and extrusions for screens and panels, and maps the painting onto each face at the right size. It works on any bu1ld0r model, not only game props.</p>
+      <p>Three parts work together:</p>
+      <div class="flow" role="img" aria-label="You talk to Claude Code, which uses the c0nstruct0r skill and MCP server, which send commands through a local port to bu1ld0r">
+        <div class="node"><b>Claude Code</b><small>with the <code>/c0nstruct0r</code> skill: the method to follow</small></div>
+        <div class="arrow">tools</div>
+        <div class="node"><b>MCP server</b><small><code>tools/c0nstruct0r/mcp_server.py</code>, plain Python, started by <code>.mcp.json</code></small></div>
+        <div class="arrow">port</div>
+        <div class="node hub"><b>bu1ld0r</b><small>started with <code>--port</code>: listens on 127.0.0.1:47800, a line in, a line out</small></div>
+      </div>
+      <p>Every command is an ordinary bu1ld0r operation (add a part, pick faces, inset, extrude, map a picture) and each one is a single undo step. After Claude finishes, <kbd>Ctrl</kbd>+<kbd>Z</kbd> steps back through everything it did.</p>
+      <div class="ways">
+        <div class="way"><span class="tag">In bu1ld0r</span><h3>FIX THIS</h3><p>Press <kbd>F2</kbd> to see the report card for the open model. Some fixes bu1ld0r makes on its own, and three buttons send Claude to do the rest.</p><a href="#fix">How it works</a></div>
+        <div class="way"><span class="tag">In a terminal</span><h3>A session</h3><p>Run <code>claude</code> in bu1ld0r's folder and type <code>/c0nstruct0r NAME</code>, or ask in your own words.</p><a href="#session">How it works</a></div>
+        <div class="way"><span class="tag">By hand</span><h3>Step files</h3><p>Use <code>rc.py</code> to send commands yourself, or to play back a file of steps.</p><a href="#hand">How it works</a></div>
+      </div>
+    </section>
+
+    <section id="need">
+      <h2><span class="n">02</span> What you need</h2>
+      <ul>
+        <li><strong>bu1ld0r</strong>: a download or your own build. Downloads include everything c0nstruct0r needs beside the program: <code>tools/c0nstruct0r/</code>, the skill in <code>.claude/skills/c0nstruct0r/</code>, and <code>.mcp.json</code>. Keep them in bu1ld0r's folder.</li>
+        <li><strong>Claude Code</strong>, installed and signed in (<code>claude</code> in a terminal). c0nstruct0r uses your own account.</li>
+        <li><strong>Python 3</strong>. It needs nothing beyond the standard library, so there's nothing to <code>pip install</code>.</li>
+        <li><em>Optional:</em> <strong>NEON-CASTER</strong>, for rebuilding its props. The <code>painting</code> and <code>check</code> tools read the game's paintings and models from <code>~/git/neon-caster/neon-caster</code>, or from wherever <code>NEON_CASTER_DIR</code> points. Without it, everything else still works, and Claude uses the pictures already on your model's faces.</li>
+      </ul>
+      <div class="note"><p><strong>Platforms.</strong> The port and the MCP server work on Linux, macOS and Windows. ASK CLAUDE inside FIX THIS works on Linux and macOS for now, because it starts Claude through a small shell script.</p></div>
+    </section>
+
+    <section id="fix">
+      <h2><span class="n">03</span> FIX THIS (F2)</h2>
+      <p>Press <kbd>F2</kbd>, or FIX in the top bar, to open a panel on the right. It checks the model as EXPORT would write it, including hidden parts, and tidied if EXPORT: TIDIED is on. It gives a <strong>SCORE</strong>: 0 means nothing was found, and the game's own props score between 40 and 90. The panel checks again a moment after each change you make.</p>
+      <p>Each finding has a row, and each row has the same buttons:</p>
+      <ul>
+        <li><strong>SHOW</strong> selects the parts that have this finding.</li>
+        <li><strong>LEAVE</strong> means you want it as it is. The finding drops out of the score, and that choice is saved with the model (<code>fixleave smear</code> in the <code>.bld</code>).</li>
+        <li><strong>The fix</strong>, where bu1ld0r can make one without Claude. It works on the selected parts, or on the whole model if nothing is selected, and is one undo step.</li>
+      </ul>
+      <div class="tbl"><table>
+        <thead><tr><th>Finding</th><th>What it means</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>SMEAR</td><td>A picture pulled across a face into streaks, stretched 3:1 or more over pixels that differ</td><td>MAKE PLAIN <span class="who alone">bu1ld0r</span> gives each smeared face its pixels' average colour.<br>PICTURES <span class="who claude">Claude</span> maps it again from the painting.</td></tr>
+          <tr><td>PIXEL SIZE</td><td>Faces whose pixels are 1.5× bigger or smaller than the model's usual size</td><td>PICTURES <span class="who claude">Claude</span>: choosing a new piece of the picture is a judgement call</td></tr>
+          <tr><td>ANGLES</td><td>Faces between 0.75° and 8° off square or 45°. A round thing's facets don't count.</td><td>SQUARE UP <span class="who alone">bu1ld0r</span> snaps the turns, then makes each face lie exactly square</td></tr>
+          <tr><td>SYMMETRY</td><td>The outline seen from the front and from above, compared with its mirror image. The panel draws it, lit where the two sides don't match.</td><td>KEEP L / KEEP R <span class="who alone">bu1ld0r</span> keeps one half, as seen from the front, and mirrors it over the other. A part that crosses the middle is cut there and rebuilt from its kept half.</td></tr>
+          <tr><td>TRIANGLES</td><td>The count against the budget of 1000</td><td>TIDY <span class="who alone">bu1ld0r</span> turns on EXPORT: TIDIED at that budget</td></tr>
+          <tr><td>PICTURES</td><td>More than one picture. EXPORT packs several into a 2×2 grid, which shrinks them.</td><td>Shown, not scored</td></tr>
+          <tr><td>REPEATS</td><td>Pictures repeated across a face. EXPORT cuts those faces up.</td><td>Shown, not scored</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>ASK CLAUDE</h3>
+      <p>Below the findings, the panel has a box headed <strong>What should I fix?</strong> and three buttons. This part appears only when bu1ld0r can find <code>claude</code> and has <code>tools/c0nstruct0r/</code> and <code>.mcp.json</code> beside it.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Button</th><th>Claude does</th></tr></thead>
+        <tbody>
+          <tr><td>PICTURES</td><td>Maps the faces flagged by SMEAR, PIXEL SIZE and REPEATS again, from the painting if there is one, else from the pictures already on the model. It uses one picture for the whole model, and a plain colour where nothing fits.</td></tr>
+          <tr><td>DETAIL</td><td>Gives flat slabs the detail the painting shows (insets, extrusions, bevels), then maps the new faces</td></tr>
+          <tr><td>REBUILD</td><td>Takes the selected parts, or the whole model, through the method again, leaving the rest alone</td></tr>
+        </tbody>
+      </table></div>
+      <ol class="steps">
+        <li>Select parts first if you only want those worked on. Type anything Claude should know in the box, for example "keep the screen as it is". Your words come first in what Claude reads.</li>
+        <li>Press a button. bu1ld0r saves a backup to <code>c0nstruct0r/backup/</code>, opens its port, and starts <code>claude -p</code> in the background. Claude can use only the c0nstruct0r tools: no shell and no file edits, only bu1ld0r through its port.</li>
+        <li>Watch the strip at the bottom of the view. It shows what Claude is doing and why. Your keyboard and mouse are locked out, except for <kbd>Esc</kbd>.</li>
+        <li>When Claude finishes, the panel shows the score before and after, and what Claude says it changed.</li>
+      </ol>
+      <p>One example from testing: PICTURES on a rebuilt console took its score from 25 to 3 in about four minutes. Claude re-mapped the cabinet sides from a patch of the painting at the front's pixel size, and gave the beacon and antenna plain colours.</p>
+    </section>
+
+    <section id="session">
+      <h2><span class="n">04</span> A Claude Code session</h2>
+      <p>For a whole rebuild, or anything you'd rather discuss first:</p>
+      <ol class="steps">
+        <li>Start bu1ld0r with its port open: <code>./bu1ld0r.run --port</code>, or put <code>port=1</code> in <code>bu1ld0r.cfg</code> to open it every time. It writes <code>c0nstruct0r.port</code> holding the port number and a token.</li>
+        <li>In a terminal, in bu1ld0r's folder, run <code>claude</code>. The first time, Claude Code asks whether to allow the project's <code>c0nstruct0r</code> MCP server. Say yes.</li>
+        <li>Ask for what you want:</li>
+      </ol>
+      <div class="copy"><pre><span class="c"># rebuild a NEON-CASTER prop from its painting</span>
+/c0nstruct0r crate
+
+<span class="c"># or in your own words, on the model that's open</span>
+take the model in bu1ld0r and give the lid a bevel and a plank picture</pre><button type="button" data-copy="/c0nstruct0r crate">Copy</button></div>
+      <p>For a prop, the skill follows these steps:</p>
+      <ol class="steps">
+        <li><strong>Read</strong> the painting, measured on a grid. The subject's height in pixels against the game's height gives the scale.</li>
+        <li><strong>Plan</strong> one part per visible block, sized from the painting and centred on x = 0, with a <code>say</code> line giving the reason for each.</li>
+        <li><strong>No gaps.</strong> Parts rest on each other. A sloped slab gets a wedge under it.</li>
+        <li><strong>Detail</strong> with cheap moves: inset, extrude, mirror.</li>
+        <li><strong>Pictures</strong> from one picture, the painting: the fronts as seen, the sides and tops from matching strips of it, plain colours where the painting shows nothing.</li>
+        <li><strong>Check</strong> the game's eight views against the painting, and the report card.</li>
+        <li><strong>Keep:</strong> it saves to <code>models/c0-NAME.bld</code> and exports to <code>export/</code>. It writes into the game's folder only when you ask.</li>
+      </ol>
+      <div class="note"><p><strong>Rehearse hidden.</strong> The skill tries a new step file on a hidden copy of bu1ld0r first (a second display), and moves to your screen only when you ask to watch. A step file that fails partway is fixed there, not in front of you.</p></div>
+    </section>
+
+    <section id="watch">
+      <h2><span class="n">05</span> While it works</h2>
+      <p>While c0nstruct0r has <strong>taken</strong> the model, a strip over the foot of the view says what it's doing. bu1ld0r ignores your keys, clicks, wheel and even pointer moves, so nothing you do can get in its way.</p>
+      <div class="view" aria-label="A mockup of bu1ld0r's view while c0nstruct0r asks a question">
+        <div class="scene" aria-hidden="true"><i style="width:120px;height:40px"></i><i style="width:60px;height:78px"></i><i style="width:90px;height:52px"></i></div>
+        <div class="ask"><p>Keep the lid's planks, or make the lid plain?</p><div class="btns"><span>keep</span><span>plain</span></div></div>
+        <div class="stripbar"><span>c0nstruct0r: the lid a touch bigger, so its edge shows</span><span><span class="k">Esc</span> takes it back</span></div>
+      </div>
+      <p class="cap">An <code>ask</code> box over the strip. Clicking an answer is the one click let through the lock.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>You press</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Esc</kbd></td><td>Takes the model back at once, as it is. Claude's next command gets <code>err stopped</code>. When it was started from ASK CLAUDE, its process is ended too.</td></tr>
+          <tr><td><kbd>F9</kbd></td><td>After an Esc, lets it carry on</td></tr>
+          <tr><td>An answer button</td><td>Answers its <code>ask</code>. It waits as long as you take.</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Afterwards: undoes its changes one step at a time</td></tr>
+        </tbody>
+      </table></div>
+      <p>It pauses briefly after each change (<code>pace</code>, 250 ms by default) so you can follow along. Closing the connection hands the model back too.</p>
+    </section>
+
+    <section id="card">
+      <h2><span class="n">06</span> The report card</h2>
+      <p><code>tools/c0nstruct0r/report.py</code> grades OBJ files, the game's or bu1ld0r's exports, with the same checks FIX THIS runs inside bu1ld0r. The two give the same scores.</p>
+      <div class="copy"><pre><span class="c"># every prop in the game, worst first</span>
+python3 tools/c0nstruct0r/report.py
+
+<span class="c"># your export against the game's own</span>
+python3 tools/c0nstruct0r/report.py --models export crate</pre><button type="button" data-copy="python3 tools/c0nstruct0r/report.py">Copy</button></div>
+      <p>The score is <code>smear + asym + (size + angle) / 2 + over</code>. Each term is a percentage, and <em>over</em> is how far the triangles go past the budget, capped at 200. Lower is better. The props c0nstruct0r has rebuilt so far score between 0 and 32, against the game's 42 to 64 for the same props.</p>
+    </section>
+
+    <section id="hand">
+      <h2><span class="n">07</span> Driving it yourself</h2>
+      <p><code>rc.py</code> connects to the port, sends the token, and prints each reply:</p>
+      <div class="copy"><pre>python3 tools/c0nstruct0r/rc.py take                <span class="c"># one command</span>
+python3 tools/c0nstruct0r/rc.py -i                  <span class="c"># type commands, one per line</span>
+python3 tools/c0nstruct0r/rc.py -f tools/c0nstruct0r/props/crate.txt
+python3 tools/c0nstruct0r/rc.py --dir /path/to/bu1ld0r -f steps.txt</pre><button type="button" data-copy="python3 tools/c0nstruct0r/rc.py -i">Copy</button></div>
+      <p>A step file is a list of port commands, one per line, stopping at the first <code>err</code>. Here is the start of the crate's:</p>
+<pre>take
+pace 400
+say crate: a wooden crate, strapped, its lid a band of its own
+new force
+add box 0.0039 0.0118 0.0 0.4475 0.208 0.38 col=8A5A30 name=body
+<span class="r">ok 1</span>
+add box 0.0039 0.2198 0.0 0.4671 0.2022 0.4 col=A8743C name=lid
+<span class="r">ok 2</span>
+edit 1
+pick facing 0 0 -1 45
+picture c0nstruct0r/crate view 0 14 122 234 224 own
+<span class="r">ok</span>
+<span class="c">...the back, sides and lid the same way...</span>
+done
+fix
+<span class="r">ok score 0 smear 0 size 0 angle 0 asym 0 tris 24/1000 pics 1 repeats 0 ...</span>
+give</pre>
+      <p>The props' step files are written by <code>tools/c0nstruct0r/props/recipes.py</code>, one recipe per prop, which describes each part as a box in the painting's pixels. Run <code>python3 tools/c0nstruct0r/props/recipes.py NAME</code> to write <code>props/NAME.txt</code>.</p>
+    </section>
+
+    <section id="commands">
+      <h2><span class="n">08</span> Port commands</h2>
+      <p>One line in, one line out: <code>ok ...</code> or <code>err</code> with the reason. <code>help</code> lists them all. A command that changes the model needs <code>take</code> first.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Command</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td><code>hello TOKEN</code></td><td>Always first (rc.py and the MCP server send it for you)</td></tr>
+          <tr><td><code>take</code> / <code>give</code></td><td>Take the model, locking out everything but Esc / hand it back</td></tr>
+          <tr><td><code>say TEXT</code></td><td>Sets the strip's words: what it's doing and why</td></tr>
+          <tr><td><code>pace MS</code></td><td>Sets the pause after each change (250 by default, 0 to 5000)</td></tr>
+          <tr><td><code>ask Q | A | B</code></td><td>Asks you, with a button per answer (yes / no by default, up to four). Replies <code>ok A</code> once you click, or <code>err stopped</code> on Esc.</td></tr>
+          <tr><td><code>status</code>, <code>parts</code>, <code>faces [P]</code></td><td>JSON: the model and camera; each part; each face of the part being edited</td></tr>
+          <tr><td><code>shot NAME [win | clean]</code></td><td>Saves a picture to <code>c0nstruct0r/shots/NAME.png</code>: the view, the whole window, or the model alone</td></tr>
+          <tr><td><code>new</code>, <code>open NAME</code> <code>[force]</code></td><td>Starts or opens a model (<code>neon:PROP</code> opens a game prop). <code>force</code> works even when the model isn't saved.</td></tr>
+          <tr><td><code>save [NAME]</code>, <code>export</code></td><td>Saves to <code>models/</code>; exports to <code>export/</code> only</td></tr>
+          <tr><td><code>undo</code>, <code>redo</code></td><td>As <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
+          <tr><td><code>add SHAPE [X Y Z [SX SY SZ [RX RY RZ]]] [key=value...]</code></td><td>Adds a part and replies with its number. Keys: <code>x y z sx sy sz rx ry rz col amt seg name hole keep hide group</code></td></tr>
+          <tr><td><code>set P key=value...</code></td><td>Changes a part (every key or none)</td></tr>
+          <tr><td><code>del P...</code>, <code>sel none | all | P...</code></td><td>Deletes; selects</td></tr>
+          <tr><td><code>look all | P...</code>, <code>view YAW [PITCH [DIST]]</code></td><td>Turns the camera to show them / to that angle (yaw 0 is the front)</td></tr>
+          <tr><td><code>mesh P</code>, <code>mirror P [x|y|z] [at=V]</code></td><td>Makes a shape a mesh part; makes a mirrored copy</td></tr>
+          <tr><td><code>edit P</code> / <code>done</code></td><td>Starts editing part P's faces / stops</td></tr>
+          <tr><td><code>pick [add] none | all | F... | facing X Y Z [DEG]</code></td><td>Picks faces: by number, or those facing a way (within 10° unless DEG says otherwise)</td></tr>
+          <tr><td><code>extrude D</code>, <code>inset K</code>, <code>push D</code></td><td>Acts on the picked faces: out by D with sides (negative goes in); each inset K of the way to its middle; pushed along its way</td></tr>
+          <tr><td><code>move DX DY DZ</code>, <code>scale K [KY KZ]</code></td><td>Moves or scales the picked faces (outside editing: the selected parts)</td></tr>
+          <tr><td><code>colour RRGGBB</code>, <code>flip</code></td><td>Sets a colour; turns the faces over</td></tr>
+          <tr><td><code>picture REF fit | tile N | view YAW X0 Y0 X1 Y1 [own] | top X0 Y0 X1 Y1 [own] | none</code></td><td>Puts <code>pictures/REF.png</code> on the picked faces: stretched to fit; repeated at N pixels a cell; as seen from YAW with the model's box filling that rectangle (<code>top</code>: from above); <code>own</code> uses the part's box instead of the model's</td></tr>
+          <tr><td><code>fix [check | open | close | plain | square | keep left | keep right | tidy | show W | leave W]</code></td><td>FIX THIS: the report card's numbers, its panel, a fix, or SHOW / LEAVE a finding (W: <code>smear size angle asym tris pics repeats</code>)</td></tr>
+        </tbody>
+      </table></div>
+      <p>Shapes: <code>box cylinder sphere cone wedge tube die star gear donut diamond spike pill arrow</code>. A shape is 1 × 1 × 1 standing on its foot, sized by <code>sx sy sz</code>, turned Z, then X, then Y.</p>
+    </section>
+
+    <section id="tools">
+      <h2><span class="n">09</span> MCP tools</h2>
+      <p>The tools Claude sees, from <code>mcp_server.py</code>:</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Tool</th><th>Gives</th></tr></thead>
+        <tbody>
+          <tr><td><code>bu1ld0r</code></td><td>Port commands, one per line, stopping at the first <code>err</code></td></tr>
+          <tr><td><code>look</code></td><td>A picture of the view (<code>yaw</code>, <code>pitch</code>, <code>dist</code>), or with <code>eight: true</code> the game's eight views on one sheet</td></tr>
+          <tr><td><code>inspect</code></td><td><code>status</code>, <code>parts</code> or <code>faces</code> as JSON</td></tr>
+          <tr><td><code>painting</code></td><td>A game prop's painting and its subject's pixel box, height and budget, copied to <code>pictures/c0nstruct0r/</code>. <code>grid: 32</code> draws a grid to measure by.</td></tr>
+          <tr><td><code>check</code></td><td>The report card for <code>export/NAME.obj</code> next to the game's own</td></tr>
+        </tbody>
+      </table></div>
+      <p>To point the server at another copy of bu1ld0r, start it with <code>--dir FOLDER</code> or set <code>C0NSTRUCT0R_DIR</code>.</p>
+    </section>
+
+    <section id="files">
+      <h2><span class="n">10</span> Files it writes</h2>
+      <p>Everything goes in bu1ld0r's own folder:</p>
+      <dl class="files">
+        <dt><code>c0nstruct0r.port</code></dt><dd>The port number and this run's token. Only programs on this computer can connect.</dd>
+        <dt><code>c0nstruct0r/shots/</code></dt><dd>Pictures taken by <code>shot</code> and <code>look</code></dd>
+        <dt><code>c0nstruct0r/backup/</code></dt><dd>The model as it was before each ASK CLAUDE</dd>
+        <dt><code>c0nstruct0r/fix-*.txt</code></dt><dd>ASK CLAUDE's prompt, Claude's output, its process id, and how it ended</dd>
+        <dt><code>models/c0-NAME.bld</code></dt><dd>A rebuilt prop, which you can keep editing</dd>
+        <dt><code>pictures/c0nstruct0r/</code></dt><dd>The paintings it maps from</dd>
+        <dt><code>export/</code></dt><dd>Exports. It never writes into the game's folder unless you ask.</dd>
+      </dl>
+      <div class="note warn"><p><strong>Safety.</strong> The port listens on 127.0.0.1 only and turns away connections from anywhere else. Every connection must send the token first. ASK CLAUDE runs Claude with the c0nstruct0r tools alone, so it can change your model only through bu1ld0r, one undo step at a time.</p></div>
+    </section>
+
+    <section id="trouble">
+      <h2><span class="n">11</span> Troubleshooting</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>You see</th><th>Try</th></tr></thead>
+        <tbody>
+          <tr><td>No ASK CLAUDE row</td><td>bu1ld0r looks for <code>claude</code> in <code>~/.local/bin</code>, <code>~/.claude/local</code>, <code>/usr/local/bin</code>, <code>/opt/homebrew/bin</code> and <code>/usr/bin</code>, and needs <code>tools/c0nstruct0r/mcp_server.py</code> and <code>.mcp.json</code> beside it. On Windows it isn't available yet.</td></tr>
+          <tr><td>The tools say bu1ld0r isn't running</td><td>Start it with <code>--port</code> and check that <code>c0nstruct0r.port</code> appeared in its folder</td></tr>
+          <tr><td>"port didn't open"</td><td>Ports 47800 to 47809 are all in use, probably by other copies of bu1ld0r. Close one, or set <code>port=</code> to a free number.</td></tr>
+          <tr><td><code>err take first</code></td><td>Send <code>take</code> before commands that change the model</td></tr>
+          <tr><td><code>err stopped</code></td><td>You pressed Esc. <kbd>F9</kbd> lets it carry on.</td></tr>
+          <tr><td><code>err not saved</code></td><td><code>new</code> and <code>open</code> refuse to drop unsaved work. Save first, or add <code>force</code>.</td></tr>
+          <tr><td><code>painting</code> or <code>check</code> can't find the game</td><td>Set <code>NEON_CASTER_DIR</code> to the folder that holds the game's <code>hd/</code> and <code>models/</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>For more detail, <code>C0NSTRUCT0R.md</code> has the plan, the decisions behind it, and every prop rebuilt so far. The skill is <code>.claude/skills/c0nstruct0r/SKILL.md</code>.</p>
+    </section>
+  </main>
+</div>
+
+<footer>bu1ld0r · c0nstruct0r · github.com/grymmjack/bu1ld0r</footer>
+
+<script>
+document.querySelectorAll('.copy button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var t = b.getAttribute('data-copy');
+    var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); };
+    try {
+      navigator.clipboard.writeText(t).then(done, function () { selectPre(b); });
+    } catch (e) { selectPre(b); }
+  });
+});
+function selectPre(b) {
+  var pre = b.parentNode.querySelector('pre');
+  var r = document.createRange(); r.selectNodeContents(pre);
+  var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+</script>
+
+</html>

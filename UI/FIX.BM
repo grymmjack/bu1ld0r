@@ -423,11 +423,9 @@ SUB FxCheck
             p = tPart(t): IF p >= 0 AND p <= pN THEN fxPF(p * 8 + 6) = -1
         END IF
     NEXT
-    ' TRIANGLES: the report card's budget (1000, or 200 for a small thing); SHOW the heavy parts
+    ' TRIANGLES: the report card's budget (1000, any size - Rick: "1000 is fine"); SHOW the heavy parts
     fxTris = sceneTN
-    h# = hi.x - lo.x: IF hi.y - lo.y > h# THEN h# = hi.y - lo.y
-    IF hi.z - lo.z > h# THEN h# = hi.z - lo.z
-    IF (sceneTN > 0 AND h# <= .3) OR INSTR(LCASE$(mdlName$), "pickup-") > 0 THEN fxBudget = 200 ELSE fxBudget = 1000
+    fxBudget = 1000
     fxOver = 0: IF fxTris > fxBudget THEN fxOver = 100 * (fxTris / fxBudget - 1)
     fxV(5) = fxTris
     FOR p = 1 TO pN
@@ -594,9 +592,9 @@ SUB FxBtnR (k, b, x, y, w, h)
         CASE 2: x = PX0 + 56: w = 106: IF k = 4 THEN w = 52
         CASE 3: x = PX0 + 112: w = 50
         CASE 4: x = PX0 + 166: w = 64
-        CASE 5: x = PX0: y = FxRowY(FX_N + 1) + 78: w = 112
-        CASE 6: x = PX0 + 118: y = FxRowY(FX_N + 1) + 78: w = 112
-        CASE 7 TO 9: x = PX0 + (b - 7) * 78: y = FxRowY(FX_N + 1) + 46: w = 74 ' (Claude: PICTURES DETAIL REBUILD)
+        CASE 5: x = PX0: y = FxRowY(FX_N + 1) + 78 + FX_ASKX: w = 112
+        CASE 6: x = PX0 + 118: y = FxRowY(FX_N + 1) + 78 + FX_ASKX: w = 112
+        CASE 7 TO 9: x = PX0 + (b - 7) * 78: y = FxRowY(FX_N + 1) + 46 + FX_ASKX: w = 74 ' (Claude: PICTURES DETAIL REBUILD)
     END SELECT
 END SUB
 
@@ -631,7 +629,7 @@ FUNCTION FxHelp$ (k, ln)
         CASE 2: t$ = "Faces whose pixels are|1.5x bigger or smaller|than the rest's (" + LTRIM$(STR$(INT(fxPxc + .5))) + " a cell).|Map them again from a|patch of the right size"
         CASE 3: t$ = "Faces 0.75 to 8 degrees|off square or 45: crooked|by a little. SQUARE UP|makes them true (round|things' facets are left)"
         CASE 4: t$ = "The outline against its|mirror image (lit: no|match), front and above;|" + LTRIM$(STR$(fxTwinless)) + " parts off their mirror.|KEEP L / R: that half (as|the front's seen) mirrored"
-        CASE 5: t$ = "Against the budget: 1000|for a big thing, 200 for|a small one. TIDY: the|export cut down to it|(it can lose detail)"
+        CASE 5: t$ = "Against the budget: 1000|triangles. TIDY: the|export cut down to it|(it can lose detail)"
         CASE 6: t$ = "More than one picture:|EXPORT packs them in a|2x2 grid, each shrunk.|Map them all from one"
         CASE 7: t$ = "Pictures repeated across|a face (TILE): the game|clamps them, so EXPORT|cuts those faces into|many more triangles"
     END SELECT
@@ -678,14 +676,14 @@ SUB FxDraw
         Txt PX0, y + 36, "and tools/c0nstruct0r/", cDim
     ELSE
         FieldDraw F_FIXASK
-        IF typeField <> F_FIXASK AND LEN(fxAsk$) = 0 THEN Txt PX0 + 4, y + 21, "What should I fix?", cDim
+        IF typeField <> F_FIXASK AND LEN(fxAsk$) = 0 THEN Txt PX0 + 4, y + 22, "What should I fix?", cDim
         FOR b = 7 TO 9
             FxBtnR 0, b, x, y, w, h: Btn x, y, w, h, FxClaudeName$(b - 6), 0
         NEXT
     END IF
     FxBtnR 0, 5, x, y, w, h: Btn x, y, w, h, "CHECK AGAIN", 0
     FxBtnR 0, 6, x, y, w, h: Btn x, y, w, h, "DONE  Esc", 0
-    y = FxRowY(FX_N + 1) + 108
+    y = FxRowY(FX_N + 1) + 108 + FX_ASKX
     IF LEN(fxSum$) AND fxRun = 0 AND fxHot = 0 THEN ' (what Claude said it did)
         Txt PX0, y, "CLAUDE SAID", cHi
         FOR i = 1 TO 12

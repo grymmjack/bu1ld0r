@@ -12,7 +12,7 @@ Status: started 2026-11-01 on the `c0nstruct0r` branch. Stages 1 (the
 report card, `tools/c0nstruct0r/report.py`), 2 (the port: UI/REMOTE,
 `tools/c0nstruct0r/rc.py`) and 3 (the MCP server, the `/c0nstruct0r`
 skill, alarmpc rebuilt on Rick's screen) done; 21 props rebuilt (stage 5);
-FIX THIS's bu1ld0r-alone half (stage 6) built - its Claude half next.
+FIX THIS (stage 6) built, both halves, and `ask`.
 
 ## Why the props look the way they do
 
@@ -168,8 +168,7 @@ in the .bld as `fixleave asym ...`). What changed from the table above:
   counted - in report.py too (its docstring always said so; no score here
   changed).
 - TRIANGLES: **TIDY** turns EXPORT: TIDIED on with the report card's
-  budget (1000; 200 for a small thing - every side 0.3 or less, or
-  `pickup-`).
+  budget (1000).
 - PICTURES and REPEATS are shown (what EXPORT packs 2x2 or cuts), not
   scored - as report.py.
 - The port: `fix [check | open | close | plain | square | keep left | keep
@@ -376,6 +375,6 @@ Learned on the way:
 - **Sides and tops**: strips and colour tiles from the painting first;
   pixelmon side paintings later.
 - **Where it lives**: `tools/c0nstruct0r/` in this repo.
-- **Budget**: by size - 1000 triangles for big props (machines,
-  furniture), 200 for small ones (pickups, small items). (Big was 600
-  at first; Rick raised it to 1000 on 2026-11-01.)
+- **Budget**: 1000 triangles for every prop, small ones too. (It was
+  600 for big props and 200 for small ones at first; Rick raised it to
+  1000, then dropped the small budget: "1000 is fine", 2026-11-01.)
