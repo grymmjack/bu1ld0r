@@ -80,6 +80,10 @@ declarations, `.BM` routines, no GOSUB/GOTO, DIM every local.
   polygons that open gaps: text and merges pass 0.
 - `_FILES$` is one iterator: list a folder's names first, then recurse
   (`PfLoadAll`). Folders come back with a trailing `/`, plus `./` `../`.
+- `DECLARE LIBRARY "X"`'s header path is relative to the file that declares
+  it: MODEL/PIC.BI has `"../CORE/filestamp"` (CORE/filestamp.h: stat's
+  `FileTimeMs#` / `FileBytes#` - QB64PE has no file-time function). Pass
+  strings to C as `f$ + CHR$(0)`.
 
 ## How it draws
 
@@ -466,7 +470,12 @@ reserved: not names.
 
 A mesh polygon can carry a picture: `mfTex` (pool) / `sfTex` (work) /
 `tTex` (triangle), PIC's index (`PicFind(ref$)`: `pictures/REF.png`,
-registered even if missing - picW 0 - and loaded once it's there), and a
+registered even if missing - picW 0 - and loaded once it's there). A
+picture's file changed by another program is read again (`PicFresh`: its
+stat time / size against `picStT#/picStB#` from when it was read; every 2 s
+in PicWatchFrame via `PicFreshFrame`, and before the port's `picture` maps -
+spots are 0..1 of picW, so a stale size halved the crate's mapping); not one
+with unsaved painting (picDirty), and a
 spot per corner (`mcTU/mcTV`, `scTU/scTV`, `tU/tW` at 3t+k), in image
 terms (v down from the top: OBJ's is 1 - v). `EmAddF&` takes `emTex` /
 `emU` / `emW` and resets emTex - set them before each call. EmMerge never

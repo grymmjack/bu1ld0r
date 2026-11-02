@@ -796,6 +796,7 @@ SUB RcPicture
     IF how$ <> "none" THEN
         k = PicFind(rcA$(2))
         IF k <= 0 THEN RcSend "err no such picture: pictures/" + rcA$(2) + ".png": EXIT SUB
+        IF PicFresh(k) THEN k = PicFind(rcA$(2)) ' (its file changed since it was read: mapped by its size now)
         IF picW(k) = 0 THEN RcSend "err pictures/" + rcA$(2) + ".png can't be read": EXIT SUB
     END IF
     SELECT CASE how$

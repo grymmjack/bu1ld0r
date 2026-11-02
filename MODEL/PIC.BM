@@ -29,8 +29,45 @@ FUNCTION PicFind (ref$)
             _FREEIMAGE img&
         END IF
     END IF
+    PicStamp k
     PicFind = k
 END FUNCTION
+
+' Picture k's file as it is now (when it's read)
+SUB PicStamp (k)
+    DIM f$
+    f$ = PicDir$ + picRef$(k) + ".png" + CHR$(0)
+    picStT#(k) = FileTimeMs#(f$): picStB#(k) = FileBytes#(f$)
+END SUB
+
+' Picture k read again if its file changed since (saved by another program); -1 if it was.
+' Not one painted on and not saved yet (picDirty), nor one that's gone.
+FUNCTION PicFresh (k)
+    DIM f$, t#, b#, j
+    IF k < 1 OR k > picN THEN EXIT FUNCTION
+    IF picW(k) = 0 OR picDirty(k) THEN EXIT FUNCTION
+    f$ = PicDir$ + picRef$(k) + ".png" + CHR$(0)
+    t# = FileTimeMs#(f$): IF t# < 0 THEN EXIT FUNCTION
+    b# = FileBytes#(f$)
+    IF t# = picStT#(k) AND b# = picStB#(k) THEN EXIT FUNCTION
+    picW(k) = 0: j = PicFind(picRef$(k))
+    IF picW(k) = 0 THEN picStT#(k) = t#: picStB#(k) = b#: EXIT FUNCTION ' (half written: tried again when it changes)
+    IF pcThumb&(k) < -1 THEN _FREEIMAGE pcThumb&(k)
+    pcThumb&(k) = 0
+    viewDirty = -1: meshKey$ = ""
+    Msg "pictures/" + picRef$(k) + ".png changed: shown as it is now (" + _TRIM$(STR$(picW(k))) + " x " + _TRIM$(STR$(picH(k))) + ")"
+    PicFresh = -1
+END FUNCTION
+
+' Every 2 s: every picture read, read again if its file changed
+SUB PicFreshFrame
+    DIM k, r
+    IF TIMER(0.001) < picStNext# AND picStNext# - TIMER(0.001) < 3 THEN EXIT SUB
+    picStNext# = TIMER(0.001) + 2
+    FOR k = 1 TO picN
+        r = PicFresh(k)
+    NEXT
+END SUB
 
 SUB PicCopyIn (img&, at AS LONG)
     DIM m AS _MEM, i AS LONG, n AS LONG, c AS _UNSIGNED LONG
@@ -70,6 +107,7 @@ SUB PicReloadAll
                 _FREEIMAGE img&
             END IF
         END IF
+        PicStamp k
     NEXT
 END SUB
 

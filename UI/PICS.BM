@@ -754,6 +754,7 @@ END FUNCTION
 ' Each frame: twice a second, a watched picture that's changed loaded again
 SUB PicWatchFrame
     DIM i, s$, k
+    PicFreshFrame
     IF pwN = 0 THEN EXIT SUB
     IF TIMER(0.001) < pwNext# AND pwNext# - TIMER(0.001) < 2 THEN EXIT SUB
     pwNext# = TIMER(0.001) + .5
