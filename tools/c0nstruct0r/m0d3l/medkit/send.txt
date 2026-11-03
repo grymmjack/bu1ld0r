@@ -1,0 +1,330 @@
+take
+pace 3500
+say My mistake: rects are in the picture's own pixels - it is 512 across, I gave 256 ones. Again:
+pace 60
+edit 1
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 0 224 154 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 232 0 456 154 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 162 91 316 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 100 162 191 316 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 200 162 424 253 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 200 262 424 353 own
+done
+edit 2
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 360 231 371.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 0 360 231 371.2 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 360 98 371.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 0 360 98 371.2 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 0 360 231 458 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 0 360 231 458 own
+done
+edit 3
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 432 162 448.8 321.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 432 162 448.8 321.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 448.8 321.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 448.8 321.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+done
+edit 4
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 432 162 448.8 321.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 432 162 448.8 321.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 448.8 321.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 448.8 321.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+done
+edit 5
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 432 162 448.8 321.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 432 162 448.8 321.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 448.8 321.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 448.8 321.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+done
+edit 6
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 432 162 448.8 321.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 432 162 448.8 321.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 448.8 321.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 448.8 321.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 448.8 178.8 own
+done
+edit 7
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 460 0 488 33.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 460 0 488 33.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 440.4 195.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 440.4 195.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+done
+edit 8
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 460 0 488 33.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 460 0 488 33.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 440.4 195.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 440.4 195.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+done
+edit 9
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 460 0 488 33.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 460 0 488 33.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 440.4 195.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 440.4 195.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+done
+edit 10
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 460 0 488 33.6 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 460 0 488 33.6 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 440.4 195.6 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 440.4 195.6 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 460 170.4 own
+done
+edit 11
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 432 162 446 192.8 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 432 162 446 192.8 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 450.2 192.8 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 450.2 192.8 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 446 180.2 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 446 180.2 own
+done
+edit 12
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 432 162 446 192.8 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 432 162 446 192.8 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 432 162 450.2 192.8 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 432 162 450.2 192.8 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 432 162 446 180.2 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 432 162 446 180.2 own
+done
+edit 13
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 360 112 374 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 0 360 112 374 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 360 22.4 374 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 0 360 22.4 374 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 248 360 360 382.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 0 360 112 382.4 own
+done
+edit 14
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 360 30.8 371.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 0 360 30.8 371.2 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 360 21 371.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 0 360 21 371.2 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+done
+edit 15
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 360 30.8 371.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 0 360 30.8 371.2 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 360 21 371.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 0 360 21 371.2 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+done
+edit 16
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 360 30.8 371.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 0 360 30.8 371.2 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 360 21 371.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 0 360 21 371.2 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+done
+edit 17
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 0 360 30.8 371.2 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 0 360 30.8 371.2 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 0 360 21 371.2 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 0 360 21 371.2 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 0 360 30.8 381 own
+done
+edit 18
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 368 360 384.94 413.9 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 368 360 384.94 413.9 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 368 360 376.4 413.9 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 368 360 376.4 413.9 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 368 360 384.94 368.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 368 360 384.94 368.4 own
+done
+edit 21
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 368 360 384.94 413.9 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 368 360 384.94 413.9 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 368 360 376.4 413.9 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 368 360 376.4 413.9 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 368 360 384.94 368.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 368 360 384.94 368.4 own
+done
+edit 19
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 368 360 386.48 376.94 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 368 360 386.48 376.94 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 368 360 376.4 376.94 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 368 360 376.4 376.94 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+done
+edit 20
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 368 360 386.48 376.94 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 368 360 386.48 376.94 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 368 360 376.4 376.94 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 368 360 376.4 376.94 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+done
+edit 22
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 368 360 386.48 376.94 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 368 360 386.48 376.94 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 368 360 376.4 376.94 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 368 360 376.4 376.94 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+done
+edit 23
+pick facing 0 0 -1
+picture c0nstruct0r/c0-medkit view 0 368 360 386.48 376.94 own
+pick facing 0 0 1
+picture c0nstruct0r/c0-medkit view 180 368 360 386.48 376.94 own
+pick facing 1 0 0
+picture c0nstruct0r/c0-medkit view 90 368 360 376.4 376.94 own
+pick facing -1 0 0
+picture c0nstruct0r/c0-medkit view 270 368 360 376.4 376.94 own
+pick facing 0 1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+pick facing 0 -1 0
+picture c0nstruct0r/c0-medkit top 368 360 386.48 368.4 own
+done
+pace 3500
+say Now every face has its own patch at the right size.
+pace 1400
+fix

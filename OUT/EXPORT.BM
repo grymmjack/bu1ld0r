@@ -94,6 +94,10 @@ SUB ExSplitRepeats
             END IF
             i0 = INT(u0 + eu): i1 = INT(u1 - eu): IF i1 < i0 THEN i1 = i0
             j0 = INT(v0 + ev): j1 = INT(v1 - ev): IF j1 < j0 THEN j1 = j0
+            ' (a face narrower than the margins - all of it in the picture's last 5%, the game's
+            ' muzzle corner - is in the repeat its middle is in, not pushed into the next)
+            IF u1 - u0 < 2 * eu THEN i0 = INT((u0 + u1) / 2): i1 = i0
+            IF v1 - v0 < 2 * ev THEN j0 = INT((v0 + v1) / 2): j1 = j0
             IF (i0 <> 0 OR i1 <> 0 OR j0 <> 0 OR j1 <> 0 OR u0 < 0 OR u1 > 1 OR v0 < 0 OR v1 > 1) AND (i1 - i0 + 1) * (j1 - j0 + 1) <= 256 THEN
                 FOR g = t TO t1: gone(g) = -1: NEXT
                 FOR i = i0 TO i1

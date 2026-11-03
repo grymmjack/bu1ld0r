@@ -1,0 +1,45 @@
+# c0-bigmed's shape (bu1ld0r port steps): a tackle-box-sized red trauma kit, 22 boxes.
+take
+new force
+pace 3500
+say The BIG kit: a red tackle box. A tray, a lid on hinges, latches, a handle, raised crosses.
+pace 1400
+view 30 15 0.85
+say The tray: 36 cm wide, 13 tall, 20 deep, lifted 8 mm for its feet.
+add box 0 0.008 0 0.36 0.13 0.20 col=C8202A name=tray
+say The lid sits on it, 2 mm bigger all round - a moulded lid overhangs its tray.
+add box 0 0.138 0 0.364 0.06 0.204 col=C8202A name=lid
+edit 2
+pick facing 0 1 0
+say A raised panel on the lid: inset makes the frame, extrude UP lifts the middle 5 mm.
+inset 0.25
+extrude 0.005
+done
+say Hinges on the back, across the joint - that's how the lid opens.
+add box 0.1 0.130 0.1055 0.06 0.016 0.012 col=B8BCC0 name=hinge-a
+add box -0.1 0.130 0.1055 0.06 0.016 0.012 col=B8BCC0 name=hinge-b
+say Latches on the front, across the same joint, to hold it shut.
+add box 0.12 0.118 -0.10475 0.04 0.04 0.0105 col=B8BCC0 name=latch-a
+add box -0.12 0.118 -0.10475 0.04 0.04 0.0105 col=B8BCC0 name=latch-b
+say The carry handle: posts sunk into the raised panel, a rubber grip.
+add box 0.07 0.202 0 0.02 0.03 0.024 col=B8BCC0 name=post-a
+add box -0.07 0.202 0 0.02 0.03 0.024 col=B8BCC0 name=post-b
+add box 0 0.232 0 0.20 0.018 0.03 col=2E2E30 name=handle
+say Rubber feet.
+add box 0.14 0 -0.075 0.05 0.01 0.03 col=2E2E30 name=foot-a
+add box -0.14 0 -0.075 0.05 0.01 0.03 col=2E2E30 name=foot-b
+add box 0.14 0 0.075 0.05 0.01 0.03 col=2E2E30 name=foot-c
+add box -0.14 0 0.075 0.05 0.01 0.03 col=2E2E30 name=foot-d
+say The front cross, raised: a bar and two stubs, sunk 1 mm, standing past the lid.
+add box 0 0.028 -0.102 0.028 0.09 0.006 col=F4F4F0 name=cross-front
+add box 0.0295 0.059 -0.102 0.031 0.028 0.006 col=F4F4F0 name=cross-front-l
+add box -0.0295 0.059 -0.102 0.031 0.028 0.006 col=F4F4F0 name=cross-front-r
+say A cross on each end too, so it reads as medical from any side.
+add box 0.182 0.038 0 0.006 0.07 0.022 col=F4F4F0 name=cross-xp
+add box 0.182 0.062 0.023 0.006 0.022 0.024 col=F4F4F0 name=cross-xp-a
+add box 0.182 0.062 -0.023 0.006 0.022 0.024 col=F4F4F0 name=cross-xp-b
+add box -0.182 0.038 0 0.006 0.07 0.022 col=F4F4F0 name=cross-xn
+add box -0.182 0.062 0.023 0.006 0.022 0.024 col=F4F4F0 name=cross-xn-a
+add box -0.182 0.062 -0.023 0.006 0.022 0.024 col=F4F4F0 name=cross-xn-b
+say Shape done: 22 boxes. Next, its picture.
+save c0-bigmed

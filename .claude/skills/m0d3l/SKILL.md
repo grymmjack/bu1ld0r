@@ -13,6 +13,32 @@ boxes, 120 triangles, score 0 in bu1ld0r, 5 exported, against the game's crate's
 (`tools/c0nstruct0r/m0d3l/crate/`: `shape.txt`, `atlas.py`, `texture.txt`). Its sources are `tools/c0nstruct0r/m0d3l/barrel/`
 (the renders, `atlas.py`, `shape.txt`, `texture.txt`): copy that folder's way of working.
 
+## Core tenets
+
+1. **Built live in Rick's own bu1ld0r, where he watches.** Every shape and mapping step goes
+   to his instance through the MCP tools, with `say` lines - never a hidden copy, never
+   "rehearse first". (He's asked for this every time: "remember do it in my bu1ld0r - i want
+   to watch".)
+2. **Real-world size.** Size it as the real thing (a canteen-sized first aid kit ~16 x 11 x
+   6.5 cm, a tackle-box-sized one ~36 x 20 x 20 cm, the barrel 0.45 tall); variants of one
+   thing differ in size as they would in life, not just in colour.
+3. **Nothing untextured** (see step 5).
+4. **One square picture, laid out at 256, drawn at 512** (step 4).
+5. **Nothing superfluous, nothing impossible.** Every part has a job you can say in a few
+   words (a seal where the lid closes, latches that cross that seam, a handle on the part you
+   lift), and the thing could work: a lid that opens can't have a rail or band running across
+   its seam - split it there. Ask "what is this for, and could it be built?" before adding
+   a part. (Rick, on the med kit: "don't make things that are superfluous or impossible".)
+6. **Turn the model to the face being worked on.** Before each side's mapping (or edit), a
+   `view` that looks at that side - `-z` yaw 0, `+z` 180, `+x` 90, `-x` 270, top pitch 60,
+   bottom pitch -60 - with a pace long enough to see it land. Mapping from behind the model
+   looks like magic boxes to someone watching; seeing the face take its picture teaches.
+   (Same in c0nstruct0r.) Many small parts: group them by side - one turn, then every small
+   part's face on that side (`boxmap.lines(..., ways=[w])`) - a turn per face per part spun
+   the camera 120 times.
+7. Tools run quietly: pixelmon and kaleidotron always with `--no-open` - Rick doesn't want
+   folders or viewers popping up; show him renders in chat or on the model instead.
+
 ## How Rick wants it run
 
 - **On his screen, live.** He's new to 3D and watches to learn. No hidden rehearsal unless
@@ -114,7 +140,12 @@ boxes, 120 triangles, score 0 in bu1ld0r, 5 exported, against the game's crate's
    **Export catch (to fix in bu1ld0r):** each picture + material pair counts as its own
    picture, so three materials on one picture pack 2x2 and the export's pixels a cell drop
    ~3x (302 -> 107). Until ExAtlas / WriteMat keep one picture whose pairs use separate
-   areas, one material per picture keeps it sharp.
+   areas, one material per picture keeps it sharp. (c0-bigmed took three on purpose - felt,
+   steel, matte iron, Rick's asks: 680 px/cell in bu1ld0r, 170 exported.)
+   Felt (Rick liked it): `m=0:0:7:87:0:33:0:53` - no shine, rough, bump, SHEEN for cloth's
+   edge glow. **METAL 100 renders dark grey** in bu1ld0r (it mirrors a dark fake sky): bright
+   silver is `m=0:0:87:13:47:7:33:0` on a light swatch (~220). Matte black iron
+   `m=0:0:10:85:80:15:0:0`.
 7. **Check**: `fix` (in bu1ld0r), `look eight=true`, `save c0-NAME`, `export` (as built -
    never tidied: Rick doesn't want the tidy export for these; the reply says "as built"),
    `check c0-NAME against=SIMILAR`. Into the game only when Rick says.
@@ -134,6 +165,21 @@ face's region - PIL at 4x then shrunk, ink a little uneven; the DIN Bold Condens
 A whole box as a band (a top band the full footprint) gives the top face itself - a body top
 under it would sit in the same place and flicker. One material for the whole model keeps the
 export to one picture.
+
+**Shared helpers** (`tools/c0nstruct0r/m0d3l/`): `paint.py` (`Atlas`: every size in the 256
+layout, x K inside - `tinted`, `painted`, `edge_dark`, `rect`, `cross`, `text`, `barcode`,
+`label`, `latch`, `put`, `save`) and `boxmap.py` (`lines(PARTS, P, K, ref, turn=)`: the
+pick / picture lines for box parts). A model's atlas.py / texture.py import them -
+`bigmed/` is the example. Catches met on the med kits:
+- **The port's rects are the picture's own pixels**: at K = 2 every layout number x 2 (a
+  K = 1 rect on the 512 picture zoomed every face 2x). boxmap does it.
+- **`own` maps over the part's whole box**, not the picked faces': a lid with a raised panel
+  is 6.5 cm tall on its sides, so its side regions are too.
+- **`inset K` leaves a (1 - K) face** - 0.25 gives 75%, not half. `scale 0.6667 0.6667 1` on
+  the panel and its walls fixed the small kit's.
+- **Look at a swatch zoomed** before using it: a render's scratch line ran down the bar of a
+  cross. Capping each pixel within 3% of a vertical blur (`gaussian_filter1d`) keeps the
+  brushed streaks and drops lines.
 
 ## Worked numbers: the barrel
 

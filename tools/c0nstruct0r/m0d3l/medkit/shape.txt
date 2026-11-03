@@ -1,0 +1,41 @@
+# c0-medkit's shape (bu1ld0r port steps): a canteen-sized crew medical case, white, 17 boxes.
+take
+new force
+pace 3500
+say A small space med kit, canteen size: white case, red panels, rubber seam, latches, handle.
+pace 1400
+view 30 15 0.55
+say The case: one box, 16 cm wide, 11 tall, 6.5 deep, lifted a little for its feet.
+add box 0 0.006 0 0.16 0.11 0.065 col=E8E8E4 name=body
+edit 1
+say Inset: the front face gets a frame round a smaller face in the middle.
+pick facing 0 0 -1
+inset 0.25
+say Extrude by minus: the middle face goes IN - a recessed panel for the cross.
+extrude -0.003
+pick facing 0 0 1
+inset 0.25
+extrude -0.003
+done
+say A rubber seam near the bottom, a hair bigger than the case so it stands proud.
+add box 0 0.022 0 0.165 0.008 0.07 col=3A3A3C name=seam
+say Aluminium rails on the corners, a bit past the seam: two faces in one place flicker.
+add box 0.077 0.004 -0.0295 0.012 0.114 0.012 col=B8BCC0 name=rail-a
+add box -0.077 0.004 -0.0295 0.012 0.114 0.012 col=B8BCC0 name=rail-b
+add box 0.077 0.004 0.0295 0.012 0.114 0.012 col=B8BCC0 name=rail-c
+add box -0.077 0.004 0.0295 0.012 0.114 0.012 col=B8BCC0 name=rail-d
+say Latches across the seam, front and back.
+add box 0.054 0.014 -0.0365 0.02 0.024 0.006 col=B8BCC0 name=latch-a
+add box -0.054 0.014 -0.0365 0.02 0.024 0.006 col=B8BCC0 name=latch-b
+add box 0.054 0.014 0.0365 0.02 0.024 0.006 col=B8BCC0 name=latch-c
+add box -0.054 0.014 0.0365 0.02 0.024 0.006 col=B8BCC0 name=latch-d
+say The handle: two posts sunk a little into the lid, a rubber grip on top.
+add box 0.033 0.114 0 0.01 0.022 0.013 col=B8BCC0 name=post-a
+add box -0.033 0.114 0 0.01 0.022 0.013 col=B8BCC0 name=post-b
+add box 0 0.136 0 0.08 0.01 0.016 col=2E2E30 name=handle
+say Rubber feet, overlapping the bottom a little: touching, never floating.
+add box 0.058 0 -0.02 0.022 0.008 0.015 col=2E2E30 name=foot-a
+add box -0.058 0 -0.02 0.022 0.008 0.015 col=2E2E30 name=foot-b
+add box 0.058 0 0.02 0.022 0.008 0.015 col=2E2E30 name=foot-c
+add box -0.058 0 0.02 0.022 0.008 0.015 col=2E2E30 name=foot-d
+say Shape done: 17 boxes. Next, the textures.

@@ -379,6 +379,8 @@ sources in `tools/c0nstruct0r/m0d3l/NAME/`.
 |---|---|---|---|---|
 | c0-barrel | 10 | 608 | 17 (the game's barrel 41) | bulging drum (extrude + scale bands), four iron hoops, sunk lid, bung, side canister; pixelmon wood / lid / iron; wood, iron, metal materials |
 | c0-crate | 10 | 120 | 0 in bu1ld0r, 5 exported (the game's crate 54) | Raiders-style shipping crate: body, two bands, four posts, three lid cleats - all boxes; pixelmon pine (juggernautXL, heun, karras), stencils drawn in code, 512 picture laid out at 256; one pine material |
+| c0-medkit | 27 | 356 | 0 in bu1ld0r and exported (the game's medkit 39) | canteen-sized white crew kit: body with a recessed red panel, raised cross (a bar and two stubs), rails stopping at the lid seam, over-centre latches, handle, feet; one glossy material. In the game as `medkit` (2026-11-01) |
+| c0-bigmed | 22 | 280 | 0 in bu1ld0r and exported (against the game's medkit, 39) | tackle-box-sized red trauma kit: tray, lid with a raised panel, hinges, latches, handle, feet, raised crosses front and ends; felt box, bright steel crosses / hardware, matte iron handle (three materials: 170 px/cell exported). Mapped live with the camera turning to each side (`bigmed/`, `paint.py`, `boxmap.py`). In the game as `bigmed` (2026-11-01) |
 
 ## Decisions (Rick, 2026-11-01)
 
@@ -390,3 +392,76 @@ sources in `tools/c0nstruct0r/m0d3l/NAME/`.
 - **Budget**: 1000 triangles for every prop, small ones too. (It was
   600 for big props and 200 for small ones at first; Rick raised it to
   1000, then dropped the small budget: "1000 is fine", 2026-11-01.)
+
+## m0d3l overnight (2026-11-01): staged in export/neon-stage/, not installed
+
+| Model | Notes |
+|---|---|
+| c0-vending | 10 boxes, 140 tris, score 8 exported (the game's 53): plinth with the delivery bin cut in, body with a deep snack window, keypad, card reader, lit sign cap, cyan feet; one paint material |
+| c0-locker | 7 boxes, 132 tris, score 2 exported (the game's 54): three lockers (blue, grey, blue), doors raised from their frames, vents, name cards, numbers, steel handles, kick base; plain faces shared so 247 px/cell |
+| c0-terminal | 4 boxes, 64 tris, score 0 exported (the game's 42): tan base deck (drive bays, status display), green-key keyboard and keypad on it, monitor housing with the green CRT set in (text, scanlines), vents, label |
+| c0-terminal-broken | 6 boxes, 88 tris, score 4 exported (the game's 50): scorched dark CRT on a stand, carry handle, the screen cracked and glitching pink / cyan (ERR / SIGNAL LOST), torn cables, keyboard missing keys |
+| c0-console | 10 parts, 156 tris, score 1 exported (the game's 43): slate cabinet with a door panel, deck with three raised buttons and a cyan light strip, instrument hood with radar and data screens set in, red beacon dome (round, wrapped) on a post with an antenna |
+| c0-alarmpc | 7 parts, 116 tris, score 0 exported (the game's 64): two pedestals with module slots, desk slab with a cyan edge, underpanel of cyan light bars, raised control deck of glowing red / cyan keys, monitor bank with six camera feeds and an ALERT set in, red joystick |
+| c0-desk | 13 parts, 164 tris, score 27 exported, all of it asymmetry - drawers on one side (the game's 61): wood top with papers, steel legs, three-drawer unit, modesty panel, monitor of green mail on a stand, keyboard, red mug |
+| c0-chair | 13 parts, 204 tris, score 2 exported (the game's models.py chair 11): stitched black leather seat and back with raised quilted cushions, armrests on posts, steel gas lift (round), four-arm base on casters |
+| c0-table-flipped | 14 boxes, 144 tris, score 0 exported (the game's models.py one 33): the top standing up with two cyan panel inlays and orange trim, underside with magenta pads, a rim, four legs out with braces and rubber feet |
+| c0-bench | 9 boxes, 96 tris, score 15 exported, all asymmetry - the toolbox sits to one side (the game's 84): stitched red leather slab with brass studs, dark legs, grey headrest pad, red toolbox with latches, name plate and a steel handle |
+| c0-labbench | 14 parts, 264 tris, score 9 exported (the game's 57): steel cabinet of drawers A B C, resin worktop, microscope (steel pillar and arm, green head), round red flask and conical green flask with glass necks (round, wrapped), a rack with a small orange flask |
+| c0-bookshelf | 15 boxes, 168 tris, score 0 exported (the game's 52): dark metal frame - sides with pink edge lights, a back, six boards - and five rows of books (spines of every height and colour, gold bands, fallen books, glowing cyan / pink data-slates) |
+| c0-rack | 5 parts, 76 tris, score 0 exported (the game's 42): grey cabinet on rubber feet, a deep mesh window onto 24 glowing fans (cyan rings, yellow hubs, a few dead), orange drive bays, vents top and sides, a door handle |
+| c0-safe | 11 parts, 88 tris, score 2 exported (the game's 52): charcoal safe on a plinth, bolted armour posts with VAULT 7 flank plates, sunk door with a glowing cyan ring lock, keypad, status lights, strip light, deposit drawer |
+| c0-safe-open | 25 parts, 220 tris, score 2 exported (the game's 61): c0-safe looted (the game swaps it in) - split vault doors swung open with bolt mechanisms, a lit cave: a shelf of cash bundles, a data case, gold bars |
+| c0-chest | 16 parts, 132 tris, score 0 exported (the game's 58): black armoured chest on a skirt, steel corner guards, glowing cyan strips, lid with carry handle, a lock light across the seam, side grips (one spec makes chest / mimic / open) |
+| c0-chest-open | c0-chest with the lid stood up at the back (a lit blue circuit inside), heaped with glowing gems and loose gem cubes; 208 tris, score 0 (the game's 59) |
+| c0-mimic-asleep | c0-chest exactly, but the lock glows red - the mimic's only tell; score 0 (the game's 58) |
+| c0-cryopod | 16 parts, 248 tris, score 0 exported (the game's 48): white panelled round pod on a cyan-rimmed plinth, a frosted ice-blue window wrapped round the front with a faint sleeper, bubbles, coolant pipes and clamps down both sides, capped top with a status light |
+| c0-generator | 11 parts, 220 tris, score 3 exported (the game's 61): riveted grey unit on a hazard-striped skid, sunk furnace window with bars over a glowing orange core, amber lamp, side vents, three insulator coils in orange and blue windings with dark caps |
+| c0-tank | 9 parts, 268 tris, score 4 exported (the game's 53): round drum of riveted grey armour plates on four dark feet, a badge with an orange arrow at the front, orange sloped shoulder with bolt slots, dark neck, glowing orange filler lid |
+| c0-lamp | 16 parts, 248 tris, score 18 exported (the game's 58; asym 16, the game's 13): retro floor lamp, pink-red base and pole with facet highlights, cyan neck, cyan drum shade lit warm from inside (from below a glowing bulb), two pull chains |
+| c0-plant | 11 parts, 316 tris, score 9 exported (the game's 17): terracotta pot with a rolled rim and dark soil, forked brown trunk, four low-poly leaf clumps (spheres, painted leaves; m0kit now wraps spheres and maps their tops from above) |
+| c0-screens | 4 parts, 64 tris, score 0 exported (the game's 23): monitor wall on a post and foot, dark bezel round six sunk displays - green radar with sweep and blips, blue grid scope, cyan target lock, purple waveform, orange core readout, red bar graphs - scan lines, a vented housing behind |
+| c0-camera | 5 parts, 92 tris, score 6 exported (the game's 38): security camera on a round foot, post and knuckle, charcoal housing with red trim, fins and a recording light, sun hood, red-eyed lens out the front, cable gland behind |
+| c0-alarm | 6 parts, 72 tris, score 5 exported (the game's 23): red wall box in a yellow safety frame with circuit lines, a pipe run, a brushed face plate, a big red push button, key switch, warning lamp, PUSH IN EMERGENCY label, grey back plate |
+| c0-alarm-off | c0-alarm switched off (build.py off): button and lamp dark, the red and yellow dimmed; score 5 (the game's 23) |
+| c0-core | 2 parts, 42 tris, score 1 exported (the game's 29): cyan crystal cut as a gem (6 sides, a small table, a point below), lit from inside (a soft glow material), a bright collar at the girdle (m0kit maps diamonds: crown from above, pavilion wrapped) |
+| c0-specimen | 4 parts, 176 tris, score 0 exported (the game's 33): dark steel base with a status light, round tank of glowing green fluid with a spiny creature floating at the front, bubbles, light strips down the glass, bolted cap and green filler ring |
+| c0-spawner | 8 parts, 100 tris, score 0 exported (the game's 13): sandstone frame on edge (rounded corners drawn), sunk well with a pink energy ring and four brackets, raised glowing cyan core, cyan arrows pointing out on all four sides, dark back plate |
+| c0-plate | 7 parts, 72 tris, slit light on the muzzle corner (the game lights it; needed the export fix in OUT/EXPORT.BM), score 0 exported (the game's 23): the PLATE trap's pressure plate - low steel slab, diamond tread top in a hazard-striped border, red sensor strip and two buttons on each edge, rubber corner feet |
+| c0-ammo | 9 parts, 252 tris, score 2 exported (the game's 38): three glowing cyan energy cells side by side, dark bands, steel caps with brass contacts |
+| c0-shells | 2 parts, 40 tris, score 0 (the game's 46): orange shell box open at the front, two rows of shotgun shells end on (brass heads, primers), 12 GA label on top |
+| c0-rounds | 13 parts, 236 tris, score 0 (the game's 56): olive ammo can with a lid and handle, 7.62 MM stencil, five brass rounds with lime tips standing on top |
+| c0-slugs | 11 parts, 212 tris, score 0 (the game's 107): steel clip of five glowing blue slugs with pointed steel heads |
+| c0-rockets | 9 parts, 236 tris, score 0 (the game's 68): dark riveted crate with an HE-RKT stencil, four red warheads on orange-banded bodies standing out of the top |
+| c0-rocket | 5 parts, 132 tris, score 6 exported (the game's 45): the flying rocket, centred on 0 0 0 with its nose at -z like the game's - grey tube with an orange band, red nose cone, crossed dark fins, a nozzle glowing orange (turned cylinders: m0kit maps them triplanar now) |
+| c0-armor | 17 parts, 168 tris, score 7 (the game's 78): standing power armour - blue plates, red trim, boots and gloves, glowing orange chest core, shoulder pads, visored helmet |
+| c0-amp | 3 parts, 208 tris, score 5 (the game's 49): round red flask with a cyan lightning bolt on the front and glowing studs, steel neck, dark cap with a red glowing top |
+| c0-overcharge | 6 parts, 168 tris, score 0 (the game's 16): bronze medallion on edge - engraved rim with ticks, four studs, a raised cyan crystal face of glowing facets |
+| c0-invuln | 4 parts, 144 tris, score 0 (the game's 21): gold medallion on edge - bronze rim, rayed gold disc, a raised gold shield with an orange-glowing emblem, white crest on top |
+| c0-goggles | 5 parts, 156 tris, score 0 exported (the game's 47): night-vision goggles - dark rubber housing, three lens tubes (turned cylinders) glowing green, head strap |
+| c0-suit | 13 parts, 144 tris, score 6 (the game's 49): yellow hazmat suit standing - hood and gas mask with a green visor and filter, zip, reflective tape, badge, black belt, gloves and boots |
+| c0-jetpack | 13 parts, 300 tris, score 3 (the game's 48): two orange tanks with hazard bands and a gauge each on a dark harness plate, steel caps, nozzles glowing at their mouths, shoulder straps |
+| c0-jetfuel | 5 parts, 92 tris, score 11 (the game's 51; asym 11 is the cap and handle side by side): orange canister with black hazard bands, a gauge reading 31, steel filler cap, carry handle |
+| c0-keycard | 2 parts, 24 tris, score 0 (the game's 16): access card in greys (the game tints it red / blue / yellow by brightness) - clip slot, chip, stripe, ACCESS, magnetic strip behind, a clip |
+| c0-map | map: parchment sheet on edge with woods, rooms, river, road, folds, an X; blue gem pin; score 0 (game 17) |
+| c0-repairkit | repairkit: open dark case, tool tray (wrench, drivers, cyan meter), lid with tool loops and cyan strip, latches; score 0 (game 66) |
+| c0-pickup-rail | pickup-rail: dark green rifle of 11 boxes (stripe, rail, green-lens scope, skeleton stock); score 32 = asymmetry, a gun's own (game 47) |
+| c0-pickup-repeater | pickup-repeater: green SMG, ribbed wooden magazine, sight, flash hider; score 30 = asymmetry (game 69) |
+| c0-pickup-rocket | pickup-rocket: banded tube (turned cylinders along x), magenta muzzle round a glowing core, twin top tubes, mount, wheels; tube 0.13 deep (game 0.11); score 17 (game 42) |
+| c0-pickup-scatter | pickup-scatter: orange shotgun leaning 35 deg as its painting (boxes laid out along the gun, turned); score 76 = asymmetry of a leaning gun (game 83) |
+| c0-barrel-acid | barrel-acid: yellow steel drum, hoops, radiation sign, lid with bung, a tap (barrels.py: one spec for all ten); score 3 (game 38) |
+| c0-barrel-lava | barrel-lava: bulging charred-stave drum (three drums, steps under hoops), orange hoops, glowing cracks, green porthole, plank lid; score 2 (game 36) |
+| c0-barrel-poison | barrel-poison: bulging purple drum with a cage of ribs and a skull; score 2 (game 40) |
+| c0-barrel-slime | barrel-slime: grey steel drum brimming with green slime running down it, red biohazard label; score 2 (game 42) |
+| c0-barrel-water | barrel-water: teal drum, hoops, white drop, a scratch, lid with bung; score 2 (game 32) |
+| c0-barrel-acid-wreck | barrel-acid-wreck: the drum's bottom 0.25 with its sign, a torn crown of 16 plates (stubs and spikes) glowing at the tops, the liquid's surface inside, runs down the outside; score 3 (game 5) |
+| c0-barrel-lava-wreck | barrel-lava-wreck: the drum's bottom 0.25 with its sign, a torn crown of 16 plates (stubs and spikes) glowing at the tops, the liquid's surface inside, runs down the outside; score 2 (game 29) |
+| c0-barrel-poison-wreck | barrel-poison-wreck: the drum's bottom 0.25 with its sign, a torn crown of 16 plates (stubs and spikes) glowing at the tops, the liquid's surface inside, runs down the outside; score 3 (game 29) |
+| c0-barrel-slime-wreck | barrel-slime-wreck: the drum's bottom 0.25 with its sign, a torn crown of 16 plates (stubs and spikes) glowing at the tops, the liquid's surface inside, runs down the outside; score 4 (game 41) |
+| c0-barrel-water-wreck | barrel-water-wreck: the drum's bottom 0.25 with its sign, a torn crown of 16 plates (stubs and spikes) glowing at the tops, the liquid's surface inside, runs down the outside; score 4 (game 31) |
+| c0-turret-base | turret-base: grey tripod (three legs turned round y, rubber pads), dark hub, banded pedestal, hazard collar - 0.17 high, the head's pivot its top; score 0 (game 73) |
+| c0-turret-head | turret-head: hazard-yellow armoured box, big blue lens, red light pods, two barrels in shrouds (ends from the white muzzle corner: 6 triangles each, middles at x +-0.105 y 0.105 z -0.23), sensor stack with red eyes; origin at the pivot; score 1 (game 56) |
+| c0-turret | turret: base + head together (head at the pivot, 0.17), 0.43 x 0.53 x 0.46; muzzles from the white corner as the head's; score 4 (game 88) |
+| c0-turret-mount | turret-mount: hex plate (seg 6 turned 90: corners at +-z, as the game's), bolts, hazard stripe; score 2 (game 2) |
+| c0-turret-mount-broken | turret-mount-broken: the plate with a charred ragged hole painted (glowing torn edge), a charred pit under it, four torn wires; score 9 (game 35) |
+| c0-sweep | sweep: labbench rebuilt (colour 0 now; score 9 = the microscope on one side, game 57); every model folder's export is in export/neon-stage/ (69 OBJs: all the game's models but barrel and crate, done before tonight, barrel-bot, left for Rick, and untitled, skipped) |

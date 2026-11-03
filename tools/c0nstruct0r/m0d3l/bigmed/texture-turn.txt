@@ -1,0 +1,440 @@
+edit 1
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 0 244.8 88.4 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 94 244.8 182.4 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 256 0 392 88.4 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 256 94 392 182.4 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 256 288 500.8 424 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 256 288 500.8 424 own
+done
+edit 2
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 188 247.52 232.2 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 238 247.52 282.2 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 256 188 394.72 232.2 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 256 238 394.72 282.2 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 0 288 247.52 426.72 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 0 288 247.52 426.72 own
+done
+edit 3
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 0 440.8 10.88 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 0 440.8 10.88 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 0 408.16 10.88 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 0 408.16 10.88 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 0 440.8 8.16 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 0 440.8 8.16 own
+done
+edit 4
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 0 440.8 10.88 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 0 440.8 10.88 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 0 408.16 10.88 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 0 408.16 10.88 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 0 440.8 8.16 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 0 440.8 8.16 own
+done
+edit 5
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 128 427.2 155.2 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 0 427.2 27.2 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 0 407.14 27.2 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 0 407.14 27.2 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 0 427.2 7.14 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 0 427.2 7.14 own
+done
+edit 6
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 128 427.2 155.2 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 0 427.2 27.2 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 0 407.14 27.2 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 0 407.14 27.2 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 0 427.2 7.14 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 0 427.2 7.14 own
+done
+edit 7
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 0 413.6 20.4 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 0 413.6 20.4 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 0 416.32 20.4 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 0 416.32 20.4 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 0 413.6 16.32 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 0 413.6 16.32 own
+done
+edit 8
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 0 413.6 20.4 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 0 413.6 20.4 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 0 416.32 20.4 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 0 416.32 20.4 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 0 413.6 16.32 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 0 413.6 16.32 own
+done
+edit 9
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 432 136 444.24 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 432 136 444.24 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 0 432 20.4 444.24 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 0 432 20.4 444.24 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 0 432 136 452.4 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 0 432 136 452.4 own
+done
+edit 10
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 432 34 438.8 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 432 34 438.8 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 0 432 20.4 438.8 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 0 432 20.4 438.8 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+done
+edit 11
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 432 34 438.8 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 432 34 438.8 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 0 432 20.4 438.8 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 0 432 20.4 438.8 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+done
+edit 12
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 432 34 438.8 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 432 34 438.8 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 0 432 20.4 438.8 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 0 432 20.4 438.8 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+done
+edit 13
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 0 432 34 438.8 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 0 432 34 438.8 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 0 432 20.4 438.8 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 0 432 20.4 438.8 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 0 432 34 452.4 own
+done
+edit 14
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 419.04 221.2 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 419.04 221.2 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 404.08 221.2 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 404.08 221.2 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 419.04 164.08 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 419.04 164.08 own
+done
+edit 15
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 421.08 179.04 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 421.08 179.04 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 404.08 179.04 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 404.08 179.04 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 421.08 164.08 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 421.08 164.08 own
+done
+edit 16
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 421.08 179.04 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 421.08 179.04 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 404.08 179.04 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 404.08 179.04 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 421.08 164.08 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 421.08 164.08 own
+done
+edit 17
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 404.08 207.6 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 404.08 207.6 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 414.96 207.6 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 414.96 207.6 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 174.96 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 174.96 own
+done
+edit 20
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 404.08 207.6 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 404.08 207.6 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 414.96 207.6 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 414.96 207.6 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 174.96 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 174.96 own
+done
+edit 18
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 404.08 174.96 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 404.08 174.96 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 416.32 174.96 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 416.32 174.96 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+done
+edit 19
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 404.08 174.96 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 404.08 174.96 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 416.32 174.96 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 416.32 174.96 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+done
+edit 21
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 404.08 174.96 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 404.08 174.96 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 416.32 174.96 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 416.32 174.96 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+done
+edit 22
+view 0 8 0.85
+pick facing 0 0 -1
+picture c0nstruct0r/c0-bigmed view 0 400 160 404.08 174.96 own
+view 180 8 0.85
+pick facing 0 0 1
+picture c0nstruct0r/c0-bigmed view 180 400 160 404.08 174.96 own
+view 90 8 0.85
+pick facing 1 0 0
+picture c0nstruct0r/c0-bigmed view 90 400 160 416.32 174.96 own
+view 270 8 0.85
+pick facing -1 0 0
+picture c0nstruct0r/c0-bigmed view 270 400 160 416.32 174.96 own
+view 20 60 0.85
+pick facing 0 1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+view 20 -60 0.85
+pick facing 0 -1 0
+picture c0nstruct0r/c0-bigmed top 400 160 404.08 176.32 own
+done
